@@ -1,0 +1,27 @@
+
+[
+  // STUB — replace with the real ABI decoded from Blockscout before mainnet use
+  {
+    "type": "function",
+    "name": "createToken",
+    "stateMutability": "payable",
+    "inputs": [
+      { "name": "name", "type": "string" },
+      { "name": "symbol", "type": "string" },
+      { "name": "metadataURI", "type": "string" }
+    ],
+    "outputs": [
+      { "name": "token", "type": "address" }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "TokenCreated",
+    "inputs": [
+      { "name": "token", "type": "address", "indexed": true },
+      { "name": "creator", "type": "address", "indexed": true },
+      { "name": "name", "type": "string", "indexed": false },
+      { "name": "symbol", "type": "string", "indexed": false }
+    ]
+  }
+]

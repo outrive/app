@@ -1,0 +1,477 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.2.0
+  description: OUTRIVE API — AI agent launchpad on Virtuals Protocol / Robinhood Chain
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: system
+    description: System status and calibration
+  - name: market
+    description: Token market data
+  - name: launches
+    description: Agent token launches
+  - name: conversations
+    description: Chat conversations
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /system/status:
+    get:
+      operationId: getSystemStatus
+      tags: [system]
+      summary: Get system calibration status, network info, and RPC health
+      responses:
+        "200":
+          description: System status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+
+  /market/tokens:
+    get:
+      operationId: listMarketTokens
+      tags: [market]
+      summary: List agent tokens — newest or trending
+      parameters:
+        - name: tab
+          in: query
+          schema:
+            type: string
+            enum: [newest, trending]
+            default: newest
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+
+  /market/tokens/{address}:
+    get:
+      operationId: getToken
+      tags: [market]
+      summary: Get agent token details by contract address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Token"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /market/trades/{address}:
+    get:
+      operationId: getTokenTrades
+      tags: [market]
+      summary: Get trade log for a token
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trade list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+
+  /market/summary:
+    get:
+      operationId: getMarketSummary
+      tags: [market]
+      summary: Market overview stats
+      responses:
+        "200":
+          description: Market summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSummary"
+
+  /launches:
+    get:
+      operationId: listLaunches
+      tags: [launches]
+      summary: List launches, optionally filtered by wallet address
+      parameters:
+        - name: walletAddress
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Launch list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Launch"
+
+    post:
+      operationId: recordLaunch
+      tags: [launches]
+      summary: Record a new launch after the user has signed and broadcast the tx
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LaunchInput"
+      responses:
+        "201":
+          description: Launch recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Launch"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations for a wallet address
+      parameters:
+        - name: walletAddress
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationInput"
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [conversations]
+      summary: Get messages for a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Message list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SystemStatus:
+      type: object
+      required: [calibrated, network, chainId, rpcHealthy]
+      properties:
+        calibrated:
+          type: boolean
+          description: True when VIRTUALS_FACTORY_ADDRESS is set and RPC is reachable
+        calibrationMessage:
+          type: ["string", "null"]
+        network:
+          type: string
+          enum: [mainnet, testnet]
+        chainId:
+          type: integer
+        rpcHealthy:
+          type: boolean
+        blockNumber:
+          type: ["integer", "null"]
+        explorerUrl:
+          type: string
+        virtualTokenAddress:
+          type: ["string", "null"]
+
+    Token:
+      type: object
+      required: [address, name, ticker, creator, createdBlock, network, phase]
+      properties:
+        address:
+          type: string
+        name:
+          type: string
+        ticker:
+          type: string
+        creator:
+          type: string
+        createdBlock:
+          type: integer
+        network:
+          type: string
+        lastPriceVirtual:
+          type: ["string", "null"]
+          description: Price in $VIRTUAL as string
+        raisedVirtual:
+          type: ["string", "null"]
+          description: Total $VIRTUAL raised on bonding curve
+        volume24h:
+          type: ["string", "null"]
+        holders:
+          type: ["integer", "null"]
+        curveProgress:
+          type: ["number", "null"]
+          description: 0-100 percentage toward 42,000 $VIRTUAL graduation
+        phase:
+          type: string
+          enum: [PROTOTYPE, GRADUATED]
+          default: PROTOTYPE
+        graduatedAt:
+          type: ["string", "null"]
+          format: date-time
+        imageUri:
+          type: ["string", "null"]
+        txHash:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: ["string", "null"]
+          format: date-time
+        priceChange24h:
+          type: ["number", "null"]
+
+    Trade:
+      type: object
+      required: [id, tokenAddress, trader, side, virtualAmount, tokenAmount, txHash, blockNumber, ts]
+      properties:
+        id:
+          type: integer
+        tokenAddress:
+          type: string
+        trader:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        virtualAmount:
+          type: string
+          description: $VIRTUAL amount
+        tokenAmount:
+          type: string
+        txHash:
+          type: string
+        blockNumber:
+          type: integer
+        ts:
+          type: string
+          format: date-time
+
+    MarketSummary:
+      type: object
+      required: [totalTokens, totalVolume24h, topGainers, recentLaunches]
+      properties:
+        totalTokens:
+          type: integer
+        totalVolume24h:
+          type: string
+        activeTokens:
+          type: integer
+        graduatedTokens:
+          type: integer
+        topGainers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+        recentLaunches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+
+    Launch:
+      type: object
+      required: [id, walletAddress, name, ticker, txHash, network, status, createdAt]
+      properties:
+        id:
+          type: integer
+        walletAddress:
+          type: string
+        tokenAddress:
+          type: ["string", "null"]
+        name:
+          type: string
+        ticker:
+          type: string
+        imageUri:
+          type: ["string", "null"]
+        txHash:
+          type: string
+        blockNumber:
+          type: ["integer", "null"]
+        network:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+        createdAt:
+          type: string
+          format: date-time
+
+    LaunchInput:
+      type: object
+      required: [walletAddress, name, ticker, txHash, network]
+      properties:
+        walletAddress:
+          type: string
+        tokenAddress:
+          type: ["string", "null"]
+        name:
+          type: string
+        ticker:
+          type: string
+        imageUri:
+          type: ["string", "null"]
+        txHash:
+          type: string
+        blockNumber:
+          type: ["integer", "null"]
+        network:
+          type: string
+
+    Conversation:
+      type: object
+      required: [id, walletAddress, title, createdAt]
+      properties:
+        id:
+          type: integer
+        walletAddress:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    ConversationInput:
+      type: object
+      required: [walletAddress, title]
+      properties:
+        walletAddress:
+          type: string
+        title:
+          type: string
+
+    Message:
+      type: object
+      required: [id, conversationId, role, content, createdAt]
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant, tool]
+        content:
+          type: string
+        toolCalls:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time

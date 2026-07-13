@@ -1,0 +1,202 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@700&display=swap');
+
+/* ── Hide ALL scrollbars globally ─────────────────────────────────────── */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+/* Utility class kept for explicit usage */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+  --font-display: var(--app-font-display);
+
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+}
+
+:root {
+  --out-bg: #0A0E0A;
+  --out-bg-sheet: #0E130E;
+  --out-grid-minor: rgba(22, 219, 101, 0.07);
+  --out-grid-major: rgba(22, 219, 101, 0.14);
+  --out-ink: #C8FF16;
+  --out-ink-dim: #8CB80E;
+  --out-text: #D6E8C8;
+  --out-muted: #5C6B54;
+  --out-accent-fill: #C8FF16;
+  --out-danger: #FF5C5C;
+  --out-warn: #FFC85C;
+  --out-up: #7CFF6B;
+  --out-down: #FF6B6B;
+
+  --background: 120 18% 5%;
+  --foreground: 104 27% 71%;
+  --primary: 73 100% 54%;
+  --primary-foreground: 120 18% 5%;
+  --card: 120 18% 7%;
+  --card-foreground: 104 27% 71%;
+  --card-border: 73 90% 38%;
+  --border: 73 90% 38%;
+  --muted: 120 14% 12%;
+  --muted-foreground: 104 10% 38%;
+  --accent: 145 81% 47%;
+  --accent-foreground: 120 18% 5%;
+  --destructive: 0 100% 67%;
+  --destructive-foreground: 120 18% 5%;
+  --secondary: 73 100% 54%;
+  --secondary-foreground: 120 18% 5%;
+  --popover: 120 18% 7%;
+  --popover-foreground: 104 27% 71%;
+  --popover-border: 73 90% 38%;
+  
+  --input: 120 18% 6%;
+  --ring: 73 100% 54%;
+  --chart-1: 73 100% 54%;
+  --chart-2: 145 81% 47%;
+  --chart-3: 104 27% 71%;
+  --chart-4: 73 90% 38%;
+  --chart-5: 0 100% 67%;
+
+  --app-font-sans: 'JetBrains Mono', monospace;
+  --app-font-mono: 'JetBrains Mono', monospace;
+  --app-font-display: 'Space Grotesk', sans-serif;
+  
+  --radius: 0px;
+}
+
+.dark {
+  --out-bg: #0A0E0A;
+  --out-bg-sheet: #0E130E;
+  --out-grid-minor: rgba(22, 219, 101, 0.07);
+  --out-grid-major: rgba(22, 219, 101, 0.14);
+  --out-ink: #C8FF16;
+  --out-ink-dim: #8CB80E;
+  --out-text: #D6E8C8;
+  --out-muted: #5C6B54;
+  --out-accent-fill: #C8FF16;
+  --out-danger: #FF5C5C;
+  --out-warn: #FFC85C;
+  --out-up: #7CFF6B;
+  --out-down: #FF6B6B;
+
+  --background: 120 18% 5%;
+  --foreground: 104 27% 71%;
+  --primary: 73 100% 54%;
+  --primary-foreground: 120 18% 5%;
+  --card: 120 18% 7%;
+  --card-foreground: 104 27% 71%;
+  --card-border: 73 90% 38%;
+  --border: 73 90% 38%;
+  --muted: 120 14% 12%;
+  --muted-foreground: 104 10% 38%;
+  --accent: 145 81% 47%;
+  --accent-foreground: 120 18% 5%;
+  --destructive: 0 100% 67%;
+  --destructive-foreground: 120 18% 5%;
+  --secondary: 73 100% 54%;
+  --secondary-foreground: 120 18% 5%;
+  --popover: 120 18% 7%;
+  --popover-foreground: 104 27% 71%;
+  --popover-border: 73 90% 38%;
+  
+  --input: 120 18% 6%;
+  --ring: 73 100% 54%;
+  --chart-1: 73 100% 54%;
+  --chart-2: 145 81% 47%;
+  --chart-3: 104 27% 71%;
+  --chart-4: 73 90% 38%;
+  --chart-5: 0 100% 67%;
+}
+
+/* ── Market ticker scroll animation ─────────────────────────────────── */
+@keyframes outrive-ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-mono antialiased bg-background text-foreground;
+    background-color: var(--out-bg);
+    background-image:
+      repeating-linear-gradient(var(--out-grid-major) 0 1px, transparent 1px 120px),
+      repeating-linear-gradient(90deg, var(--out-grid-major) 0 1px, transparent 1px 120px),
+      repeating-linear-gradient(var(--out-grid-minor) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, var(--out-grid-minor) 0 1px, transparent 1px 24px);
+  }
+
+  ::selection {
+    background-color: var(--out-ink);
+    color: var(--out-bg);
+  }
+}

@@ -1,0 +1,45 @@
+# Build output
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+
+# Dependencies
+node_modules
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Platform-specific (not for public repos)
+.replit
+.replitignore
+replit.md
+.agents/
+.local/
+.cache/
+attached_assets/
+artifact.toml
+.npmrc
+
+# IDE
+.idea/
+.vscode/
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Expo
+.expo
+.expo-shared
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage/

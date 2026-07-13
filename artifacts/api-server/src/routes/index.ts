@@ -1,0 +1,22 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health.js";
+import systemRouter from "./system.js";
+import marketRouter from "./market.js";
+import virtualsMarketRouter from "./virtuals-market.js";
+import launchesRouter from "./launches.js";
+import conversationsRouter from "./conversations.js";
+import chatRouter from "./chat.js";
+import creditsRouter from "./credits.js";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(systemRouter);
+router.use(marketRouter);
+router.use(virtualsMarketRouter);
+router.use(launchesRouter);
+router.use(conversationsRouter);
+router.use(chatRouter);
+router.use(creditsRouter);
+
+export default router;
