@@ -10,6 +10,7 @@ OUTRIVE is built by the OUTRIVE team and powered by the following technologies a
 Core product, frontend, API server, agent engine, and infrastructure.
 
 - Website: [outrive.io](https://outrive.io)
+- Discord: [discord.gg/outriveio](https://discord.gg/outriveio)
 - GitHub: [github.com/outrive](https://github.com/outrive)
 - X (Twitter): [@outrive_](https://x.com/outrive_)
 

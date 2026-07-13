@@ -1489,6 +1489,12 @@ export default function Home() {
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--out-text)')}>
                   X (TWITTER)
                 </a>
+                <a href="https://discord.gg/outriveio" target="_blank" rel="noopener noreferrer"
+                  className="transition-colors" style={{ color: 'var(--out-text)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--out-ink)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--out-text)')}>
+                  DISCORD
+                </a>
                 <a href="https://github.com/outrive" target="_blank" rel="noopener noreferrer"
                   className="transition-colors" style={{ color: 'var(--out-text)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--out-ink)')}
