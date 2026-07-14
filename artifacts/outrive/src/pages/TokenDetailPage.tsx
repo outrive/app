@@ -472,14 +472,13 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
           </a>
           <a
             href={token.status === 'GRADUATED'
-              ? `https://app.virtuals.io/virtuals/${token.id}`
-              : `https://app.virtuals.io/prototypes/${token.id}`}
+              `https://app.virtuals.io/virtuals/${token.id}`}
             target="_blank" rel="noreferrer"
             className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
             style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
-            {token.status === 'GRADUATED' ? 'VIRTUALS ↗' : 'PROTOTYPE ↗'}
+            VIRTUALS ↗
           </a>
         </div>
       </div>
@@ -577,15 +576,13 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                   </a>
                 )}
                 <a
-                  href={token.status === 'GRADUATED'
-                    ? `https://app.virtuals.io/virtuals/${token.id}`
-                    : `https://app.virtuals.io/prototypes/${token.id}`}
+                  href={`https://app.virtuals.io/virtuals/${token.id}`}
                   target="_blank" rel="noreferrer"
                   className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
                   style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'var(--out-ink)'; e.currentTarget.style.color = '#050905'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--out-ink)'; }}>
-                  {token.status === 'GRADUATED' ? 'VIRTUALS ↗' : 'PROTOTYPE ↗'}
+                  VIRTUALS ↗
                 </a>
                 {token.twitter && (
                   <a href={`https://twitter.com/${token.twitter.replace(/^@/, '')}`} target="_blank" rel="noreferrer"
