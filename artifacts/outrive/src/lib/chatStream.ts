@@ -19,6 +19,8 @@ export type ChatEvent =
   | { type: "text"; content: string }
   | { type: "tool_call"; toolName: string; status: "running" | "done"; duration?: number }
   | { type: "tx_payload"; needsApproval: false; launchTx: UnsignedTx; preview: LaunchPreview }
+  | { type: "launch_result"; txHash: `0x${string}`; preview: LaunchPreview }
+  | { type: "launch_error"; message: string; preview?: LaunchPreview }
   | { type: "credits_required"; freeRemaining: number; otrCredits: number }
   | { type: "done" }
   | { type: "error"; message: string };

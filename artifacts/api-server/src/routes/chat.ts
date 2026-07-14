@@ -4,7 +4,8 @@ import { db } from "@workspace/db";
 import { conversationsTable, messagesTable, launchesTable, tokensTable, chatCreditsTable, FREE_CHAT_LIMIT, OTR_PER_CREDIT } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { getPublicClient } from "../lib/chains.js";
-import { buildLaunchTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
+import { buildLaunchTx, signAndBroadcastLaunchTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
+import { getSignerAddress, hasBondingRole } from "../lib/signerWallet.js";
 import { checkLaunchRateLimit } from "../lib/rateLimit.js";
 import { cacheGet, cacheSet } from "../lib/cache.js";
 import { SYSTEM_PROMPT } from "../lib/agentPrompt.js";
@@ -88,7 +89,7 @@ async function executeTool(
   toolName: string,
   toolInput: ToolInput,
   walletAddress: string
-): Promise<{ result: string; txPayload?: unknown }> {
+): Promise<{ result: string; txPayload?: unknown; launchResult?: { txHash: `0x${string}`; preview: unknown } }> {
   switch (toolName) {
     case "launch_agent_token": {
       const { name, ticker, description = "", image_ref = "", anti_sniper_minutes } = toolInput;
@@ -97,7 +98,7 @@ async function executeTool(
       // anti_sniper_minutes: undefined → default 1 min (60s); 0 → disabled; else convert
       const antiSniperDuration = anti_sniper_minutes === undefined
         ? 60
-        : Math.min(Math.max(0, Math.round(anti_sniper_minutes * 60)), 98 * 60);
+        : Math.min(Math.max(0, Math.round(anti_sniper_minutes * 60)), 60); // cap at 60s (1 min) — only valid value
 
       const rateCheck = checkLaunchRateLimit(walletAddress);
       if (!rateCheck.allowed) {
@@ -112,20 +113,13 @@ async function executeTool(
       const tickerCheck = validateTicker(ticker.toUpperCase());
       if (!tickerCheck.ok) return { result: `ERROR: ${tickerCheck.error}` };
 
-      // Check ETH gas balance
-      if (walletAddress && walletAddress !== "0x0000000000000000000000000000000000000000") {
-        try {
-          const client = getPublicClient();
-          const balance = await client.getBalance({ address: walletAddress as `0x${string}` });
-          if (balance < BigInt("100000000000000")) { // ~0.0001 ETH minimum
-            return { result: "ERROR: Insufficient ETH for gas. Please bridge ETH to Robinhood Chain." };
-          }
-        } catch {
-          // Can't check balance — proceed anyway
-        }
+      // Server-side signing — OUTRIVE broadcasts with its BONDING_ROLE wallet
+      const signerAddr = getSignerAddress();
+      if (!signerAddr) {
+        return { result: "ERROR: OUTRIVE server signer is not configured. Launches are temporarily unavailable." };
       }
 
-      const buildResult = await buildLaunchTx({
+      const launchResult = await signAndBroadcastLaunchTx({
         name,
         ticker: ticker.toUpperCase(),
         description,
@@ -134,15 +128,25 @@ async function executeTool(
         walletAddress: walletAddress as `0x${string}`,
       });
 
-      if ("error" in buildResult) return { result: `ERROR: ${buildResult.error}` };
+      if ("error" in launchResult) return { result: `ERROR: ${launchResult.error}` };
+
+      // Record launch in DB
+      try {
+        await db.insert(launchesTable).values({
+          walletAddress: walletAddress.toLowerCase(),
+          name,
+          ticker: ticker.toUpperCase(),
+          txHash: launchResult.txHash,
+          status: "confirmed",
+          network: "mainnet",
+        });
+      } catch {
+        // Non-fatal — launch already succeeded on-chain
+      }
 
       return {
-        result: `WORK ORDER READY — Agent token "${name}" (${ticker.toUpperCase()}) prepared for Instant Launch. One wallet signature required.`,
-        txPayload: {
-          needsApproval: false,
-          launchTx: buildResult.launchTx,
-          preview: buildResult.preview,
-        },
+        result: `LAUNCH CONFIRMED — Agent token "${name}" (${ticker.toUpperCase()}) deployed on-chain. Tx: ${launchResult.txHash}`,
+        launchResult: { txHash: launchResult.txHash, preview: launchResult.preview },
       };
     }
 
@@ -344,7 +348,9 @@ router.post("/chat", async (req: Request, res: Response): Promise<void> => {
 
           sendEvent({ type: "tool_call", toolName: toolUse.name, status: "done", duration });
 
-          if (result.txPayload) {
+          if (result.launchResult) {
+            sendEvent({ type: "launch_result", ...result.launchResult });
+          } else if (result.txPayload) {
             sendEvent({ type: "tx_payload", ...result.txPayload });
           }
 

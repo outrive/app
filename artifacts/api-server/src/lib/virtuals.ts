@@ -1,5 +1,7 @@
-import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi } from "viem";
+import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http } from "viem";
+import { createWalletClient } from "viem";
 import { getPublicClient, getActiveChain } from "./chains.js";
+import { getSignerAccount, getSignerAddress, hasBondingRole } from "./signerWallet.js";
 import { logger } from "./logger.js";
 
 // ─── Verified ABI — AgentFactory proxy ────────────────────────────────────
@@ -257,7 +259,55 @@ export function validateTicker(ticker: string): { ok: boolean; error?: string } 
   return { ok: true };
 }
 
-// ─── Build launch transaction ───────────────────────────────────────────────
+// ─── Server-side sign & broadcast ──────────────────────────────────────────
+// Uses OUTRIVE's BONDING_ROLE wallet to sign and submit the launch tx.
+// The creator parameter is set to the user's wallet so they are the on-chain
+// creator of record even though OUTRIVE pays gas and signs.
+export async function signAndBroadcastLaunchTx(params: {
+  name: string;
+  ticker: string;
+  description?: string;
+  imageRef?: string;
+  antiSniperDuration?: number;
+  walletAddress: `0x${string}`;
+}): Promise<{ txHash: `0x${string}`; preview: LaunchPreview } | { error: string }> {
+  const signerAccount = getSignerAccount();
+  if (!signerAccount) {
+    return { error: "OUTRIVE_SIGNER_PRIVATE_KEY is not configured. Server signing is not available." };
+  }
+
+  const bondingRole = hasBondingRole();
+  if (bondingRole === false) {
+    const addr = getSignerAddress();
+    return { error: `OUTRIVE signer (${addr}) does not have BONDING_ROLE on the factory. Contact Virtuals Protocol to grant the role, then retry.` };
+  }
+
+  const buildResult = await buildLaunchTx(params);
+  if ("error" in buildResult) return buildResult;
+
+  try {
+    const chain  = getActiveChain();
+    const rpcUrl = process.env.RPC_URL_OVERRIDE ?? chain.rpcUrls.default.http[0];
+    const wallet = createWalletClient({ account: signerAccount, chain, transport: http(rpcUrl) });
+
+    const txHash = await wallet.sendTransaction({
+      to:    buildResult.launchTx.to,
+      data:  buildResult.launchTx.data,
+      value: BigInt(buildResult.launchTx.value || "0"),
+    });
+
+    logger.info({ txHash, name: params.name, ticker: params.ticker, creator: params.walletAddress },
+      "OUTRIVE signed and broadcast launch tx");
+
+    return { txHash, preview: buildResult.preview };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, name: params.name, ticker: params.ticker }, "signAndBroadcastLaunchTx failed");
+    return { error: `Transaction broadcast failed: ${msg}` };
+  }
+}
+
+// ─── Build launch transaction (unsigned) ────────────────────────────────────
 // tokenSupplyParams_ encodes the Virtuals Protocol v2 TokenSupplyParams struct:
 //   { maxTokensPerWallet, maxTokensPerTxn, botProtectionDurationInSeconds,
 //     vault, lpOwner, creator, projectId }

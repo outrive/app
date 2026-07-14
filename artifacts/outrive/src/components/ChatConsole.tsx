@@ -20,6 +20,7 @@ interface TxPayload {
   needsApproval: false;
   launchTx: UnsignedTx;
   preview: LaunchPreview;
+  serverTxHash?: `0x${string}`; // present when OUTRIVE signed server-side
 }
 
 type SignStep   = 'idle' | 'launch' | 'pending' | 'confirmed' | 'failed';
@@ -405,6 +406,39 @@ export function ChatConsole() {
               return [...prev, ln];
             });
           }
+        }
+      } else if (event.type === 'launch_result') {
+        // Server signed and broadcast — show confirmed Work Order immediately
+        const payload: TxPayload = {
+          needsApproval: false,
+          launchTx: { to: '0x0000000000000000000000000000000000000000' as `0x${string}`, data: '0x', value: '0' },
+          preview: event.preview,
+          serverTxHash: event.txHash,
+        };
+        hasRecordedRef.current = true;
+        setTxPayload(payload);
+        setSignStep('confirmed');
+        setLaunchSuccess({ name: event.preview.name, ticker: event.preview.ticker, hash: event.txHash });
+        if (address) {
+          recordLaunch.mutate({
+            data: {
+              walletAddress: address,
+              name:          event.preview.name,
+              ticker:        event.preview.ticker,
+              txHash:        event.txHash,
+              network:       'mainnet',
+            },
+          });
+        }
+        if (mode === 'cli') setCliLines(prev => [...prev, BL()]);
+      } else if (event.type === 'launch_error') {
+        if (mode === 'cli') {
+          setCliLines(prev => [
+            ...prev,
+            BL(),
+            L(`  ✗ LAUNCH FAILED — ${event.message}`, 'danger', true),
+            BL(),
+          ]);
         }
       } else if (event.type === 'tx_payload') {
         setTxPayload(event);
@@ -961,7 +995,7 @@ function renderWorkOrder(
           ['NETWORK',     txPayload.preview.network],
           ['FACTORY',     txPayload.preview.targetContract.slice(0,10) + '…' + txPayload.preview.targetContract.slice(-6)],
           ['GAS (EST.)',  txPayload.preview.baseCost],
-          ['CREATOR',    'YOUR WALLET  (you sign, you own)'],
+          ['CREATOR',    txPayload.serverTxHash ? `${address ? address.slice(0,10) + '…' : 'YOUR WALLET'}  (creator of record)` : 'YOUR WALLET  (you sign, you own)'],
         ] as [string, string][]).map(([label, val]) => (
           <div key={label} className="flex items-end gap-1">
             <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[9px] sm:text-[10px]">{label}</span>
@@ -972,7 +1006,9 @@ function renderWorkOrder(
       </div>
 
       <div className="text-[var(--out-warn)] text-[10px] mb-4 uppercase tracking-wide">
-        ⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING
+        {txPayload.serverTxHash
+          ? '⚠ FIELDS ARE ON-CHAIN AND IMMUTABLE — SIGNED BY OUTRIVE SERVER'
+          : '⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING'}
       </div>
 
       {/* Action buttons — state-driven */}
@@ -988,8 +1024,8 @@ function renderWorkOrder(
             <span className="text-[var(--out-ink)] text-[10px] font-bold">TOKEN COMMISSIONED ON-CHAIN</span>
           </div>
           <div className="flex flex-wrap gap-4 mt-1">
-            {hash && (
-              <a href={`${explorerBase}/tx/${hash}`} target="_blank" rel="noreferrer"
+            {(txPayload?.serverTxHash ?? hash) && (
+              <a href={`${explorerBase}/tx/${txPayload?.serverTxHash ?? hash}`} target="_blank" rel="noreferrer"
                 className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
                 VIEW TX ON BLOCKSCOUT ↗
               </a>
