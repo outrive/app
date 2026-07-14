@@ -692,19 +692,19 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                             <span className="border px-1.5 py-0.5 text-[10px] uppercase tracking-widest"
                               style={{ borderColor: kindColor, color: kindColor }}>{kind}</span>
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-3 py-2">
                             <a href={`${EXPLORER}/address/${tx.from.hash}`} target="_blank" rel="noreferrer"
                               className="hover:underline" style={{ color: tx.from.is_contract ? 'var(--out-ink-dim)' : 'var(--out-text)' }}>
                               {tx.from.name ? tx.from.name.slice(0, 12) : fmtAddr(tx.from.hash)}
                             </a>
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-3 py-2">
                             <a href={`${EXPLORER}/address/${tx.to.hash}`} target="_blank" rel="noreferrer"
                               className="hover:underline" style={{ color: tx.to.is_contract ? 'var(--out-ink-dim)' : 'var(--out-text)' }}>
                               {tx.to.name ? tx.to.name.slice(0, 12) : fmtAddr(tx.to.hash)}
                             </a>
                           </td>
-                          <td className="px-2 py-2 text-right" style={{ color: 'var(--out-text)' }}>
+                          <td className="px-3 py-2 text-right" style={{ color: 'var(--out-text)' }}>
                             {fmtRaw(tx.total.value, tx.total.decimals)} <span style={{ color: 'var(--out-muted)' }}>{token.ticker}</span>
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -741,8 +741,13 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                   <table className="w-full text-[11px] border-collapse">
                     <thead className="sticky top-0" style={{ background: '#080d08' }}>
                       <tr style={{ borderBottom: '1px solid var(--out-grid-major)' }}>
-                        {['#', 'ADDRESS', 'BALANCE', 'SHARE'].map(h => (
-                          <th key={h} className="px-3 py-2 text-left font-normal uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{h}</th>
+                        {([
+                          { label: '#',       align: 'text-left'  },
+                          { label: 'ADDRESS', align: 'text-left'  },
+                          { label: 'BALANCE', align: 'text-right' },
+                          { label: 'SHARE',   align: 'text-right' },
+                        ] as const).map(({ label, align }) => (
+                          <th key={label} className={`px-3 py-2 ${align} font-normal uppercase tracking-widest`} style={{ color: 'var(--out-muted)' }}>{label}</th>
                         ))}
                       </tr>
                     </thead>
@@ -756,7 +761,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                             onMouseEnter={e => (e.currentTarget.style.background = '#0E1A0E')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                             <td className="px-3 py-2" style={{ color: 'var(--out-muted)' }}>{i + 1}</td>
-                            <td className="px-2 py-2">
+                            <td className="px-3 py-2">
                               <a href={`${EXPLORER}/address/${h.address.hash}`} target="_blank" rel="noreferrer"
                                 className="hover:underline"
                                 style={{ color: h.address.is_contract ? 'var(--out-ink-dim)' : 'var(--out-text)' }}>
@@ -766,7 +771,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                                 <span className="ml-1.5 text-[9px] border px-1" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>CONTRACT</span>
                               )}
                             </td>
-                            <td className="px-2 py-2 text-right font-bold" style={{ color: 'var(--out-text)' }}>
+                            <td className="px-3 py-2 text-right font-bold" style={{ color: 'var(--out-text)' }}>
                               {fmtRaw(h.value)} <span className="font-normal text-[10px]" style={{ color: 'var(--out-muted)' }}>{token.ticker}</span>
                             </td>
                             <td className="px-3 py-2 text-right">
