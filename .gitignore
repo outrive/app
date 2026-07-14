@@ -20,7 +20,6 @@ replit.md
 .local/
 .cache/
 attached_assets/
-artifact.toml
 .npmrc
 
 # IDE
