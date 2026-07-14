@@ -11,6 +11,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TokenDetailPage } from './TokenDetailPage';
 import type { VToken } from './TokenDetailPage';
+import { TickerStrip } from '@/components/MarketTicker';
 
 const BASE_URL = import.meta.env.BASE_URL ?? '/';
 function apiUrl(path: string) { return BASE_URL.replace(/\/$/, '') + path; }
@@ -82,6 +83,7 @@ export default function TokenDetail() {
 
   return (
     <main className="pt-12">
+      <TickerStrip />
       <TokenDetailPage token={token!} onBack={() => navigate('/')} />
     </main>
   );

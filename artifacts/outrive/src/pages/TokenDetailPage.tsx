@@ -415,11 +415,11 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
     : '';
 
   return (
-    <div className="flex flex-col font-mono md:h-[calc(100vh-48px)] md:overflow-hidden"
-      style={{ minHeight: 'calc(100vh - 48px)', background: 'var(--out-bg)' }}>
+    <div className="flex flex-col font-mono md:h-[calc(100vh-82px)] md:overflow-hidden"
+      style={{ minHeight: 'calc(100vh - 82px)', background: 'var(--out-bg)' }}>
 
-      {/* ══ STICKY HEADER BAR — top-[48px] sits below the fixed Topbar ══ */}
-      <div className="sticky top-[48px] z-10 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b shrink-0"
+      {/* ══ STICKY HEADER BAR — top-[82px] = 48px Topbar + 34px TickerStrip ══ */}
+      <div className="sticky top-[82px] z-10 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b shrink-0"
         style={{ borderColor: 'var(--out-ink-dim)', background: 'var(--out-bg-sheet)' }}>
 
         <button onClick={onBack}
