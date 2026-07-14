@@ -321,17 +321,23 @@ export function ChatConsole() {
     const file = e.target.files?.[0];
     if (!file || !txPayload || !address) return;
     setImageUploading(true);
+
+    // 1. Show local blob preview immediately — before upload
+    const localBlob = URL.createObjectURL(file);
+    setImagePreviewUrl(localBlob);
+
     try {
       const baseUrl = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 
-      // 1. Upload image → get public URL
+      // 2. Upload image → get public URL
       const formData = new FormData();
       formData.append('image', file);
       const upRes = await fetch(`${baseUrl}/api/upload/image`, { method: 'POST', body: formData });
       if (!upRes.ok) throw new Error((await upRes.json() as { error?: string }).error ?? 'Upload failed');
       const { url } = await upRes.json() as { url: string };
 
-      // 2. Show local preview immediately
+      // 3. Swap to remote URL and free blob
+      URL.revokeObjectURL(localBlob);
       setImagePreviewUrl(url);
 
       // 3. Rebuild calldata with the new image URL
