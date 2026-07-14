@@ -266,7 +266,7 @@ export function ChatConsole() {
   const hasRecordedRef = useRef(false);
   const assistantIdRef = useRef('');
 
-  const { sendTransaction, data: hash, isPending: isSigning } = useSendTransaction();
+  const { sendTransaction, data: hash, isPending: isSigning, isError: isSendError } = useSendTransaction();
   const { isSuccess: isConfirmed, isError: isTxFailed, data: receipt } = useWaitForTransactionReceipt({ hash });
 
   // Activate (launch()) state — step 2 after preLaunch confirms
@@ -333,8 +333,9 @@ export function ChatConsole() {
         });
       }
     }
-    if (isTxFailed && signStep === 'pending') setSignStep('failed');
-  }, [isConfirmed, isTxFailed, hash, signStep]);
+    if (isTxFailed  && signStep === 'pending') setSignStep('failed');
+    if (isSendError && signStep === 'pending') setSignStep('failed');
+  }, [isConfirmed, isTxFailed, isSendError, hash, signStep]);
 
   /* ── Step 2: auto-activate after preLaunch confirms ── */
   useEffect(() => {
@@ -643,21 +644,29 @@ export function ChatConsole() {
   const handleLaunch = () => {
     if (!txPayload?.launchTx) return;
     setSignStep('pending');
-    sendTransaction({
-      to:    txPayload.launchTx.to,
-      data:  txPayload.launchTx.data,
-      value: BigInt(txPayload.launchTx.value || '0'),
-    });
+    sendTransaction(
+      {
+        to:      txPayload.launchTx.to,
+        data:    txPayload.launchTx.data,
+        value:   BigInt(txPayload.launchTx.value || '0'),
+        chainId: 4663,   // Robinhood Chain — wagmi auto-prompts chain switch if needed
+      },
+      { onError: () => setSignStep('failed') },
+    );
   };
 
   const handleActivate = () => {
     if (!activateUnsignedTx) return;
     setActivateStep('activating');
-    sendActivateTx({
-      to:    activateUnsignedTx.to,
-      data:  activateUnsignedTx.data,
-      value: BigInt(activateUnsignedTx.value || '0'),
-    });
+    sendActivateTx(
+      {
+        to:      activateUnsignedTx.to,
+        data:    activateUnsignedTx.data,
+        value:   BigInt(activateUnsignedTx.value || '0'),
+        chainId: 4663,
+      },
+      { onError: () => setActivateStep('failed') },
+    );
   };
 
   /* ═══════════════════════════════════════════════════════════════════════
@@ -1155,9 +1164,21 @@ function renderWorkOrder(
           </div>
         </div>
       ) : signStep === 'failed' ? (
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
-          <span className="text-[10px]" style={{ color: 'var(--out-danger)' }}>TRANSACTION REJECTED OR REVERTED</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
+            <span className="text-[10px]" style={{ color: 'var(--out-danger)' }}>REJECTED OR REVERTED — check wallet &amp; network</span>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleLaunch}
+              className="flex-1 border border-[var(--out-ink)] px-4 py-2 text-[var(--out-ink)] font-mono text-[11px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+              RETRY →
+            </button>
+            <button onClick={handleDiscard}
+              className="border border-[var(--out-ink-dim)] px-4 py-2 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">
+              DISCARD
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex gap-3">
