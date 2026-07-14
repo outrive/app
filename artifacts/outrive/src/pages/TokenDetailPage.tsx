@@ -455,7 +455,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
           {token.address && <>
             <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>CA</span>
             <span className="text-[11px] font-mono" style={{ color: 'var(--out-ink)' }}>
-              {token.address.slice(0, 6)}…{token.address.slice(-4)}
+              {token.address}
             </span>
             <button onClick={copyCA}
               className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
