@@ -289,7 +289,7 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
     : 'var(--out-warn)';
 
   const date = new Date(launch.createdAt).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: '2-digit',
+    month: 'short', day: 'numeric', year: '2-digit', timeZone: 'UTC',
   });
 
   return (
