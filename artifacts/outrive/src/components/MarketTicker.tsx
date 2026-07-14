@@ -136,19 +136,6 @@ export function TickerStrip() {
         borderTop: '1px solid var(--out-ink-dim)',
       }}
     >
-      {/* Static MARKET label */}
-      <span
-        className="shrink-0 px-3 text-[11px] uppercase tracking-widest border-r font-mono"
-        style={{
-          color: 'var(--out-muted)',
-          borderColor: 'var(--out-ink-dim)',
-          whiteSpace: 'nowrap',
-          background: 'var(--out-bg)',
-        }}
-      >
-        ▦ MARKET
-      </span>
-
       {/* Scrolling area */}
       <div className="flex-1 overflow-hidden relative" style={{ height: TICKER_H }}>
         <div className="absolute left-0 top-0 h-full w-8 z-10 pointer-events-none"
