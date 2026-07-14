@@ -358,7 +358,7 @@ export function MarketPage() {
                     <div key={t.id}
                       className="flex items-center gap-3 px-2 py-2.5 border-b cursor-pointer transition-colors"
                       style={{ borderColor: 'var(--out-grid-major)', background: isMine ? '#0A120A' : 'transparent' }}
-                      onClick={() => navigate('/token/' + t.address)}>
+                      onClick={() => navigate('/token/' + t.address, { state: { token: t } })}>
 
                       {/* Rank */}
                       <span className="text-[12px] shrink-0 w-5 text-right font-mono" style={{ color: 'var(--out-muted)' }}>{rank}</span>
@@ -424,7 +424,7 @@ export function MarketPage() {
                           style={{ borderColor: 'var(--out-grid-major)', background: isMine ? '#0A120A' : 'transparent' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#0E1A0E')}
                           onMouseLeave={e => (e.currentTarget.style.background = isMine ? '#0A120A' : 'transparent')}
-                          onClick={() => navigate('/token/' + t.address)}>
+                          onClick={() => navigate('/token/' + t.address, { state: { token: t } })}>
                           <td className="py-2.5 pr-3 text-[12px]" style={{ color: 'var(--out-muted)' }}>{rank}</td>
                           <td className="py-2.5 pr-4">
                             <div className="flex items-center gap-2">
