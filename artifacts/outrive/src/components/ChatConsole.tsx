@@ -267,6 +267,8 @@ export function ChatConsole() {
   const [historyIdx, setHistoryIdx]   = useState(-1);
   const [credits, setCredits]         = useState<CreditInfo | null>(null);
   const [txErrorMsg, setTxErrorMsg]   = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const messagesEndRef      = useRef<HTMLDivElement>(null);
   const scrollContainerRef  = useRef<HTMLDivElement>(null);
@@ -314,12 +316,63 @@ export function ChatConsole() {
     cliEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [cliLines, txPayload]);
 
+  /* ── Image upload handler — called from Work Order card ── */
+  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !txPayload || !address) return;
+    setImageUploading(true);
+    try {
+      const baseUrl = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
+
+      // 1. Upload image → get public URL
+      const formData = new FormData();
+      formData.append('image', file);
+      const upRes = await fetch(`${baseUrl}/api/upload/image`, { method: 'POST', body: formData });
+      if (!upRes.ok) throw new Error((await upRes.json() as { error?: string }).error ?? 'Upload failed');
+      const { url } = await upRes.json() as { url: string };
+
+      // 2. Show local preview immediately
+      setImagePreviewUrl(url);
+
+      // 3. Rebuild calldata with the new image URL
+      const rbRes = await fetch(`${baseUrl}/api/launch/rebuild-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:               txPayload.preview.name,
+          ticker:             txPayload.preview.ticker,
+          description:        txPayload.preview.description,
+          imageRef:           url,
+          antiSniperDuration: txPayload.preview.antiSniperDuration,
+          walletAddress:      address,
+        }),
+      });
+      if (!rbRes.ok) throw new Error('Calldata rebuild failed');
+      const rebuilt = await rbRes.json() as { launchTx: { to: `0x${string}`; data: `0x${string}`; value: string }; preview: typeof txPayload.preview };
+
+      // 4. Update txPayload with new calldata + imageRef
+      setTxPayload(prev => prev ? {
+        ...prev,
+        launchTx: rebuilt.launchTx,
+        preview:  { ...prev.preview, imageRef: url },
+      } : prev);
+    } catch (err) {
+      console.error('[OUTRIVE] image upload failed:', err);
+    } finally {
+      setImageUploading(false);
+      // Reset input so same file can be re-selected
+      e.target.value = '';
+    }
+  }, [txPayload, address]);
+
   useEffect(() => {
     hasRecordedRef.current = false;
     hasSentRef.current     = false;
     setSignStep('idle');
     setTxErrorMsg(null);
     setLaunchSuccess(null);
+    setImagePreviewUrl(null);
+    setImageUploading(false);
     setActivateStep('idle');
     setActivateTxHash(undefined);
     setActivateUnsignedTx(null);
@@ -908,7 +961,8 @@ export function ChatConsole() {
 
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch,
             () => setTxPayload(null), activateStep, activateTxHash,
-            activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg)}
+            activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg,
+            imageUploading, imagePreviewUrl, handleImageSelect)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -963,7 +1017,8 @@ export function ChatConsole() {
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch, () => {
             setTxPayload(null);
             setCliLines(prev => [...prev, L('  ✗ work order discarded', 'muted'), BL()]);
-          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg)}
+          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg,
+            imageUploading, imagePreviewUrl, handleImageSelect)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -1139,6 +1194,9 @@ function renderWorkOrder(
   handleActivate?: () => void,
   walletChainId?: number,
   txErrorMsg?: string | null,
+  imageUploading?: boolean,
+  imagePreviewUrl?: string | null,
+  onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void,
 ) {
   if (!txPayload) return null;
 
@@ -1155,7 +1213,7 @@ function renderWorkOrder(
       </div>
 
       {/* Fields */}
-      <div className="space-y-1.5 mb-5">
+      <div className="space-y-1.5 mb-4">
         {([
           ['NAME',        txPayload.preview.name],
           ['TICKER',      `${txPayload.preview.ticker}`],
@@ -1173,6 +1231,52 @@ function renderWorkOrder(
             <span className="text-[var(--out-text)] text-right text-[9px] sm:text-[10px] max-w-[140px] sm:max-w-[200px] truncate">{val}</span>
           </div>
         ))}
+
+        {/* ── Image upload row ── */}
+        {signStep === 'idle' && onImageSelect && (
+          <div className="flex items-center gap-1 pt-1">
+            <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[9px] sm:text-[10px]">IMAGE</span>
+            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] mb-[3px]" />
+            <div className="flex items-center gap-2 shrink-0">
+              {imagePreviewUrl ? (
+                <>
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Agent"
+                    className="w-6 h-6 object-cover border border-[var(--out-ink-dim)]"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                  <span className="text-[9px]" style={{ color: 'var(--out-ink)' }}>✓ ATTACHED</span>
+                </>
+              ) : (
+                <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+                  {imageUploading ? '⟳ UPLOADING…' : 'NO IMAGE'}
+                </span>
+              )}
+              <label
+                className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5 cursor-pointer transition-colors"
+                style={{
+                  borderColor: imageUploading ? 'var(--out-grid-major)' : 'var(--out-ink)',
+                  color:       imageUploading ? 'var(--out-muted)' : 'var(--out-ink)',
+                  background:  'transparent',
+                  pointerEvents: imageUploading ? 'none' : 'auto',
+                }}
+              >
+                {imageUploading ? 'UPLOADING…' : imagePreviewUrl ? 'CHANGE ↑' : 'BROWSE ↑'}
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={onImageSelect}
+                  disabled={imageUploading}
+                />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="text-[9px] mb-3" style={{ color: 'var(--out-muted)' }}>
+        PNG / JPG / WebP — square recommended (min 400×400px, max 5 MB) — immutable after signing
       </div>
 
       <div className="text-[var(--out-warn)] text-[10px] mb-4 uppercase tracking-wide">

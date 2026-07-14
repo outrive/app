@@ -12,7 +12,9 @@ export interface LaunchPreview {
   targetContract: string;
   baseCost: string;
   mode: string;
-  antiSniper: string;   // e.g. "60s (1 MIN)" | "DISABLED"
+  antiSniper: string;       // e.g. "60s (1 MIN)" | "DISABLED"
+  antiSniperDuration: number; // raw seconds (0 or 60) — used to rebuild calldata
+  imageRef: string;          // current image URL (empty string if none)
 }
 
 export type ChatEvent =
