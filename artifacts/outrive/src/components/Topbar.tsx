@@ -135,9 +135,8 @@ export function Topbar() {
 
         {/* Network chip (sm+) */}
         <div
-          className="hidden sm:flex items-center gap-1.5 px-2 py-1 border shrink-0"
+          className="hidden sm:flex items-center gap-1.5 px-2 py-1 shrink-0"
           style={{
-            borderColor: isHealthy ? 'var(--out-ink-dim)' : 'var(--out-warn)',
             color: isHealthy ? 'var(--out-text)' : 'var(--out-warn)',
           }}
         >
