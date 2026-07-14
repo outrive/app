@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sheet } from '@/components/Sheet';
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
+import { getAddress } from 'viem';
 import { streamChat, fetchCredits, type ChatEvent, type CreditInfo, type UnsignedTx, type LaunchPreview } from '@/lib/chatStream';
 import { useRecordLaunch } from '@workspace/api-client-react';
 import { getExplorerUrl } from '@/lib/chains';
@@ -677,10 +678,12 @@ export function ChatConsole() {
     }
 
     // Step 2: send the transaction — wallet is now on Robinhood Chain
+    // Normalize `to` with getAddress() — viem 2.x rejects non-EIP-55 checksummed addresses
+    // client-side before MetaMask ever opens, causing a silent FAILED.
     hasSentRef.current = true;
     sendTransaction(
       {
-        to:    txPayload.launchTx.to,
+        to:    getAddress(txPayload.launchTx.to.toLowerCase() as `0x${string}`),
         data:  txPayload.launchTx.data,
         value: BigInt(txPayload.launchTx.value || '0'),
         // No chainId here — already switched above; avoids double MetaMask popup

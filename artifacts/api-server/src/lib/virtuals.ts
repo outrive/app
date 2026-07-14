@@ -1,4 +1,4 @@
-import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http } from "viem";
+import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http, getAddress } from "viem";
 import { createWalletClient } from "viem";
 import { getPublicClient, getActiveChain } from "./chains.js";
 import { getSignerAccount, getSignerAddress } from "./signerWallet.js";
@@ -60,9 +60,11 @@ const BONDING_V5_ABI: Abi = [
 ];
 
 // BondingV5 proxy address — override with VIRTUALS_BONDING_ADDRESS env var if needed
-const BONDING_V5_ADDRESS = (
-  process.env.VIRTUALS_BONDING_ADDRESS ?? "0xd4ccbfa37e2f35611b3042e4096Ad7a3459Bd007"
-) as `0x${string}`;
+// IMPORTANT: address must be EIP-55 checksummed; viem 2.x rejects invalid mixed-case addresses.
+// Correct checksum: 0xd4cCBFA37e2f35611b3042e4096Ad7a3459Bd007
+const BONDING_V5_ADDRESS: `0x${string}` = getAddress(
+  (process.env.VIRTUALS_BONDING_ADDRESS ?? "0xd4ccbfa37e2f35611b3042e4096Ad7a3459Bd007").toLowerCase()
+);
 
 // ─── Verified ABI — AgentFactory proxy (used by indexer / system status) ──
 // Proxy: 0x43e4c17b15365596caae8e7d00e42bc8e988c2d4
