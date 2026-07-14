@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sheet } from '@/components/Sheet';
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
 import { streamChat, fetchCredits, type ChatEvent, type CreditInfo, type UnsignedTx, type LaunchPreview } from '@/lib/chatStream';
 import { useRecordLaunch } from '@workspace/api-client-react';
 import { getExplorerUrl } from '@/lib/chains';
@@ -246,7 +246,8 @@ function parseCmd(raw: string): ParseResult {
    COMPONENT
 ═══════════════════════════════════════════════════════════════════════════ */
 export function ChatConsole() {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const [mode, setMode]           = useState<InputMode>('prompt');
   const [messages, setMessages]   = useState<LocalMessage[]>([]);
   const [cliLines, setCliLines]   = useState<CliLine[]>(() => makeBanner());
@@ -641,29 +642,48 @@ export function ChatConsole() {
   /* ═══════════════════════════════════════════════════════════════════════
      TX HANDLERS
   ═══════════════════════════════════════════════════════════════════════ */
-  const handleLaunch = () => {
+  const handleLaunch = async () => {
     if (!txPayload?.launchTx) return;
     setSignStep('pending');
+    // Step 1: explicit chain switch BEFORE sending tx.
+    // Doing this separately avoids wagmi's auto-switch inside sendTransaction,
+    // which causes MetaMask to show TWO sequential popups and confuses users.
+    if (chain?.id !== 4663) {
+      try {
+        await switchChainAsync({ chainId: 4663 });
+      } catch {
+        setSignStep('failed');
+        return;
+      }
+    }
+    // Step 2: send the transaction — wallet is now on Robinhood Chain
     sendTransaction(
       {
-        to:      txPayload.launchTx.to,
-        data:    txPayload.launchTx.data,
-        value:   BigInt(txPayload.launchTx.value || '0'),
-        chainId: 4663,   // Robinhood Chain — wagmi auto-prompts chain switch if needed
+        to:    txPayload.launchTx.to,
+        data:  txPayload.launchTx.data,
+        value: BigInt(txPayload.launchTx.value || '0'),
+        // No chainId here — already switched above; avoids double MetaMask popup
       },
       { onError: () => setSignStep('failed') },
     );
   };
 
-  const handleActivate = () => {
+  const handleActivate = async () => {
     if (!activateUnsignedTx) return;
     setActivateStep('activating');
+    if (chain?.id !== 4663) {
+      try {
+        await switchChainAsync({ chainId: 4663 });
+      } catch {
+        setActivateStep('failed');
+        return;
+      }
+    }
     sendActivateTx(
       {
-        to:      activateUnsignedTx.to,
-        data:    activateUnsignedTx.data,
-        value:   BigInt(activateUnsignedTx.value || '0'),
-        chainId: 4663,
+        to:    activateUnsignedTx.to,
+        data:  activateUnsignedTx.data,
+        value: BigInt(activateUnsignedTx.value || '0'),
       },
       { onError: () => setActivateStep('failed') },
     );
@@ -833,7 +853,7 @@ export function ChatConsole() {
 
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch,
             () => setTxPayload(null), activateStep, activateTxHash,
-            activateUnsignedTx ? handleActivate : undefined)}
+            activateUnsignedTx ? handleActivate : undefined, chain?.id)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -886,7 +906,7 @@ export function ChatConsole() {
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch, () => {
             setTxPayload(null);
             setCliLines(prev => [...prev, L('  ✗ work order discarded', 'muted'), BL()]);
-          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined)}
+          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -1058,6 +1078,7 @@ function renderWorkOrder(
   activateStep?: ActivateStep,
   activateTxHash?: `0x${string}`,
   handleActivate?: () => void,
+  walletChainId?: number,
 ) {
   if (!txPayload) return null;
 
@@ -1097,6 +1118,15 @@ function renderWorkOrder(
       <div className="text-[var(--out-warn)] text-[10px] mb-4 uppercase tracking-wide">
         {'⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING'}
       </div>
+
+      {/* Chain warning — shown when wallet is NOT on Robinhood Chain */}
+      {walletChainId !== undefined && walletChainId !== 4663 && walletChainId !== 46630 && signStep !== 'confirmed' && (
+        <div className="mb-4 px-3 py-2 border text-[10px] font-mono uppercase tracking-wide flex items-center gap-2"
+          style={{ borderColor: 'var(--out-warn)', color: 'var(--out-warn)', background: 'rgba(255,160,0,0.05)' }}>
+          <span>⚠</span>
+          <span>WALLET ON WRONG CHAIN (chainId {walletChainId}) — clicking SIGN will switch to Robinhood Chain (4663) first</span>
+        </div>
+      )}
 
       {/* Action buttons — state-driven */}
       {(signStep === 'pending' || isSigning) ? (
