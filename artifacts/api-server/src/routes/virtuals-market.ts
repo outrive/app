@@ -313,4 +313,53 @@ router.get("/virtuals/tokens/:id/ohlcv", async (req, res): Promise<void> => {
   res.json({ candles: [] });
 });
 
+// GET /api/virtuals/token-by-address/:address
+// Looks up a single Virtuals token by its on-chain contract address.
+router.get("/virtuals/token-by-address/:address", async (req, res): Promise<void> => {
+  const rawAddr = req.params.address;
+  const cacheKey = `virtuals:by-addr:${rawAddr.toLowerCase()}`;
+  const cached = cacheGet<ReturnType<typeof normalise>>(cacheKey);
+  if (cached) { res.json(cached); return; }
+  try {
+    // Try tokenAddress filter first
+    const p1 = new URLSearchParams();
+    p1.set("filters[tokenAddress][$eqi]", rawAddr);
+    p1.set("pagination[pageSize]", "1");
+    const r1 = await fetch(`${VIRTUALS_BASE}/virtuals?${p1}`, {
+      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (r1.ok) {
+      const j1 = await r1.json() as { data: VItem[] };
+      const item1 = j1.data?.[0];
+      if (item1) {
+        const token = normalise(item1);
+        cacheSet(cacheKey, token, 30_000);
+        res.json(token); return;
+      }
+    }
+    // Fallback: try preToken filter
+    const p2 = new URLSearchParams();
+    p2.set("filters[preToken][$eqi]", rawAddr);
+    p2.set("pagination[pageSize]", "1");
+    const r2 = await fetch(`${VIRTUALS_BASE}/virtuals?${p2}`, {
+      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (r2.ok) {
+      const j2 = await r2.json() as { data: VItem[] };
+      const item2 = j2.data?.[0];
+      if (item2) {
+        const token = normalise(item2);
+        cacheSet(cacheKey, token, 30_000);
+        res.json(token); return;
+      }
+    }
+    res.status(404).json({ error: "Token not found" });
+  } catch (e) {
+    logger.error({ err: e }, "token-by-address lookup failed");
+    res.status(500).json({ error: "Failed to fetch token" });
+  }
+});
+
 export default router;
