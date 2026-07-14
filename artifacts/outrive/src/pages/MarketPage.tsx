@@ -119,6 +119,17 @@ function useVirtualsSummary() {
     staleTime: 30_000,
   });
 }
+function useOutriveAddresses() {
+  return useQuery<Set<string>>({
+    queryKey: ['outrive-addresses'],
+    queryFn: () =>
+      fetch(apiUrl('/api/launches/addresses'))
+        .then(r => r.json())
+        .then((d: { addresses: string[] }) => new Set(d.addresses.map(a => a.toLowerCase()))),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AVATAR
@@ -198,6 +209,7 @@ export function MarketPage() {
   const [page, setPage]         = useState(1);
   const [lastSync, setLastSync] = useState(new Date());
   const [countdown, setCountdown] = useState(REFRESH_MS / 1000);
+  const [outriveOnly, setOutriveOnly] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebSearch(search); setPage(1); }, 400);
@@ -207,6 +219,7 @@ export function MarketPage() {
   const vp = useVirtualPrice();
   const { data, isLoading, isFetching, refetch } = useVirtualsTokens({ sort, chain, status, search: debSearch, page });
   const { data: summary } = useVirtualsSummary();
+  const { data: outriveAddrs } = useOutriveAddresses();
 
   useEffect(() => {
     let c = REFRESH_MS / 1000;
@@ -222,7 +235,10 @@ export function MarketPage() {
     refetch(); setLastSync(new Date()); setCountdown(REFRESH_MS / 1000);
   }, [refetch]);
 
-  const tokens = data?.tokens ?? [];
+  const allTokens = data?.tokens ?? [];
+  const tokens = outriveOnly && outriveAddrs
+    ? allTokens.filter(t => outriveAddrs.has(t.address?.toLowerCase()))
+    : allTokens;
   const meta   = data?.meta;
   const apiErr = data?.error;
 
@@ -292,6 +308,16 @@ export function MarketPage() {
                       style={btnStyle(status === val)}>{label}</button>
                   ))}
                 </div>
+                {/* OUTRIVE-only toggle */}
+                <button
+                  onClick={() => setOutriveOnly(v => !v)}
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 uppercase tracking-widest border transition-colors font-mono text-[13px]"
+                  style={outriveOnly
+                    ? { borderColor: 'var(--out-ink)', color: 'var(--out-bg)', background: 'var(--out-ink)' }
+                    : { borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: 'transparent' }}>
+                  ▲ OUTRIVE
+                </button>
+
                 <div className="flex items-center gap-2 font-mono text-[13px] ml-auto shrink-0">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${isFetching ? 'bg-white' : 'bg-[var(--out-ink)] animate-pulse'}`} />
                   <span style={{ color: 'var(--out-ink)' }}>LIVE</span>
@@ -350,10 +376,11 @@ export function MarketPage() {
               {/* ══ MOBILE CARD LIST (< sm) ══════════════════════════════════ */}
               <div className="sm:hidden flex flex-col">
                 {tokens.map((t, i) => {
-                  const rank   = (page - 1) * 50 + i + 1;
-                  const isNew  = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
-                  const isMine = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                  const posChg = t.priceChange24h >= 0;
+                  const rank      = (page - 1) * 50 + i + 1;
+                  const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
+                  const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
+                  const isOutrive = !!outriveAddrs?.has(t.address?.toLowerCase());
+                  const posChg    = t.priceChange24h >= 0;
                   return (
                     <div key={t.id}
                       className="flex items-center gap-3 px-2 py-2.5 border-b cursor-pointer transition-colors"
@@ -370,9 +397,10 @@ export function MarketPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[12px] font-bold font-mono" style={{ color: 'var(--out-ink)' }}>${t.ticker}</span>
-                          {t.isVerified && <span className="text-[13px] border px-1" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
-                          {isNew  && <span className="text-[13px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
-                          {isMine && <span className="text-[13px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                          {t.isVerified  && <span className="text-[13px] border px-1" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
+                          {isNew         && <span className="text-[13px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
+                          {isMine        && <span className="text-[13px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                          {isOutrive     && <span className="text-[10px] border px-1" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>OTR</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap font-mono">
                           <span className="text-[12px]" style={{ color: 'var(--out-text)' }}>{vp > 0 ? fmtUsd(t.mcapInVirtual * vp) : `${fmtVirtual(t.mcapInVirtual)} VRTL`}</span>
@@ -414,10 +442,11 @@ export function MarketPage() {
                   </thead>
                   <tbody>
                     {tokens.map((t, i) => {
-                      const rank   = (page - 1) * 50 + i + 1;
-                      const isNew  = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
-                      const isMine = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                      const posChg = t.priceChange24h >= 0;
+                      const rank      = (page - 1) * 50 + i + 1;
+                      const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
+                      const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
+                      const isOutrive = !!outriveAddrs?.has(t.address?.toLowerCase());
+                      const posChg    = t.priceChange24h >= 0;
                       return (
                         <tr key={t.id}
                           className="border-b cursor-pointer transition-colors group"
@@ -433,8 +462,9 @@ export function MarketPage() {
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold" style={{ color: 'var(--out-ink)' }}>${t.ticker}</span>
                                   {t.isVerified && <span className="text-[11px] px-1 border" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
-                                  {isNew  && <span className="text-[11px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
-                                  {isMine && <span className="text-[11px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                                  {isNew      && <span className="text-[11px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
+                                  {isMine     && <span className="text-[11px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                                  {isOutrive  && <span className="text-[10px] border px-1" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>OTR</span>}
                                 </div>
                                 <span className="text-[12px] truncate max-w-[130px]" style={{ color: 'var(--out-muted)' }}>{t.name}</span>
                               </div>

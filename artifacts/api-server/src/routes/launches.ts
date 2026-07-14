@@ -27,6 +27,18 @@ router.get("/launches", async (req, res): Promise<void> => {
   res.json(launches);
 });
 
+/* GET /launches/addresses — all token addresses launched via OUTRIVE */
+router.get("/launches/addresses", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({ tokenAddress: launchesTable.tokenAddress })
+    .from(launchesTable)
+    .orderBy(desc(launchesTable.createdAt));
+  const addresses = rows
+    .map(r => r.tokenAddress?.toLowerCase())
+    .filter(Boolean) as string[];
+  res.json({ addresses });
+});
+
 router.post("/launches", async (req, res): Promise<void> => {
   const parsed = RecordLaunchBody.safeParse(req.body);
   if (!parsed.success) {
