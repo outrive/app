@@ -145,7 +145,7 @@ export function Topbar() {
             className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
             style={{ background: isHealthy ? 'var(--out-ink)' : 'var(--out-warn)' }}
           />
-          <img src="/robinhood-logo.png" alt="Robinhood" className="h-5 w-auto object-contain" style={{ maxWidth: '100px', imageRendering: 'crisp-edges' }} />
+          <img src="/robinhood-logo.png" alt="Robinhood" className="h-7 w-auto object-contain" />
         </div>
 
         {/* Calibration badge (md+) */}
