@@ -27,7 +27,7 @@ const tools: Anthropic.Tool[] = [
         ticker:              { type: "string", description: "Token ticker, uppercase A-Z0-9, max 6 chars (rendered as $TICKER)" },
         description:         { type: "string", description: "Optional agent description, max 500 chars" },
         image_ref:           { type: "string", description: "Optional image URI" },
-        anti_sniper_minutes: { type: "number", description: "Anti-sniper protection window in minutes. Default 1 (= 60s). Set to 0 to disable. Max 98. Buy tax starts 99% and decays linearly to 1% over the window." },
+        anti_sniper_minutes: { type: "number", description: "Anti-sniper protection. Only two valid values: 1 (= 60s, default, buy tax 99% decaying to 1%) or 0 (disabled). No other durations are supported for Instant Launch." },
       },
     },
   },
