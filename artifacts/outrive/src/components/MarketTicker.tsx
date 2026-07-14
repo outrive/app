@@ -33,20 +33,17 @@ function seedColor(s: string) {
   return GREENS[Math.abs(h) % GREENS.length];
 }
 
-/* ── Fetch directly from virtuals proxy (real Robinhood chain data) ──── */
+/* ── Fetch directly from virtuals proxy ──────────────────────────────── */
 async function fetchTickerTokens(): Promise<TickerToken[]> {
-  const p = new URLSearchParams({
-    sort: 'mcapInVirtual:desc',
-    chain: 'ROBINHOOD',
-    page: '1',
-    pageSize: '40',
-  });
+  const p = new URLSearchParams({ sort: 'mcapInVirtual:desc', chain: 'ROBINHOOD', page: '1', pageSize: '40' });
   const res = await fetch(apiUrl(`/api/virtuals/tokens?${p}`));
   if (!res.ok) return [];
   const json = await res.json();
   const items: TickerToken[] = json?.tokens ?? (Array.isArray(json) ? json : []);
   return items.slice(0, 40);
 }
+
+const TICKER_H = 34; // increased from 28 for readability
 
 /* ── Token chip ───────────────────────────────────────────────────────── */
 function TokenChip({ t, vp }: { t: TickerToken; vp: number }) {
@@ -55,7 +52,7 @@ function TokenChip({ t, vp }: { t: TickerToken; vp: number }) {
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-3 border-r shrink-0 h-full"
+      className="inline-flex items-center gap-2 px-3.5 border-r shrink-0 h-full"
       style={{ borderRightColor: 'var(--out-ink-dim)', fontFamily: 'JetBrains Mono, monospace' }}
     >
       {t.image && !imgErr ? (
@@ -68,20 +65,20 @@ function TokenChip({ t, vp }: { t: TickerToken; vp: number }) {
         />
       ) : (
         <span
-          className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-black font-bold"
-          style={{ background: seedColor(t.ticker), fontSize: 7 }}
+          className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center font-bold"
+          style={{ background: seedColor(t.ticker), fontSize: 8, color: '#050905' }}
         >
           {t.ticker.slice(0, 1)}
         </span>
       )}
-      <span className="text-[10px] font-bold" style={{ color: 'var(--out-ink)' }}>
+      <span className="text-[12px] font-bold tracking-wide" style={{ color: 'var(--out-ink)' }}>
         ${t.ticker}
       </span>
-      <span className="text-[9px]" style={{ color: 'var(--out-text)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--out-text)' }}>
         {fmtMcapUsd(t.mcapInVirtual, vp)}
       </span>
       {t.priceChange24h !== 0 && (
-        <span className="text-[9px]" style={{ color: positive ? 'var(--out-ink)' : '#f87171' }}>
+        <span className="text-[11px] font-medium" style={{ color: positive ? 'var(--out-ink)' : '#f87171' }}>
           {positive ? '+' : ''}{t.priceChange24h.toFixed(1)}%
         </span>
       )}
@@ -93,7 +90,7 @@ function TokenChip({ t, vp }: { t: TickerToken; vp: number }) {
 function Sep() {
   return (
     <span
-      className="shrink-0 px-2 text-[10px]"
+      className="shrink-0 px-3 text-[12px]"
       style={{ color: 'var(--out-ink-dim)', fontFamily: 'JetBrains Mono, monospace' }}
     >
       ·
@@ -124,7 +121,7 @@ export function TickerStrip() {
     if (!el || tokens.length === 0) return;
     el.style.animation = 'none';
     void el.offsetWidth;
-    const approxItemW = 170;
+    const approxItemW = 185;
     const totalW = tokens.length * approxItemW;
     const duration = Math.max(20, totalW / 80);
     el.style.animation = `outrive-ticker ${duration}s linear infinite`;
@@ -134,18 +131,17 @@ export function TickerStrip() {
     <div
       className="flex items-center overflow-hidden"
       style={{
-        height: 28,
+        height: TICKER_H,
         background: 'var(--out-bg)',
         borderTop: '1px solid var(--out-ink-dim)',
       }}
     >
-      {/* Static label */}
+      {/* Static MARKET label */}
       <span
-        className="shrink-0 px-3 text-[9px] uppercase tracking-widest border-r"
+        className="shrink-0 px-3 text-[11px] uppercase tracking-widest border-r font-mono"
         style={{
           color: 'var(--out-muted)',
           borderColor: 'var(--out-ink-dim)',
-          fontFamily: 'JetBrains Mono, monospace',
           whiteSpace: 'nowrap',
           background: 'var(--out-bg)',
         }}
@@ -154,16 +150,16 @@ export function TickerStrip() {
       </span>
 
       {/* Scrolling area */}
-      <div className="flex-1 overflow-hidden relative" style={{ height: 28 }}>
-        <div className="absolute left-0 top-0 h-full w-6 z-10 pointer-events-none"
+      <div className="flex-1 overflow-hidden relative" style={{ height: TICKER_H }}>
+        <div className="absolute left-0 top-0 h-full w-8 z-10 pointer-events-none"
           style={{ background: 'linear-gradient(to right, var(--out-bg), transparent)' }} />
-        <div className="absolute right-0 top-0 h-full w-6 z-10 pointer-events-none"
+        <div className="absolute right-0 top-0 h-full w-8 z-10 pointer-events-none"
           style={{ background: 'linear-gradient(to left, var(--out-bg), transparent)' }} />
 
         {isLoading && (
           <span
-            className="absolute inset-0 flex items-center px-4 text-[9px] uppercase tracking-widest"
-            style={{ color: 'var(--out-muted)', fontFamily: 'JetBrains Mono, monospace' }}
+            className="absolute inset-0 flex items-center px-4 text-[11px] uppercase tracking-widest font-mono"
+            style={{ color: 'var(--out-muted)' }}
           >
             SCANNING ROBINHOOD CHAIN…
           </span>
@@ -173,7 +169,7 @@ export function TickerStrip() {
           <div
             ref={trackRef}
             className="flex items-center whitespace-nowrap"
-            style={{ height: 28, willChange: 'transform' }}
+            style={{ height: TICKER_H, willChange: 'transform' }}
           >
             {[...tokens, ...tokens].map((t, i) => (
               <React.Fragment key={`${t.ticker}-${i}`}>
@@ -187,35 +183,21 @@ export function TickerStrip() {
 
       {/* LIVE dot */}
       <span
-        className="shrink-0 px-3 flex items-center gap-1.5 border-l"
-        style={{ borderColor: 'var(--out-ink-dim)', height: 28 }}
+        className="shrink-0 px-3 flex items-center gap-1.5 border-l font-mono"
+        style={{ borderColor: 'var(--out-ink-dim)', height: TICKER_H }}
       >
-        <span
-          className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-          style={{ background: 'var(--out-ink)' }}
-        />
-        <span
-          className="text-[9px] uppercase"
-          style={{ color: 'var(--out-ink)', fontFamily: 'JetBrains Mono, monospace' }}
-        >
-          LIVE
-        </span>
+        <span className="w-2 h-2 rounded-full animate-pulse shrink-0" style={{ background: 'var(--out-ink)' }} />
+        <span className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>LIVE</span>
       </span>
     </div>
   );
 }
 
-/* ── MarketTicker — standalone sticky version (kept for compat) ───────── */
+/* ── MarketTicker — standalone sticky version ─────────────────────────── */
 export function MarketTicker() {
-  const TICKER_TOP = 106;
+  const TICKER_TOP = 48;
   return (
-    <div
-      className="sticky z-30 border-b"
-      style={{
-        top: TICKER_TOP,
-        borderColor: 'var(--out-ink-dim)',
-      }}
-    >
+    <div className="sticky z-30 border-b" style={{ top: TICKER_TOP, borderColor: 'var(--out-ink-dim)' }}>
       <TickerStrip />
     </div>
   );

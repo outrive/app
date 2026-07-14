@@ -155,7 +155,7 @@ function CurveBarInline({ pct, wide = false }: { pct: number; wide?: boolean }) 
       <div style={{ width: wide ? 80 : 56, height: 6, background: 'var(--out-bg)', border: '1px solid var(--out-muted)', overflow: 'hidden', borderRadius: 2 }}>
         <div style={{ width: `${clamped}%`, height: '100%', background: color, transition: 'width .4s', borderRadius: 2 }} />
       </div>
-      <span className="text-[9px]" style={{ color: 'var(--out-muted)', minWidth: 30, textAlign: 'right' }}>{Math.round(clamped)}%</span>
+      <span className="text-[12px]" style={{ color: 'var(--out-muted)', minWidth: 30, textAlign: 'right' }}>{Math.round(clamped)}%</span>
     </div>
   );
 }
@@ -260,9 +260,9 @@ export function MarketPage() {
             { label: 'MY LAUNCHES',      val: address ? String(tokens.filter(t => t.creator?.toLowerCase() === address.toLowerCase()).length) : '—', sub: address ? 'THIS PAGE' : 'CONNECT WALLET' },
           ].map(s => (
             <div key={s.label} className="border border-[var(--out-grid-major)] px-4 py-3 flex flex-col gap-1">
-              <div className="text-[9px] uppercase tracking-widest text-[var(--out-muted)]">{s.label}</div>
+              <div className="text-[12px] uppercase tracking-widest text-[var(--out-muted)]">{s.label}</div>
               <div className="text-[22px] font-bold leading-none" style={{ color: 'var(--out-ink)' }}>{s.val}</div>
-              <div className="text-[9px] text-[var(--out-muted)]">{s.sub}</div>
+              <div className="text-[12px] text-[var(--out-muted)]">{s.sub}</div>
             </div>
           ))}
         </div>
@@ -273,14 +273,14 @@ export function MarketPage() {
             {/* Controls */}
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex font-mono text-[10px]">
+                <div className="flex font-mono text-[13px]">
                   {CHAIN_BTNS.map(c => (
                     <button key={c.value} onClick={() => { setChain(c.value); setPage(1); }}
                       className="px-2 sm:px-3 py-1.5 uppercase tracking-widest border-y border-l last:border-r transition-colors"
                       style={btnStyle(chain === c.value)}>{c.label}</button>
                   ))}
                 </div>
-                <div className="flex font-mono text-[10px]">
+                <div className="flex font-mono text-[13px]">
                   {STATUS_BTNS.map(([label, val]) => (
                     <button key={val}
                       onClick={() => {
@@ -292,7 +292,7 @@ export function MarketPage() {
                       style={btnStyle(status === val)}>{label}</button>
                   ))}
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[10px] ml-auto shrink-0">
+                <div className="flex items-center gap-2 font-mono text-[13px] ml-auto shrink-0">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${isFetching ? 'bg-white' : 'bg-[var(--out-ink)] animate-pulse'}`} />
                   <span style={{ color: 'var(--out-ink)' }}>LIVE</span>
                   <span className="hidden sm:inline" style={{ color: 'var(--out-muted)' }}>· {syncStr}</span>
@@ -307,14 +307,14 @@ export function MarketPage() {
                 <span style={{ color: 'var(--out-muted)' }}>⌕</span>
                 <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="SEARCH NAME / TICKER"
-                  className="flex-1 bg-transparent outline-none uppercase tracking-wide text-[10px] placeholder:text-[9px]"
+                  className="flex-1 bg-transparent outline-none uppercase tracking-wide text-[13px] placeholder:text-[13px]"
                   style={{ color: 'var(--out-text)' }} />
                 {search && <button onClick={() => setSearch('')} style={{ color: 'var(--out-muted)' }}>✕</button>}
               </div>
             </div>
 
             {/* Sort tabs */}
-            <div className="flex gap-0 font-mono text-[10px] overflow-x-auto no-scrollbar border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
+            <div className="flex gap-0 font-mono text-[13px] overflow-x-auto no-scrollbar border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
               {SORT_TABS.map(s => (
                 <button key={s.value} onClick={() => { setSort(s.value); setPage(1); }}
                   className="px-4 py-2 uppercase tracking-widest whitespace-nowrap transition-colors border-b-2"
@@ -325,13 +325,13 @@ export function MarketPage() {
             </div>
 
             {apiErr && (
-              <div className="border px-4 py-2 font-mono text-[10px] uppercase tracking-widest"
+              <div className="border px-4 py-2 font-mono text-[13px] uppercase tracking-widest"
                 style={{ borderColor: 'var(--out-warn)', color: 'var(--out-warn)' }}>⚠ API ERROR: {apiErr}</div>
             )}
 
             {/* Click-to-detail hint */}
             {!isLoading && tokens.length > 0 && (
-              <div className="font-mono text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+              <div className="font-mono text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
                 <span className="sm:hidden">◈ TAP ANY ROW TO OPEN TRADE PANEL</span>
                 <span className="hidden sm:inline">◈ CLICK ANY ROW TO OPEN TRADE PANEL</span>
               </div>
@@ -341,7 +341,7 @@ export function MarketPage() {
             {isLoading ? <Skeleton /> : tokens.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 font-mono">
                 <span className="text-5xl opacity-10" style={{ color: 'var(--out-ink)' }}>▦</span>
-                <span className="text-[10px] uppercase tracking-widest text-center" style={{ color: 'var(--out-muted)' }}>
+                <span className="text-[13px] uppercase tracking-widest text-center" style={{ color: 'var(--out-muted)' }}>
                   {debSearch ? `NO RESULTS FOR "${debSearch.toUpperCase()}"` : 'NO TOKENS FOUND'}
                 </span>
               </div>
@@ -361,7 +361,7 @@ export function MarketPage() {
                       onClick={() => navigate('/token/' + t.address)}>
 
                       {/* Rank */}
-                      <span className="text-[9px] shrink-0 w-5 text-right font-mono" style={{ color: 'var(--out-muted)' }}>{rank}</span>
+                      <span className="text-[12px] shrink-0 w-5 text-right font-mono" style={{ color: 'var(--out-muted)' }}>{rank}</span>
 
                       {/* Avatar */}
                       <TokenAvatar token={t} size={36} />
@@ -370,14 +370,14 @@ export function MarketPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[12px] font-bold font-mono" style={{ color: 'var(--out-ink)' }}>${t.ticker}</span>
-                          {t.isVerified && <span className="text-[7px] border px-1" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
-                          {isNew  && <span className="text-[7px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
-                          {isMine && <span className="text-[7px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                          {t.isVerified && <span className="text-[13px] border px-1" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
+                          {isNew  && <span className="text-[13px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
+                          {isMine && <span className="text-[13px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap font-mono">
-                          <span className="text-[9px]" style={{ color: 'var(--out-text)' }}>{vp > 0 ? fmtUsd(t.mcapInVirtual * vp) : `${fmtVirtual(t.mcapInVirtual)} VRTL`}</span>
-                          <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>·</span>
-                          <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{ago(t.launchedAt)}</span>
+                          <span className="text-[12px]" style={{ color: 'var(--out-text)' }}>{vp > 0 ? fmtUsd(t.mcapInVirtual * vp) : `${fmtVirtual(t.mcapInVirtual)} VRTL`}</span>
+                          <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>·</span>
+                          <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>{ago(t.launchedAt)}</span>
                         </div>
                       </div>
 
@@ -387,7 +387,7 @@ export function MarketPage() {
                           style={{ color: t.priceChange24h === 0 ? 'var(--out-muted)' : posChg ? '#39d353' : '#f87171' }}>
                           {t.priceChange24h !== 0 ? fmtPct(t.priceChange24h) : '—'}
                         </span>
-                        <span className="text-[8px] border px-1.5 py-0.5 uppercase tracking-widest"
+                        <span className="text-[11px] border px-1.5 py-0.5 uppercase tracking-widest"
                           style={t.status === 'GRADUATED'
                             ? { borderColor: 'var(--out-ink)', color: 'var(--out-ink)', background: '#12180f' }
                             : { borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
@@ -401,11 +401,11 @@ export function MarketPage() {
 
               {/* ══ DESKTOP TABLE (sm+) ══════════════════════════════════════ */}
               <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full font-mono text-[10px] border-collapse" style={{ minWidth: 780 }}>
+                <table className="w-full font-mono text-[13px] border-collapse" style={{ minWidth: 780 }}>
                   <thead>
                     <tr className="text-left" style={{ borderBottom: '1px solid var(--out-grid-major)' }}>
                       {['#', 'AGENT TOKEN', 'MCAP (USD)', 'VOL 24H', '24H %', 'LIQUIDITY', 'HOLDERS', 'CURVE', 'AGE', 'STATUS'].map(h => (
-                        <th key={h} className="py-2 pr-3 last:pr-0 text-[9px] uppercase tracking-widest"
+                        <th key={h} className="py-2 pr-3 last:pr-0 text-[12px] uppercase tracking-widest"
                           style={{ color: 'var(--out-muted)', fontWeight: 400, textAlign: h === '#' || h === 'AGENT TOKEN' ? 'left' : 'right', whiteSpace: 'nowrap' }}>
                           {h}
                         </th>
@@ -425,18 +425,18 @@ export function MarketPage() {
                           onMouseEnter={e => (e.currentTarget.style.background = '#0E1A0E')}
                           onMouseLeave={e => (e.currentTarget.style.background = isMine ? '#0A120A' : 'transparent')}
                           onClick={() => navigate('/token/' + t.address)}>
-                          <td className="py-2.5 pr-3 text-[9px]" style={{ color: 'var(--out-muted)' }}>{rank}</td>
+                          <td className="py-2.5 pr-3 text-[12px]" style={{ color: 'var(--out-muted)' }}>{rank}</td>
                           <td className="py-2.5 pr-4">
                             <div className="flex items-center gap-2">
                               <TokenAvatar token={t} size={32} />
                               <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold" style={{ color: 'var(--out-ink)' }}>${t.ticker}</span>
-                                  {t.isVerified && <span className="text-[8px] px-1 border" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
-                                  {isNew  && <span className="text-[8px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
-                                  {isMine && <span className="text-[8px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
+                                  {t.isVerified && <span className="text-[11px] px-1 border" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
+                                  {isNew  && <span className="text-[11px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
+                                  {isMine && <span className="text-[11px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
                                 </div>
-                                <span className="text-[9px] truncate max-w-[130px]" style={{ color: 'var(--out-muted)' }}>{t.name}</span>
+                                <span className="text-[12px] truncate max-w-[130px]" style={{ color: 'var(--out-muted)' }}>{t.name}</span>
                               </div>
                             </div>
                           </td>
@@ -455,9 +455,9 @@ export function MarketPage() {
                           <td className="py-2.5 pr-3 text-right">
                             <CurveBarInline pct={t.curveProgress} />
                           </td>
-                          <td className="py-2.5 pr-3 text-right text-[9px]" style={{ color: 'var(--out-muted)' }}>{ago(t.launchedAt)}</td>
+                          <td className="py-2.5 pr-3 text-right text-[12px]" style={{ color: 'var(--out-muted)' }}>{ago(t.launchedAt)}</td>
                           <td className="py-2.5 text-right">
-                            <span className="text-[9px] border px-1.5 py-0.5 uppercase tracking-widest group-hover:border-[var(--out-ink)] transition-colors"
+                            <span className="text-[12px] border px-1.5 py-0.5 uppercase tracking-widest group-hover:border-[var(--out-ink)] transition-colors"
                               style={t.status === 'GRADUATED'
                                 ? { borderColor: 'var(--out-ink)', color: 'var(--out-ink)', background: '#12180f' }
                                 : { borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
@@ -474,7 +474,7 @@ export function MarketPage() {
 
             {/* Pagination */}
             {meta && meta.pageCount > 1 && (
-              <div className="flex items-center justify-between font-mono text-[10px] pt-2 flex-wrap gap-2">
+              <div className="flex items-center justify-between font-mono text-[13px] pt-2 flex-wrap gap-2">
                 <span style={{ color: 'var(--out-muted)' }} className="uppercase tracking-widest">
                   {((page - 1) * 50) + 1}–{Math.min(page * 50, meta.total)} OF {meta.total.toLocaleString()} AGENTS
                 </span>
@@ -493,7 +493,7 @@ export function MarketPage() {
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-between pt-2 border-t font-mono text-[9px] uppercase tracking-widest flex-wrap gap-1"
+            <div className="flex items-center justify-between pt-2 border-t font-mono text-[12px] uppercase tracking-widest flex-wrap gap-1"
               style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
               <span>
                 <span className="inline-block w-1 h-1 rounded-full bg-[var(--out-ink)] mr-1.5" />

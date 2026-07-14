@@ -455,12 +455,16 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
             SCAN ↗
           </a>
-          <a href={`https://app.virtuals.io/prototypes/${token.id}`} target="_blank" rel="noreferrer"
+          <a
+            href={token.status === 'GRADUATED'
+              ? `https://app.virtuals.io/virtuals/${token.id}`
+              : `https://app.virtuals.io/prototypes/${token.id}`}
+            target="_blank" rel="noreferrer"
             className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
             style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
-            VIRTUALS ↗
+            {token.status === 'GRADUATED' ? 'VIRTUALS ↗' : 'PROTOTYPE ↗'}
           </a>
         </div>
       </div>

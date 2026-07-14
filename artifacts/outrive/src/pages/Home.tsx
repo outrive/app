@@ -28,7 +28,7 @@ function StepBadge({ label, state }: { label: string; state: StepState }) {
     ? 'border-[var(--out-ink)] text-[var(--out-ink)] bg-[#12180f]'
     : 'border-[var(--out-ink-dim)] text-[var(--out-muted)]';
   return (
-    <span className={`border px-1.5 sm:px-2 py-0.5 font-mono text-[8px] sm:text-[10px] uppercase tracking-wide sm:tracking-widest shrink-0 whitespace-nowrap ${color}`}>
+    <span className={`border px-1.5 sm:px-2 py-0.5 font-mono text-[11px] sm:text-[13px] uppercase tracking-wide sm:tracking-widest shrink-0 whitespace-nowrap ${color}`}>
       {state === 'active' ? '● ' : state === 'done' ? '✓ ' : '○ '}{label}
     </span>
   );
@@ -85,7 +85,7 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
           MOBILE  —  sticky burger strip + dropdown
       ══════════════════════════════════════════ */}
       <div
-        className="md:hidden sticky top-12 z-40 font-mono text-[10px] uppercase tracking-widest"
+        className="md:hidden sticky top-12 z-40 font-mono text-[13px] uppercase tracking-widest"
         style={{ background: 'var(--out-bg)', borderBottom: '1px solid var(--out-ink-dim)' }}
       >
         {/* Active tab + burger toggle */}
@@ -115,7 +115,7 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
         {/* Dropdown */}
         {open && (
           <div style={{ background: '#080d08', borderTop: '1px solid var(--out-ink-dim)' }}>
-            <div className="px-3 pt-2 pb-1 text-[8px] tracking-widest" style={{ color: 'var(--out-muted)' }}>APP</div>
+            <div className="px-3 pt-2 pb-1 text-[11px] tracking-widest" style={{ color: 'var(--out-muted)' }}>APP</div>
             {APP_TABS.map(t => (
               <button key={t.id} onClick={() => choose(t.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 border-t transition-colors"
@@ -127,10 +127,10 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
                 }}>
                 <t.Icon size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} />
                 <span className="text-[11px]">{t.label}</span>
-                {view === t.id && <span className="ml-auto text-[8px]" style={{ color: 'var(--out-ink)' }}>●</span>}
+                {view === t.id && <span className="ml-auto text-[11px]" style={{ color: 'var(--out-ink)' }}>●</span>}
               </button>
             ))}
-            <div className="px-3 pt-3 pb-1 text-[8px] tracking-widest border-t"
+            <div className="px-3 pt-3 pb-1 text-[11px] tracking-widest border-t"
               style={{ color: 'var(--out-muted)', borderColor: 'var(--out-ink-dim)' }}>INFO</div>
             {INFO_TABS.map(t => (
               <button key={t.id} onClick={() => choose(t.id)}
@@ -143,7 +143,7 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
                 }}>
                 <t.Icon size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} />
                 <span className="text-[11px]">{t.label}</span>
-                {view === t.id && <span className="ml-auto text-[8px]" style={{ color: 'var(--out-ink)' }}>●</span>}
+                {view === t.id && <span className="ml-auto text-[11px]" style={{ color: 'var(--out-ink)' }}>●</span>}
               </button>
             ))}
             <div className="h-2" />
@@ -155,17 +155,17 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
           DESKTOP  —  fixed left sidebar
       ══════════════════════════════════════════ */}
       <aside
-        className="hidden md:flex flex-col fixed top-12 left-0 bottom-0 z-40 w-44 overflow-y-auto no-scrollbar border-r font-mono text-[10px] uppercase tracking-widest"
+        className="hidden md:flex flex-col fixed top-12 left-0 bottom-0 z-40 w-44 overflow-y-auto no-scrollbar border-r font-mono text-[13px] uppercase tracking-widest"
         style={{ background: 'var(--out-bg)', borderColor: 'var(--out-ink-dim)' }}
       >
-        <div className="px-3 pt-5 pb-1.5 text-[8px] tracking-widest" style={{ color: 'var(--out-muted)' }}>
+        <div className="px-3 pt-5 pb-1.5 text-[11px] tracking-widest" style={{ color: 'var(--out-muted)' }}>
           APP
         </div>
         {APP_TABS.map(sideItem)}
 
         <div className="mx-4 my-3 border-t" style={{ borderColor: 'var(--out-ink-dim)' }} />
 
-        <div className="px-3 pb-1.5 text-[8px] tracking-widest" style={{ color: 'var(--out-muted)' }}>
+        <div className="px-3 pb-1.5 text-[11px] tracking-widest" style={{ color: 'var(--out-muted)' }}>
           INFO
         </div>
         {INFO_TABS.map(sideItem)}
@@ -216,7 +216,7 @@ function ClaimFeesButton({ walletAddress, onRefresh }: {
           href="https://app.virtuals.io"
           target="_blank"
           rel="noreferrer"
-          className="inline-block border px-5 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors text-center"
+          className="inline-block border px-5 py-2 font-mono text-[13px] uppercase tracking-widest transition-colors text-center"
           style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--out-ink)'; (e.currentTarget as HTMLElement).style.color = '#050905'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--out-ink)'; }}
@@ -227,7 +227,7 @@ function ClaimFeesButton({ walletAddress, onRefresh }: {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="border px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors disabled:opacity-40"
+            className="border px-4 py-2 font-mono text-[13px] uppercase tracking-widest transition-colors disabled:opacity-40"
             style={{ borderColor: 'var(--out-ink-dim)', color: refreshing ? 'var(--out-ink)' : 'var(--out-muted)' }}
             onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; } }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
@@ -238,7 +238,7 @@ function ClaimFeesButton({ walletAddress, onRefresh }: {
         )}
       </div>
       {walletAddress && (
-        <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+        <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
           After claiming on Virtuals, click ↻ REFRESH BALANCE to update the display.
         </div>
       )}
@@ -255,7 +255,7 @@ function CurveBar({ pct }: { pct: number }) {
       <div className="flex-1 h-[4px] bg-[#1a1f1a] rounded-none overflow-hidden">
         <div style={{ width: `${clamped}%`, background: color, height: '100%', transition: 'width 0.4s' }} />
       </div>
-      <span className="text-[9px] font-mono shrink-0" style={{ color, minWidth: 32, textAlign: 'right' }}>
+      <span className="text-[12px] font-mono shrink-0" style={{ color, minWidth: 32, textAlign: 'right' }}>
         {clamped.toFixed(0)}%
       </span>
     </div>
@@ -274,9 +274,9 @@ function StatusDot({ ok }: { ok: boolean }) {
 function StatCard({ label, value, sub, warn }: { label: string; value: string | number; sub?: string; warn?: boolean }) {
   return (
     <div className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-1 font-mono">
-      <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{label}</div>
+      <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{label}</div>
       <div className="text-[18px] font-bold leading-none" style={{ color: warn ? 'var(--out-warn)' : 'var(--out-ink)' }}>{value}</div>
-      {sub && <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{sub}</div>}
+      {sub && <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>{sub}</div>}
     </div>
   );
 }
@@ -293,18 +293,18 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
   });
 
   return (
-    <div className="grid font-mono text-[10px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-2"
+    <div className="grid font-mono text-[13px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-2"
       style={{ gridTemplateColumns: '1fr 60px 120px auto' }}>
 
       {/* Name + ticker */}
       <div className="min-w-0">
         <div className="text-[var(--out-text)] font-bold truncate">{launch.name}</div>
-        <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>${launch.ticker} · {date}</div>
+        <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>${launch.ticker} · {date}</div>
       </div>
 
       {/* Status badge */}
       <div>
-        <span className="text-[8px] border px-1.5 py-0.5 uppercase tracking-widest" style={{ borderColor: statusColor, color: statusColor }}>
+        <span className="text-[11px] border px-1.5 py-0.5 uppercase tracking-widest" style={{ borderColor: statusColor, color: statusColor }}>
           {launch.status === 'confirmed' ? '✓ LIVE' : launch.status === 'failed' ? '✗ FAIL' : '● PEND'}
         </span>
       </div>
@@ -313,7 +313,7 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
       <div>
         {launch.status === 'confirmed'
           ? <CurveBar pct={0} />
-          : <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>—</span>}
+          : <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>—</span>}
       </div>
 
       {/* TX link */}
@@ -323,7 +323,7 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
             href={`${explorerUrl}/tx/${launch.txHash}`}
             target="_blank"
             rel="noreferrer"
-            className="text-[9px] underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)]"
+            className="text-[12px] underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)]"
             style={{ color: 'var(--out-muted)' }}
           >
             TX ↗
@@ -406,7 +406,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           <span className="text-lg">⚠</span>
           <div>
             <div className="font-bold uppercase tracking-widest">Wallet Not Connected</div>
-            <div className="text-[9px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
+            <div className="text-[12px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
               Connect your wallet via the top bar to view your launches, fees, and portfolio.
             </div>
           </div>
@@ -422,13 +422,13 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5 pb-4 border-b border-[var(--out-grid-major)]">
           {/* Wallet identity */}
           <div className="font-mono">
-            <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>CONNECTED WALLET</div>
+            <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>CONNECTED WALLET</div>
             {walletAddress ? (
               <>
                 <div className="text-[13px] font-bold" style={{ color: 'var(--out-ink)' }}>
                   {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
                 </div>
-                <div className="text-[9px] mt-0.5 flex items-center gap-1.5" style={{ color: 'var(--out-muted)' }}>
+                <div className="text-[12px] mt-0.5 flex items-center gap-1.5" style={{ color: 'var(--out-muted)' }}>
                   <StatusDot ok={status?.rpcHealthy ?? false} />
                   ROBINHOOD CHAIN · chainId {status?.chainId ?? 4663}
                 </div>
@@ -441,13 +441,13 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           {/* ETH balance */}
           {walletAddress && (
             <div className="font-mono border-l border-[var(--out-grid-major)] pl-4 ml-1">
-              <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>ETH BALANCE</div>
+              <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>ETH BALANCE</div>
               <div className="text-[13px] font-bold" style={{ color: 'var(--out-ink)' }}>
                 {ethBalance
                   ? `${parseFloat(ethBalance.formatted).toFixed(6)} ETH`
                   : '—'}
               </div>
-              <div className="text-[9px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
+              <div className="text-[12px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
                 gas on Robinhood Chain
               </div>
             </div>
@@ -456,7 +456,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           <div className="sm:ml-auto flex gap-2 flex-wrap">
             <button
               onClick={() => refetchLaunches()}
-              className="font-mono text-[9px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
+              className="font-mono text-[12px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
               style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
@@ -468,7 +468,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
                 href={`${explorerUrl}/address/${walletAddress}`}
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-[9px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
+                className="font-mono text-[12px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
                 style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
@@ -490,15 +490,15 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
         {/* ── MY LAUNCHES TABLE ── */}
         <div className="mb-2">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>MY TOKEN LAUNCHES</div>
-            <div className="text-[9px] font-mono" style={{ color: 'var(--out-muted)' }}>
+            <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>MY TOKEN LAUNCHES</div>
+            <div className="text-[12px] font-mono" style={{ color: 'var(--out-muted)' }}>
               {confirmed.length > 0 ? `${confirmed.length} active` : ''}
             </div>
           </div>
 
           {/* Table header */}
           {(launches?.length ?? 0) > 0 && (
-            <div className="grid font-mono text-[8px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1 mb-1 gap-2"
+            <div className="grid font-mono text-[11px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1 mb-1 gap-2"
               style={{ gridTemplateColumns: '1fr 60px 120px auto', color: 'var(--out-muted)' }}>
               <span>NAME / TICKER</span>
               <span>STATUS</span>
@@ -509,18 +509,18 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
 
           {/* Rows */}
           {launchesLoading ? (
-            <div className="py-8 text-center font-mono text-[10px]" style={{ color: 'var(--out-muted)' }}>
+            <div className="py-8 text-center font-mono text-[13px]" style={{ color: 'var(--out-muted)' }}>
               LOADING…
             </div>
           ) : !walletAddress ? (
-            <div className="py-8 text-center font-mono text-[10px]" style={{ color: 'var(--out-muted)' }}>
+            <div className="py-8 text-center font-mono text-[13px]" style={{ color: 'var(--out-muted)' }}>
               Connect wallet to see your launches.
             </div>
           ) : launches?.length === 0 ? (
             <div className="py-10 text-center font-mono border border-dashed border-[var(--out-grid-major)] flex flex-col items-center gap-3">
               <div className="text-[32px] opacity-20" style={{ color: 'var(--out-ink)' }}>▲</div>
-              <div className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>No launches yet</div>
-              <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>Use the AGENT tab to launch your first AI agent token.</div>
+              <div className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>No launches yet</div>
+              <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>Use the AGENT tab to launch your first AI agent token.</div>
             </div>
           ) : (
             <div>
@@ -537,15 +537,15 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
       ═══════════════════════════════════════ */}
       <Sheet dwgNo="OUT-DSH-02" figCaption="FIG. 04 — CREATOR FEE REVENUE">
         <div className="mb-3">
-          <div className="text-[9px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>CREATOR FEE EARNINGS</div>
+          <div className="text-[12px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>CREATOR FEE EARNINGS</div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <div className="border border-[var(--out-grid-major)] p-4 font-mono col-span-1 sm:col-span-2">
-              <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>FEES COLLECTED (PROTOCOL)</div>
+              <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>FEES COLLECTED (PROTOCOL)</div>
               <div className="text-[28px] font-bold leading-none" style={{ color: (feeBalanceDisplay !== '—' && feeBalanceDisplay !== '…') ? 'var(--out-ink)' : 'var(--out-muted)' }}>
                 {feeBalanceDisplay}
               </div>
-              <div className="text-[9px] mt-1" style={{ color: 'var(--out-muted)' }}>
+              <div className="text-[12px] mt-1" style={{ color: 'var(--out-muted)' }}>
                 {confirmedWithTokens.length > 0
                   ? `agent token units · read from AgentTaxV2 · ${confirmedWithTokens.length} token${confirmedWithTokens.length !== 1 ? 's' : ''} tracked`
                   : 'connect wallet and launch a token to see fee data'}
@@ -555,14 +555,14 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
 
             <div className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-3">
               <div>
-                <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>FEE RATE</div>
+                <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>FEE RATE</div>
                 <div className="text-[14px] font-bold" style={{ color: 'var(--out-ink)' }}>1%</div>
-                <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>of every trade on your tokens</div>
+                <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>of every trade on your tokens</div>
               </div>
             </div>
           </div>
 
-          <div className="border border-[var(--out-grid-major)] p-3 font-mono text-[9px] leading-relaxed" style={{ color: 'var(--out-muted)', background: '#080d08' }}>
+          <div className="border border-[var(--out-grid-major)] p-3 font-mono text-[12px] leading-relaxed" style={{ color: 'var(--out-muted)', background: '#080d08' }}>
             <span style={{ color: 'var(--out-ink)' }}>HOW FEES WORK — </span>
             As creator of an agent token, you earn a 1% fee on every buy and sell trade routed through the Virtuals bonding curve.
             Fees are tracked by the Virtuals Protocol on-chain and are claimable via{' '}
@@ -580,7 +580,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           SHEET C — SYSTEM STATUS
       ═══════════════════════════════════════ */}
       <Sheet dwgNo="OUT-DSH-03" figCaption="FIG. 05 — PROTOCOL & SYSTEM STATUS">
-        <div className="text-[9px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>SYSTEM STATUS</div>
+        <div className="text-[12px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>SYSTEM STATUS</div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
@@ -596,9 +596,9 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
               { label: 'GRADUATION',   val: 'AUTO (CURVE FILLS)' },
             ] as { label: string; val: string; ok?: boolean }[]).map(({ label, val, ok }) => (
               <div key={label} className="flex items-center gap-2">
-                <span className="text-[9px] uppercase tracking-widest shrink-0 w-28" style={{ color: 'var(--out-muted)' }}>{label}</span>
+                <span className="text-[12px] uppercase tracking-widest shrink-0 w-28" style={{ color: 'var(--out-muted)' }}>{label}</span>
                 <span className="flex-1 border-b border-dotted border-[var(--out-grid-major)]" />
-                <span className="text-[10px] font-bold text-right" style={{
+                <span className="text-[13px] font-bold text-right" style={{
                   color: ok === undefined
                     ? 'var(--out-text)'
                     : ok ? 'var(--out-ink)' : 'var(--out-warn)',
@@ -611,7 +611,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
 
           {/* Right — market summary */}
           <div className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-3">
-            <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>PROTOCOL MARKET (GLOBAL)</div>
+            <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>PROTOCOL MARKET (GLOBAL)</div>
             {([
               { label: 'TOTAL TOKENS',     val: String(summary?.totalTokens ?? '—') },
               { label: 'ACTIVE / BONDING', val: String(summary?.activeTokens ?? '—') },
@@ -622,16 +622,16 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
               { label: 'CUSTODY MODEL',    val: 'NON-CUSTODIAL' },
             ] as { label: string; val: string }[]).map(({ label, val }) => (
               <div key={label} className="flex items-center gap-2">
-                <span className="text-[9px] uppercase tracking-widest shrink-0 w-32" style={{ color: 'var(--out-muted)' }}>{label}</span>
+                <span className="text-[12px] uppercase tracking-widest shrink-0 w-32" style={{ color: 'var(--out-muted)' }}>{label}</span>
                 <span className="flex-1 border-b border-dotted border-[var(--out-grid-major)]" />
-                <span className="text-[10px] font-bold text-right" style={{ color: 'var(--out-text)' }}>{val}</span>
+                <span className="text-[13px] font-bold text-right" style={{ color: 'var(--out-text)' }}>{val}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Explorer link */}
-        <div className="mt-4 flex flex-wrap gap-4 font-mono text-[9px]">
+        <div className="mt-4 flex flex-wrap gap-4 font-mono text-[12px]">
           <a href={explorerUrl} target="_blank" rel="noreferrer"
             className="underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)] transition-colors"
             style={{ color: 'var(--out-muted)' }}>
@@ -661,15 +661,15 @@ function Docs() {
   const Row = ({ r }: { r: { method: string; path: string; desc: string } }) => (
     <div className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 py-2 sm:py-1.5 border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-[9px] border px-1.5 py-0.5 shrink-0 w-10 text-center font-mono"
+        <span className="text-[12px] border px-1.5 py-0.5 shrink-0 w-10 text-center font-mono"
           style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-ink)' }}>{r.method}</span>
-        <span className="font-mono text-[10px] sm:text-[11px] sm:w-64" style={{ color: 'var(--out-ink)' }}>{r.path}</span>
+        <span className="font-mono text-[13px] sm:text-[13px] sm:w-64" style={{ color: 'var(--out-ink)' }}>{r.path}</span>
       </div>
-      <span className="font-mono text-[10px] sm:text-[11px] pl-12 sm:pl-0" style={{ color: 'var(--out-muted)' }}>{r.desc}</span>
+      <span className="font-mono text-[13px] sm:text-[13px] pl-12 sm:pl-0" style={{ color: 'var(--out-muted)' }}>{r.desc}</span>
     </div>
   );
   const SectionHead = ({ n, t }: { n: string; t: string }) => (
-    <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
+    <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
       {n} · {t}
     </div>
   );
@@ -689,14 +689,14 @@ function Docs() {
               Natural-language interface → unsigned transaction → user signs → user is creator of record on-chain.
               Design doctrine: <em style={{ color: 'var(--out-ink)' }}>the LLM decides what; deterministic code decides how; the user's wallet decides whether.</em>
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[10px]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[13px]">
               {[
                 { k: 'CHAIN',    v: 'Robinhood Chain · chainId 4663 (mainnet) / 46630 (testnet)' },
                 { k: 'PROTOCOL', v: 'Virtuals Protocol · Instant Launch · Bonding curve → Uniswap LP' },
                 { k: 'AI ENGINE', v: 'OUTRIVE AI · 7 tools · SSE streaming' },
               ].map(r => (
                 <div key={r.k} className="border p-3" style={{ borderColor: 'var(--out-grid-major)' }}>
-                  <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>{r.k}</div>
+                  <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>{r.k}</div>
                   <div style={{ color: 'var(--out-text)' }}>{r.v}</div>
                 </div>
               ))}
@@ -706,7 +706,7 @@ function Docs() {
           {/* 02 Network specs */}
           <div>
             <SectionHead n="02" t="NETWORK SPECIFICATIONS (VERIFIED — V1–V4)" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 text-[10px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 text-[13px]">
               {[
                 { k: 'MAINNET chainId',  v: '4663' },
                 { k: 'MAINNET RPC',      v: 'https://rpc.mainnet.chain.robinhood.com' },
@@ -718,7 +718,7 @@ function Docs() {
                 { k: 'TESTNET FAUCET',   v: 'https://faucet.testnet.chain.robinhood.com' },
               ].map(r => (
                 <div key={r.k} className="flex gap-2 items-baseline py-1 border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
-                  <span className="shrink-0 text-[9px] uppercase tracking-widest w-24 sm:w-36" style={{ color: 'var(--out-muted)' }}>{r.k}</span>
+                  <span className="shrink-0 text-[12px] uppercase tracking-widest w-24 sm:w-36" style={{ color: 'var(--out-muted)' }}>{r.k}</span>
                   <span className="break-all min-w-0" style={{ color: 'var(--out-ink)' }}>{r.v}</span>
                 </div>
               ))}
@@ -755,7 +755,7 @@ function Docs() {
           {/* 05 Protocol facts */}
           <div>
             <SectionHead n="05" t="VIRTUALS PROTOCOL FACTS (VERIFIED — V5–V12)" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 text-[10px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0 text-[13px]">
               {[
                 { k: 'INSTANT LAUNCH FEE',    v: 'No base fee — gas only (ETH). Token tradable immediately.' },
                 { k: 'TRADING FEE',           v: '1% on all buys and sells from day one.' },
@@ -768,7 +768,7 @@ function Docs() {
                 { k: 'PAID MODULES',          v: 'Launch Radar 100 $VIRTUAL · Capital Formation 10 $VIRTUAL · others free.' },
               ].map(r => (
                 <div key={r.k} className="flex gap-2 items-baseline py-1.5 border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
-                  <span className="shrink-0 text-[9px] uppercase tracking-widest w-44" style={{ color: 'var(--out-muted)' }}>{r.k}</span>
+                  <span className="shrink-0 text-[12px] uppercase tracking-widest w-44" style={{ color: 'var(--out-muted)' }}>{r.k}</span>
                   <span style={{ color: 'var(--out-text)' }}>{r.v}</span>
                 </div>
               ))}
@@ -848,7 +848,7 @@ function HowTo() {
     <div className="max-w-[1400px] mx-auto px-4 py-6 flex flex-col gap-6">
       <Sheet dwgNo="OUT-HOW-01" figCaption="FIG. 05 — STEP-BY-STEP LAUNCH GUIDE">
         <div className="py-4 flex flex-col gap-3 font-mono">
-          <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>
+          <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>
             USER LAUNCH GUIDE — STEPS 01–08
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -856,9 +856,9 @@ function HowTo() {
               <div key={s.n} className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[var(--out-ink)] text-[20px] font-bold leading-none">{s.n}</span>
-                  <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
+                  <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
                 </div>
-                <p className="text-[10px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
               </div>
             ))}
           </div>
@@ -897,12 +897,12 @@ function CliDocs() {
 
           {/* Chat CLI commands */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
               01 · IN-APP CHAT COMMANDS (SWITCH TO CLI MODE IN AGENT TAB)
             </div>
             <div className="flex flex-col gap-0">
               {chatCommands.map((c, i) => (
-                <div key={i} className="flex flex-col sm:flex-row gap-0.5 sm:gap-4 py-2 border-b text-[10px] sm:text-[11px]" style={{ borderColor: 'var(--out-grid-major)' }}>
+                <div key={i} className="flex flex-col sm:flex-row gap-0.5 sm:gap-4 py-2 border-b text-[13px] sm:text-[13px]" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <span className="sm:shrink-0 sm:w-64 flex items-start gap-1" style={{ color: 'var(--out-ink)' }}>
                     <span style={{ color: 'var(--out-muted)' }}>$</span> {c.cmd}
                   </span>
@@ -914,12 +914,12 @@ function CliDocs() {
 
           {/* npm/operator scripts */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
               02 · OPERATOR SCRIPTS (§9.1 CLI REFERENCE)
             </div>
             <div className="flex flex-col gap-0">
               {npmCommands.map((c, i) => (
-                <div key={i} className="flex flex-col sm:flex-row gap-0.5 sm:gap-4 py-2 border-b text-[10px]" style={{ borderColor: 'var(--out-grid-major)' }}>
+                <div key={i} className="flex flex-col sm:flex-row gap-0.5 sm:gap-4 py-2 border-b text-[13px]" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <span className="sm:shrink-0 sm:w-80 flex items-start gap-1 break-all" style={{ color: 'var(--out-ink)', fontFamily: 'JetBrains Mono, monospace' }}>
                     {c.cmd}
                   </span>
@@ -931,11 +931,11 @@ function CliDocs() {
 
           {/* Example session */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
               03 · EXAMPLE CHAT SESSION
             </div>
             <div className="border p-4" style={{ borderColor: 'var(--out-grid-major)', background: '#0A0F0A' }}>
-              <pre className="text-[10px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--out-ink)' }}>
+              <pre className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--out-ink)' }}>
 {`$ balance
 → ETH: 0.0312 · $VIRTUAL: 1,250.00
 
@@ -958,7 +958,7 @@ $ launch SkyNet SKYN 500
 
           {/* Operational invariants */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>
               04 · OPERATIONAL INVARIANTS (§9.3)
             </div>
             <div className="flex flex-col gap-2">
@@ -967,7 +967,7 @@ $ launch SkyNet SKYN 500
                 'The backend holds no private keys anywhere. There is nothing key-shaped to leak.',
                 'Public RPC is acceptable for development only. Production requires RPC_URL_OVERRIDE (Alchemy, QuickNode, dRPC).',
               ].map((inv, i) => (
-                <div key={i} className="flex gap-2 items-start text-[10px]">
+                <div key={i} className="flex gap-2 items-start text-[13px]">
                   <span style={{ color: 'var(--out-ink)' }}>⬡</span>
                   <p style={{ color: 'var(--out-text)' }}>{inv}</p>
                 </div>
@@ -989,7 +989,7 @@ function Architecture() {
 
           {/* Stack */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>01 · STACK</div>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>01 · STACK</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[
                 { layer: 'FRONTEND',    tech: 'React + Vite',              detail: 'wagmi v2, viem, Privy wallet adapter, TanStack Query v5, JetBrains Mono' },
@@ -1000,9 +1000,9 @@ function Architecture() {
                 { layer: 'PROTOCOL',    tech: 'Virtuals Instant Launch',    detail: 'Factory → bonding curve → Uniswap LP (auto-graduation when curve fills, 10-year LP lock)' },
               ].map((r) => (
                 <div key={r.layer} className="border border-[var(--out-grid-major)] p-3 flex flex-col gap-1">
-                  <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{r.layer}</div>
+                  <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>{r.layer}</div>
                   <div className="text-[11px]" style={{ color: 'var(--out-ink)' }}>{r.tech}</div>
-                  <div className="text-[9px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>{r.detail}</div>
+                  <div className="text-[12px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>{r.detail}</div>
                 </div>
               ))}
             </div>
@@ -1010,8 +1010,8 @@ function Architecture() {
 
           {/* Architecture diagram */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>02 · SYSTEM ARCHITECTURE DIAGRAM (§5)</div>
-            <pre className="text-[9px] leading-relaxed p-4 overflow-x-auto" style={{ background: '#0A0F0A', border: '1px solid var(--out-grid-major)', color: 'var(--out-ink)', whiteSpace: 'pre' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>02 · SYSTEM ARCHITECTURE DIAGRAM (§5)</div>
+            <pre className="text-[12px] leading-relaxed p-4 overflow-x-auto" style={{ background: '#0A0F0A', border: '1px solid var(--out-grid-major)', color: 'var(--out-ink)', whiteSpace: 'pre' }}>
 {`┌────────────────────────────────────────────────────────────────────┐
 │                     FRONTEND — React + Vite                         │
 │  ┌─────────────┐  ┌────────────────┐  ┌──────────────────────────┐ │
@@ -1047,13 +1047,13 @@ function Architecture() {
 
           {/* Separation of powers */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>03 · SEPARATION OF POWERS (SECURITY MODEL)</div>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>03 · SEPARATION OF POWERS (SECURITY MODEL)</div>
             <div className="overflow-x-auto">
-              <table className="w-full text-[10px] border-collapse font-mono" style={{ minWidth: 600 }}>
+              <table className="w-full text-[13px] border-collapse font-mono" style={{ minWidth: 600 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--out-ink-dim)' }}>
                     {['COMPONENT', 'MAY DO', 'MAY NEVER DO'].map(h => (
-                      <th key={h} className="text-left py-1.5 pr-6 text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)', fontWeight: 400 }}>{h}</th>
+                      <th key={h} className="text-left py-1.5 pr-6 text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)', fontWeight: 400 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1077,8 +1077,8 @@ function Architecture() {
 
           {/* Data model */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>04 · DATABASE SCHEMA (§8 DATA MODEL)</div>
-            <pre className="text-[9px] leading-relaxed p-4 overflow-x-auto" style={{ background: '#0A0F0A', border: '1px solid var(--out-grid-major)', color: 'var(--out-ink)', whiteSpace: 'pre' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>04 · DATABASE SCHEMA (§8 DATA MODEL)</div>
+            <pre className="text-[12px] leading-relaxed p-4 overflow-x-auto" style={{ background: '#0A0F0A', border: '1px solid var(--out-grid-major)', color: 'var(--out-ink)', whiteSpace: 'pre' }}>
 {`users        (id, wallet_address UNIQUE, created_at)
 conversations(id, user_id, title, created_at)
 messages     (id, conversation_id, role, content, tool_calls JSONB, created_at)
@@ -1098,18 +1098,18 @@ trades       (id, token_address, trader, side, virtual_amount, token_amount,
 
 watchlist    (user_id, token_address, PRIMARY KEY(user_id, token_address))`}
             </pre>
-            <p className="text-[10px] mt-2" style={{ color: 'var(--out-muted)' }}>Cache: in-memory LRU, TTL 20s for market_overview and per-token price reads.</p>
+            <p className="text-[13px] mt-2" style={{ color: 'var(--out-muted)' }}>Cache: in-memory LRU, TTL 20s for market_overview and per-token price reads.</p>
           </div>
 
           {/* Threat analysis */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>05 · THREAT ANALYSIS (§10)</div>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>05 · THREAT ANALYSIS (§10)</div>
             <div className="overflow-x-auto">
-              <table className="w-full text-[10px] border-collapse font-mono" style={{ minWidth: 500 }}>
+              <table className="w-full text-[13px] border-collapse font-mono" style={{ minWidth: 500 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--out-ink-dim)' }}>
                     {['THREAT', 'MITIGATION'].map(h => (
-                      <th key={h} className="text-left py-1.5 pr-6 text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)', fontWeight: 400 }}>{h}</th>
+                      <th key={h} className="text-left py-1.5 pr-6 text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)', fontWeight: 400 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1136,7 +1136,7 @@ watchlist    (user_id, token_address, PRIMARY KEY(user_id, token_address))`}
 
           {/* Token lifecycle */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>06 · TOKEN LIFECYCLE (§4.3)</div>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>06 · TOKEN LIFECYCLE (§4.3)</div>
             <svg viewBox="0 0 720 200" className="w-full" style={{ stroke: 'var(--out-ink)', fill: 'none', strokeWidth: 1 }}>
               {[
                 { x: 10,  y: 80, w: 90,  h: 40, label: 'BROWSER\nWALLET' },
@@ -1242,11 +1242,11 @@ function Faq() {
         <div className="py-4 flex flex-col gap-3 font-mono">
           {items.map((item, i) => (
             <div key={i} className="border border-[var(--out-grid-major)] p-4">
-              <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-ink)' }}>
+              <div className="text-[13px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-ink)' }}>
                 <span className="mr-2" style={{ color: 'var(--out-muted)' }}>{String(i + 1).padStart(2, '0')}</span>
                 {item.q}
               </div>
-              <div className="text-[10px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{item.a}</div>
+              <div className="text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{item.a}</div>
             </div>
           ))}
         </div>
@@ -1266,13 +1266,13 @@ function About() {
             <img src="/outrive-logo.png" alt="OUTRIVE" className="h-12 w-12 object-contain" />
             <div>
               <div className="text-[22px] font-bold tracking-widest" style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--out-ink)' }}>OUTRIVE</div>
-              <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>AI AGENT LAUNCHPAD — VIRTUALS PROTOCOL ON ROBINHOOD CHAIN</div>
+              <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>AI AGENT LAUNCHPAD — VIRTUALS PROTOCOL ON ROBINHOOD CHAIN</div>
             </div>
           </div>
 
           {/* Mission */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-2 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>MISSION</div>
+            <div className="text-[12px] uppercase tracking-widest mb-2 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>MISSION</div>
             <p className="text-[11px] leading-relaxed max-w-3xl" style={{ color: 'var(--out-text)' }}>
               OUTRIVE is a <span style={{ color: 'var(--out-ink)' }}>chat-first launchpad client</span>.
               A user connects their own wallet, types natural-language instructions to an AI deployment agent, and the agent drafts, validates, and simulates an on-chain launch through{' '}
@@ -1287,8 +1287,8 @@ function About() {
 
           {/* Principles */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>CORE PRINCIPLES</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-[10px]">
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>CORE PRINCIPLES</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-[13px]">
               {[
                 { n: '01', title: 'NON-CUSTODIAL',   body: 'Your keys, your tokens. Server never holds funds or private keys. Always.' },
                 { n: '02', title: 'TRANSPARENT',      body: 'Work Order card shows every tx parameter before you sign. Nothing hidden.' },
@@ -1297,7 +1297,7 @@ function About() {
               ].map((p) => (
                 <div key={p.n} className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-2">
                   <span className="text-[16px] font-bold" style={{ color: 'var(--out-ink)' }}>{p.n}</span>
-                  <span className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{p.title}</span>
+                  <span className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{p.title}</span>
                   <span className="leading-relaxed" style={{ color: 'var(--out-muted)' }}>{p.body}</span>
                 </div>
               ))}
@@ -1306,7 +1306,7 @@ function About() {
 
           {/* Roadmap */}
           <div>
-            <div className="text-[9px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>ROADMAP (§12)</div>
+            <div className="text-[12px] uppercase tracking-widest mb-3 border-b pb-1" style={{ color: 'var(--out-muted)', borderColor: 'var(--out-grid-major)' }}>ROADMAP (§12)</div>
             <div className="flex flex-col gap-3">
               {[
                 { ver: 'v1 — CURRENT', items: ['Chat launch (Instant Launch)', 'Optional initial $VIRTUAL dev buy (2-sig)', 'Live Virtuals Protocol market dashboard', 'Creator fee readout post-calibration'] },
@@ -1315,10 +1315,10 @@ function About() {
                 { ver: 'v2.x', items: ['Genesis/Fund-Raise mode if/when programmatic paths confirmed', 'Multi-chain (Base) toggle reusing the same config layer'] },
               ].map(r => (
                 <div key={r.ver} className="border p-4 flex flex-col gap-2" style={{ borderColor: 'var(--out-grid-major)' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{r.ver}</div>
+                  <div className="text-[13px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{r.ver}</div>
                   <ul className="flex flex-col gap-1">
                     {r.items.map((item, i) => (
-                      <li key={i} className="flex gap-2 text-[10px] leading-relaxed" style={{ color: 'var(--out-text)' }}>
+                      <li key={i} className="flex gap-2 text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>
                         <span style={{ color: 'var(--out-ink)' }}>▷</span>{item}
                       </li>
                     ))}
@@ -1330,8 +1330,8 @@ function About() {
 
           {/* Legal posture */}
           <div className="border p-4" style={{ borderColor: '#f59e0b', background: '#120f02' }}>
-            <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: '#f59e0b' }}>RISK DISCLOSURE & LEGAL POSTURE (§13)</div>
-            <p className="text-[10px] leading-relaxed" style={{ color: '#d97706' }}>
+            <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: '#f59e0b' }}>RISK DISCLOSURE & LEGAL POSTURE (§13)</div>
+            <p className="text-[13px] leading-relaxed" style={{ color: '#d97706' }}>
               OUTRIVE is a non-custodial software interface. It never holds user funds or keys, executes nothing without a user signature, and provides no financial advice.
               Agent/launchpad tokens are highly speculative and may lose all value.
               Protocol parameters cited here (fees, thresholds, modes) belong to Virtuals Protocol and can change at any time;
@@ -1440,14 +1440,14 @@ export default function Home() {
               <img src="/outrive-logo.png" alt="OUTRIVE" className="h-8 w-8 object-contain" />
               <div>
                 <div className="text-[11px] font-bold tracking-widest" style={{ color: 'var(--out-ink)' }}>OUTRIVE</div>
-                <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>AI AGENT LAUNCHPAD</div>
+                <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>AI AGENT LAUNCHPAD</div>
               </div>
             </div>
 
             {/* Link columns */}
-            <div className="flex flex-wrap gap-8 sm:gap-12 text-[10px] uppercase tracking-widest">
+            <div className="flex flex-wrap gap-8 sm:gap-12 text-[13px] uppercase tracking-widest">
               <div className="flex flex-col gap-2">
-                <span className="text-[9px] mb-1" style={{ color: 'var(--out-muted)' }}>APP</span>
+                <span className="text-[12px] mb-1" style={{ color: 'var(--out-muted)' }}>APP</span>
                 {[
                   { label: 'AGENT',     tab: 'agent' as View },
                   { label: 'MARKET',    tab: 'market' as View },
@@ -1463,7 +1463,7 @@ export default function Home() {
                 ))}
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-[9px] mb-1" style={{ color: 'var(--out-muted)' }}>LEARN</span>
+                <span className="text-[12px] mb-1" style={{ color: 'var(--out-muted)' }}>LEARN</span>
                 {[
                   { label: 'DOCS',          tab: 'docs' as View },
                   { label: 'HOW TO',        tab: 'howto' as View },
@@ -1482,7 +1482,7 @@ export default function Home() {
                 ))}
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-[9px] mb-1" style={{ color: 'var(--out-muted)' }}>COMMUNITY</span>
+                <span className="text-[12px] mb-1" style={{ color: 'var(--out-muted)' }}>COMMUNITY</span>
                 <a href="https://outrive.io" target="_blank" rel="noopener noreferrer"
                   className="transition-colors" style={{ color: 'var(--out-text)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--out-ink)')}
@@ -1519,7 +1519,7 @@ export default function Home() {
 
           <div className="border-t" style={{ borderColor: 'var(--out-grid-major)' }} />
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
             <p>
               OUTRIVE IS A SOFTWARE TOOL BUILT ON VIRTUALS PROTOCOL. NOT AFFILIATED WITH OR ENDORSED BY VIRTUALS OR ROBINHOOD.
               NOT FINANCIAL ADVICE. AGENT TOKENS ARE HIGHLY SPECULATIVE AND MAY LOSE ALL VALUE.

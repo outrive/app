@@ -22,7 +22,7 @@ function CopyRow({ label, value, href }: { label: string; value: string; href?: 
 
   return (
     <div className="flex flex-col gap-0.5 py-2 border-b border-[var(--out-grid-major)] last:border-b-0">
-      <span className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'var(--out-muted)' }}>
+      <span className="text-[12px] uppercase tracking-[0.14em]" style={{ color: 'var(--out-muted)' }}>
         {label}
       </span>
       <div className="flex items-center gap-3 flex-wrap">
@@ -35,7 +35,7 @@ function CopyRow({ label, value, href }: { label: string; value: string; href?: 
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={copy}
-            className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5 transition-colors"
+            className="text-[12px] uppercase tracking-widest border px-1.5 py-0.5 transition-colors"
             style={{
               borderColor: copied ? 'var(--out-ink)' : 'var(--out-grid-major)',
               color: copied ? 'var(--out-ink)' : 'var(--out-muted)',
@@ -50,7 +50,7 @@ function CopyRow({ label, value, href }: { label: string; value: string; href?: 
               href={href}
               target="_blank"
               rel="noreferrer"
-              className="text-[9px] uppercase tracking-widest transition-colors"
+              className="text-[12px] uppercase tracking-widest transition-colors"
               style={{ color: 'var(--out-ink-dim)' }}
             >
               ↗ EXPLORER
@@ -73,12 +73,12 @@ export function LaunchSuccessPanel({
 
       {/* ── Header ── */}
       <div className="border-b border-[var(--out-ink)] px-4 py-2.5 flex items-center gap-3">
-        <span className="text-[var(--out-ink)] uppercase tracking-[0.12em] font-bold text-[10px] sm:text-[11px] flex-1">
+        <span className="text-[var(--out-ink)] uppercase tracking-[0.12em] font-bold text-[13px] sm:text-[13px] flex-1">
           ✓ COMMISSIONED ON-CHAIN — {name}&nbsp;(${ticker})
         </span>
         <button
           onClick={onDismiss}
-          className="text-[var(--out-muted)] hover:text-[var(--out-ink)] text-[10px] tracking-widest uppercase transition-colors shrink-0"
+          className="text-[var(--out-muted)] hover:text-[var(--out-ink)] text-[13px] tracking-widest uppercase transition-colors shrink-0"
         >
           DISMISS ×
         </button>
@@ -94,10 +94,10 @@ export function LaunchSuccessPanel({
           />
         ) : (
           <div className="py-2 border-b border-[var(--out-grid-major)]">
-            <span className="text-[9px] uppercase tracking-[0.14em]" style={{ color: 'var(--out-muted)' }}>
+            <span className="text-[12px] uppercase tracking-[0.14em]" style={{ color: 'var(--out-muted)' }}>
               TOKEN CONTRACT ADDRESS (CA)
             </span>
-            <div className="mt-0.5 text-[10px] animate-pulse" style={{ color: 'var(--out-ink-dim)' }}>
+            <div className="mt-0.5 text-[13px] animate-pulse" style={{ color: 'var(--out-ink-dim)' }}>
               Extracting from receipt…
             </div>
           </div>
@@ -122,7 +122,7 @@ export function LaunchSuccessPanel({
       <div className="border-t border-[var(--out-grid-major)] px-4 py-2.5 flex flex-wrap gap-4">
         <a
           href={`${baseUrl}/market?tab=newest`}
-          className="text-[9px] uppercase tracking-widest transition-colors"
+          className="text-[12px] uppercase tracking-widest transition-colors"
           style={{ color: 'var(--out-ink)' }}
         >
           ↗ VIEW IN MARKET (NEW TOKENS)
@@ -131,7 +131,7 @@ export function LaunchSuccessPanel({
           <a
             href={`${explorerBase}/token/${tokenAddress}`}
             target="_blank" rel="noreferrer"
-            className="text-[9px] uppercase tracking-widest transition-colors"
+            className="text-[12px] uppercase tracking-widest transition-colors"
             style={{ color: 'var(--out-ink-dim)' }}
           >
             ↗ BLOCKSCOUT
@@ -140,14 +140,14 @@ export function LaunchSuccessPanel({
         <a
           href="https://app.virtuals.io"
           target="_blank" rel="noreferrer"
-          className="text-[9px] uppercase tracking-widest transition-colors"
+          className="text-[12px] uppercase tracking-widest transition-colors"
           style={{ color: 'var(--out-ink-dim)' }}
         >
           ↗ SET UP AGENT ON VIRTUALS
         </a>
       </div>
 
-      <div className="px-4 pb-2.5 text-[9px]" style={{ color: 'var(--out-muted)' }}>
+      <div className="px-4 pb-2.5 text-[12px]" style={{ color: 'var(--out-muted)' }}>
         Token is live on the bonding curve. Configure personality, runtime &amp; socials on app.virtuals.io.
       </div>
     </div>

@@ -109,14 +109,14 @@ export function Topbar() {
             OUTRIVE
           </span>
           <span
-            className="text-[9px] uppercase tracking-widest hidden sm:inline shrink-0"
+            className="text-[12px] uppercase tracking-widest hidden sm:inline shrink-0"
             style={{ color: 'var(--out-muted)' }}
           >
             AGENT FACTORY
           </span>
-          <span className="text-[9px] hidden sm:inline shrink-0" style={{ color: 'var(--out-ink-dim)' }}>•</span>
+          <span className="text-[12px] hidden sm:inline shrink-0" style={{ color: 'var(--out-ink-dim)' }}>•</span>
           <span
-            className="text-[9px] uppercase tracking-widest hidden lg:inline shrink-0"
+            className="text-[12px] uppercase tracking-widest hidden lg:inline shrink-0"
             style={{ color: 'var(--out-ink)' }}
           >
             VIRTUALS ON ROBINHOOD
@@ -125,7 +125,7 @@ export function Topbar() {
       </div>
 
       {/* ── Right: chips (progressive hide) + connect ── */}
-      <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] uppercase tracking-widest shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[13px] uppercase tracking-widest shrink-0">
 
         {/* Network dot (xs only) */}
         <span
@@ -198,7 +198,7 @@ export function Topbar() {
           /* WRONG CHAIN */
           <div className="flex items-center gap-1.5 shrink-0">
             <span
-              className="hidden sm:block text-[9px] uppercase tracking-widest shrink-0"
+              className="hidden sm:block text-[12px] uppercase tracking-widest shrink-0"
               style={{ color: 'var(--out-warn)' }}
             >
               WRONG CHAIN

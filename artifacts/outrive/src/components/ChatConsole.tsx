@@ -806,7 +806,7 @@ export function ChatConsole() {
       {/* ── Mode switcher + status + credit bar ── */}
       <div className="flex flex-col gap-2 mb-4 border-b pb-3" style={{ borderColor: 'var(--out-ink-dim)' }}>
         <div className="flex items-center gap-0">
-          <div className="flex gap-1.5 text-[10px] font-mono mr-auto">
+          <div className="flex gap-1.5 text-[13px] font-mono mr-auto">
             {(['prompt', 'cli'] as InputMode[]).map(m => (
               <button
                 key={m}
@@ -825,7 +825,7 @@ export function ChatConsole() {
               </button>
             ))}
           </div>
-          <span className="font-mono text-[10px]" style={{ color: 'var(--out-muted)' }}>
+          <span className="font-mono text-[13px]" style={{ color: 'var(--out-muted)' }}>
             {address
               ? <><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style={{ background: 'var(--out-ink)' }} />{address.slice(0,6)}…{address.slice(-4)}</>
               : <><span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style={{ background: 'var(--out-warn)' }} /><span style={{ color: 'var(--out-warn)' }}>NOT CONNECTED</span></>}
@@ -834,7 +834,7 @@ export function ChatConsole() {
 
         {/* ── Credit meter (only when wallet connected) ── */}
         {address && credits && (
-          <div className="flex items-center gap-3 font-mono text-[9px]">
+          <div className="flex items-center gap-3 font-mono text-[12px]">
             {/* free tier bar */}
             <div className="flex items-center gap-1.5">
               <span style={{ color: 'var(--out-muted)' }}>FREE</span>
@@ -870,7 +870,7 @@ export function ChatConsole() {
             </div>
 
             {credits.freeRemaining === 0 && credits.otrCredits <= 0 && (
-              <span className="ml-auto border px-1.5 py-0.5 text-[8px] uppercase tracking-widest animate-pulse"
+              <span className="ml-auto border px-1.5 py-0.5 text-[11px] uppercase tracking-widest animate-pulse"
                 style={{ borderColor: 'var(--out-warn)', color: 'var(--out-warn)' }}>
                 ⊘ NO CREDITS
               </span>
@@ -916,14 +916,14 @@ export function ChatConsole() {
                 <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                   {m.role === 'tool' ? (
                     /* Tool call indicator — compact, not raw text */
-                    <div className="flex items-center gap-2 text-[10px] font-mono px-1"
+                    <div className="flex items-center gap-2 text-[13px] font-mono px-1"
                       style={{ color: 'var(--out-ink-dim)' }}>
                       <span style={{ color: 'var(--out-ink)', opacity: 0.5 }}>◎</span>
                       <span>{m.content}</span>
                     </div>
                   ) : m.role === 'user' ? (
                     <div className="max-w-[84%]">
-                      <div className="text-[9px] font-mono uppercase tracking-widest mb-1 text-right"
+                      <div className="text-[12px] font-mono uppercase tracking-widest mb-1 text-right"
                         style={{ color: 'var(--out-muted)' }}>YOU</div>
                       <div className="px-3 py-2 text-[12px] font-mono leading-relaxed"
                         style={{
@@ -936,7 +936,7 @@ export function ChatConsole() {
                     </div>
                   ) : (
                     <div className="w-full">
-                      <div className="text-[9px] font-mono uppercase tracking-widest mb-1.5"
+                      <div className="text-[12px] font-mono uppercase tracking-widest mb-1.5"
                         style={{ color: 'var(--out-ink)', opacity: 0.7 }}>AGENT</div>
                       <div className="text-[12px] leading-relaxed"
                         style={{ color: 'var(--out-text)' }}>
@@ -952,7 +952,7 @@ export function ChatConsole() {
           {/* Streaming cursor */}
           {isStreaming && (
             <div className="flex items-center gap-2 mt-3 px-1">
-              <span className="text-[9px] font-mono uppercase tracking-widest"
+              <span className="text-[12px] font-mono uppercase tracking-widest"
                 style={{ color: 'var(--out-ink)', opacity: 0.7 }}>AGENT</span>
               <span className="inline-block w-1.5 h-4 animate-pulse"
                 style={{ background: 'var(--out-ink)' }} />
@@ -1043,9 +1043,9 @@ export function ChatConsole() {
             style={{ borderColor: 'var(--out-ink-dim)' }}>
             <span className="inline-block w-1.5 h-1.5 rounded-full"
               style={{ background: 'var(--out-warn)' }} />
-            <span className="text-[10px] font-bold uppercase tracking-widest"
+            <span className="text-[13px] font-bold uppercase tracking-widest"
               style={{ color: 'var(--out-warn)' }}>WALLET REQUIRED</span>
-            <span className="text-[9px] uppercase tracking-wide ml-auto"
+            <span className="text-[12px] uppercase tracking-wide ml-auto"
               style={{ color: 'var(--out-muted)' }}>AGENT ACCESS LOCKED</span>
           </div>
           <div className="px-4 py-4 flex flex-col gap-3">
@@ -1053,14 +1053,14 @@ export function ChatConsole() {
               Connect your wallet to access the <strong style={{ color: 'var(--out-ink)' }}>OUTRIVE deployment agent</strong>.
               Your wallet is your identity — no sign-up required.
             </p>
-            <div className="flex items-start gap-3 text-[10px] font-mono" style={{ color: 'var(--out-muted)' }}>
+            <div className="flex items-start gap-3 text-[13px] font-mono" style={{ color: 'var(--out-muted)' }}>
               <div className="flex flex-col gap-1.5">
                 <span><span style={{ color: 'var(--out-ink)' }}>01</span> · Connect wallet</span>
                 <span><span style={{ color: 'var(--out-ink)' }}>02</span> · Describe your agent</span>
                 <span><span style={{ color: 'var(--out-ink)' }}>03</span> · Sign &amp; launch on-chain</span>
               </div>
             </div>
-            <p className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
               Supported: MetaMask, Rabby, and any EIP-1193 wallet · Network: Robinhood Chain (4663)
             </p>
           </div>
@@ -1072,9 +1072,9 @@ export function ChatConsole() {
           style={{ borderColor: 'var(--out-warn)', background: '#0b0a05' }}>
           <div className="border-b flex items-center gap-2 px-4 py-2"
             style={{ borderColor: 'var(--out-warn)' }}>
-            <span className="text-[10px] font-bold uppercase tracking-widest"
+            <span className="text-[13px] font-bold uppercase tracking-widest"
               style={{ color: 'var(--out-warn)' }}>⊘ CREDIT REQUIRED</span>
-            <span className="text-[9px] uppercase tracking-wide ml-auto"
+            <span className="text-[12px] uppercase tracking-wide ml-auto"
               style={{ color: 'var(--out-muted)' }}>AI AGENT ACCESS LOCKED</span>
           </div>
           <div className="px-4 py-3 space-y-2">
@@ -1082,7 +1082,7 @@ export function ChatConsole() {
               All <strong style={{ color: 'var(--out-ink)' }}>10 free AI chats</strong> have been used for this wallet.
               Buy <strong style={{ color: 'var(--out-ink)' }}>$OTR</strong> to unlock more.
             </p>
-            <div className="flex items-center gap-2 py-1.5 border-l-2 pl-3 text-[10px]"
+            <div className="flex items-center gap-2 py-1.5 border-l-2 pl-3 text-[13px]"
               style={{ borderColor: 'var(--out-ink)', color: 'var(--out-muted)' }}>
               <span>1 $OTR</span>
               <span style={{ color: 'var(--out-ink-dim)' }}>═</span>
@@ -1091,20 +1091,20 @@ export function ChatConsole() {
             <div className="flex flex-wrap gap-2 pt-1">
               <button
                 onClick={() => window.dispatchEvent(new CustomEvent('outrive:nav', { detail: 'outrive' }))}
-                className="flex items-center gap-1.5 border px-3 py-1.5 text-[10px] uppercase tracking-widest cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 border px-3 py-1.5 text-[13px] uppercase tracking-widest cursor-pointer transition-colors"
                 style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'var(--out-ink)'; e.currentTarget.style.color = 'var(--out-bg)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--out-ink)'; }}
               >
                 ◈ GET $OTR CREDITS →
               </button>
-              <div className="flex items-center gap-1.5 border px-3 py-1.5 text-[10px] uppercase tracking-widest opacity-40 cursor-not-allowed select-none"
+              <div className="flex items-center gap-1.5 border px-3 py-1.5 text-[13px] uppercase tracking-widest opacity-40 cursor-not-allowed select-none"
                 style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
                 title="Available after $OTR TGE">
                 ◉ DEPOSIT $OTR → SOON
               </div>
             </div>
-            <p className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+            <p className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
               On-chain credit top-up activates after the $OTR token generation event (TGE).
             </p>
           </div>
@@ -1119,7 +1119,7 @@ export function ChatConsole() {
                   key={a.label}
                   onClick={() => handleQuickAction(a.text)}
                   disabled={!address || isStreaming}
-                  className="text-[10px] font-mono uppercase tracking-widest border px-2 py-0.5 transition-colors disabled:opacity-30"
+                  className="text-[13px] font-mono uppercase tracking-widest border px-2 py-0.5 transition-colors disabled:opacity-30"
                   style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
                   onMouseEnter={e => {
                     e.currentTarget.style.color = 'var(--out-ink)';
@@ -1204,10 +1204,10 @@ function renderWorkOrder(
     <div className="my-4 border border-[var(--out-ink)] bg-[#0A100A] p-4 font-mono text-xs w-full">
       {/* Header */}
       <div className="border-b border-[var(--out-ink)] pb-2 mb-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-        <span className="text-[var(--out-ink)] uppercase tracking-[0.12em] font-bold text-[10px] sm:text-[11px]">
+        <span className="text-[var(--out-ink)] uppercase tracking-[0.12em] font-bold text-[13px] sm:text-[13px]">
           ▲ WORK ORDER — AGENT TOKEN LAUNCH
         </span>
-        <span className="sm:ml-auto text-[var(--out-muted)] text-[9px] font-normal uppercase tracking-widest">
+        <span className="sm:ml-auto text-[var(--out-muted)] text-[12px] font-normal uppercase tracking-widest">
           VIRTUALS PROTOCOL / ROBINHOOD CHAIN
         </span>
       </div>
@@ -1226,16 +1226,16 @@ function renderWorkOrder(
           ['CREATOR',    'YOUR WALLET  (you sign, you own)'],
         ] as [string, string][]).map(([label, val]) => (
           <div key={label} className="flex items-end gap-1">
-            <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[9px] sm:text-[10px]">{label}</span>
+            <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[12px] sm:text-[13px]">{label}</span>
             <span className="flex-1 border-b border-dotted border-[var(--out-muted)] mb-[3px]" />
-            <span className="text-[var(--out-text)] text-right text-[9px] sm:text-[10px] max-w-[140px] sm:max-w-[200px] truncate">{val}</span>
+            <span className="text-[var(--out-text)] text-right text-[12px] sm:text-[13px] max-w-[140px] sm:max-w-[200px] truncate">{val}</span>
           </div>
         ))}
 
         {/* ── Image upload row ── */}
         {signStep === 'idle' && onImageSelect && (
           <div className="flex items-center gap-1 pt-1">
-            <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[9px] sm:text-[10px]">IMAGE</span>
+            <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[12px] sm:text-[13px]">IMAGE</span>
             <span className="flex-1 border-b border-dotted border-[var(--out-muted)] mb-[3px]" />
             <div className="flex items-center gap-2 shrink-0">
               {imagePreviewUrl ? (
@@ -1246,15 +1246,15 @@ function renderWorkOrder(
                     className="w-6 h-6 object-cover border border-[var(--out-ink-dim)]"
                     style={{ imageRendering: 'pixelated' }}
                   />
-                  <span className="text-[9px]" style={{ color: 'var(--out-ink)' }}>✓ ATTACHED</span>
+                  <span className="text-[12px]" style={{ color: 'var(--out-ink)' }}>✓ ATTACHED</span>
                 </>
               ) : (
-                <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+                <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
                   {imageUploading ? '⟳ UPLOADING…' : 'NO IMAGE'}
                 </span>
               )}
               <label
-                className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5 cursor-pointer transition-colors"
+                className="text-[12px] uppercase tracking-widest border px-1.5 py-0.5 cursor-pointer transition-colors"
                 style={{
                   borderColor: imageUploading ? 'var(--out-grid-major)' : 'var(--out-ink)',
                   color:       imageUploading ? 'var(--out-muted)' : 'var(--out-ink)',
@@ -1275,17 +1275,17 @@ function renderWorkOrder(
           </div>
         )}
       </div>
-      <div className="text-[9px] mb-3" style={{ color: 'var(--out-muted)' }}>
+      <div className="text-[12px] mb-3" style={{ color: 'var(--out-muted)' }}>
         PNG / JPG / WebP — square recommended (min 400×400px, max 5 MB) — immutable after signing
       </div>
 
-      <div className="text-[var(--out-warn)] text-[10px] mb-4 uppercase tracking-wide">
+      <div className="text-[var(--out-warn)] text-[13px] mb-4 uppercase tracking-wide">
         {'⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING'}
       </div>
 
       {/* Chain warning — shown when wallet is NOT on Robinhood Chain */}
       {walletChainId !== undefined && walletChainId !== 4663 && walletChainId !== 46630 && signStep !== 'confirmed' && (
-        <div className="mb-4 px-3 py-2 border text-[10px] font-mono uppercase tracking-wide flex items-center gap-2"
+        <div className="mb-4 px-3 py-2 border text-[13px] font-mono uppercase tracking-wide flex items-center gap-2"
           style={{ borderColor: 'var(--out-warn)', color: 'var(--out-warn)', background: 'rgba(255,160,0,0.05)' }}>
           <span>⚠</span>
           <span>WALLET ON WRONG CHAIN (chainId {walletChainId}) — clicking SIGN will switch to Robinhood Chain (4663) first</span>
@@ -1295,40 +1295,40 @@ function renderWorkOrder(
       {/* Action buttons — state-driven */}
       {(signStep === 'pending' || isSigning) ? (
         <div className="flex items-center gap-3">
-          <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">PENDING</span>
-          <span className="text-[var(--out-muted)] text-[10px]">AWAITING WALLET CONFIRMATION…</span>
+          <span className="text-[13px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">PENDING</span>
+          <span className="text-[var(--out-muted)] text-[13px]">AWAITING WALLET CONFIRMATION…</span>
         </div>
       ) : signStep === 'confirmed' ? (
         <div className="space-y-2">
           {/* Step 1 confirmed */}
           <div className="flex items-center gap-3">
-            <span className="text-[10px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 1/2 CONFIRMED</span>
-            <span className="text-[var(--out-ink)] text-[10px] font-bold">TOKEN CREATED ON-CHAIN</span>
+            <span className="text-[13px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 1/2 CONFIRMED</span>
+            <span className="text-[var(--out-ink)] text-[13px] font-bold">TOKEN CREATED ON-CHAIN</span>
           </div>
 
           {/* Step 2: activate */}
           {activateStep === 'activating' ? (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
-              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
+              <span className="text-[13px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
+              <span className="text-[13px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
             </div>
           ) : activateStep === 'done' ? (
             <div className="flex items-center gap-3">
-              <span className="text-[10px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 2/2 ACTIVE</span>
-              <span className="text-[var(--out-ink)] text-[10px] font-bold">TRADING LIVE ON BONDING CURVE</span>
+              <span className="text-[13px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 2/2 ACTIVE</span>
+              <span className="text-[var(--out-ink)] text-[13px] font-bold">TRADING LIVE ON BONDING CURVE</span>
             </div>
           ) : activateStep === 'failed' && handleActivate ? (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)]">STEP 2 REQUIRED</span>
+              <span className="text-[13px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)]">STEP 2 REQUIRED</span>
               <button onClick={handleActivate}
-                className="border border-[var(--out-ink)] px-3 py-0.5 text-[var(--out-ink)] text-[10px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+                className="border border-[var(--out-ink)] px-3 py-0.5 text-[var(--out-ink)] text-[13px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
                 ACTIVATE TRADING →
               </button>
             </div>
           ) : activateStep === 'idle' ? (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
-              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
+              <span className="text-[13px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
+              <span className="text-[13px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
             </div>
           ) : null}
 
@@ -1336,22 +1336,22 @@ function renderWorkOrder(
           <div className="flex flex-wrap gap-4 mt-1">
             {hash && (
               <a href={`${explorerBase}/tx/${hash}`} target="_blank" rel="noreferrer"
-                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
+                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[13px]">
                 VIEW CREATE TX ↗
               </a>
             )}
             {activateTxHash && (
               <a href={`${explorerBase}/tx/${activateTxHash}`} target="_blank" rel="noreferrer"
-                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
+                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[13px]">
                 VIEW ACTIVATE TX ↗
               </a>
             )}
             <a href="https://app.virtuals.io" target="_blank" rel="noreferrer"
-              className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
+              className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[13px]">
               COMPLETE AGENT ON VIRTUALS ↗
             </a>
           </div>
-          <div className="text-[var(--out-muted)] text-[10px] mt-1">
+          <div className="text-[var(--out-muted)] text-[13px] mt-1">
             {activateStep === 'done'
               ? 'Token live on bonding curve. Set up agent personality & runtime on app.virtuals.io.'
               : 'Token created on-chain. Activating bonding curve trading…'}
@@ -1361,13 +1361,13 @@ function renderWorkOrder(
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
-              <span className="text-[10px]" style={{ color: 'var(--out-danger)' }}>
+              <span className="text-[13px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
+              <span className="text-[13px]" style={{ color: 'var(--out-danger)' }}>
                 {txErrorMsg ? 'TX ERROR — see details below' : 'REJECTED OR REVERTED — check wallet & network'}
               </span>
             </div>
             {txErrorMsg && (
-              <div className="px-2 py-1.5 text-[9px] font-mono leading-relaxed break-all"
+              <div className="px-2 py-1.5 text-[12px] font-mono leading-relaxed break-all"
                 style={{ background: 'rgba(255,40,40,0.06)', border: '1px solid rgba(255,40,40,0.25)', color: 'var(--out-danger)', opacity: 0.85 }}>
                 {txErrorMsg}
               </div>
