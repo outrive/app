@@ -21,3 +21,7 @@ publicDir = "artifacts/outrive/dist/public"
 [[services.production.rewrites]]
 from = "/*"
 to = "/index.html"
+
+[services.env]
+PORT = "19608"
+BASE_PATH = "/"
