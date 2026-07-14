@@ -145,8 +145,8 @@ export function Topbar() {
             className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
             style={{ background: isHealthy ? 'var(--out-ink)' : 'var(--out-warn)' }}
           />
-          <span className="hidden md:inline">ROBINHOOD ({chainId})</span>
-          <span className="md:hidden">{chainId}</span>
+          <span className="hidden md:inline">Robinhood Chain</span>
+          <span className="md:hidden">RHC</span>
         </div>
 
         {/* Calibration badge (md+) */}
@@ -165,22 +165,6 @@ export function Topbar() {
         {!ready ? null : !isConnected ? (
           /* NOT CONNECTED */
           <div className="flex items-center gap-1.5 shrink-0">
-            {hasWallet && (
-              <button
-                onClick={addChain}
-                disabled={pending}
-                className="hidden sm:block px-2 py-1 border font-bold uppercase tracking-widest transition-opacity hover:opacity-80 disabled:opacity-50 shrink-0"
-                title="Add Robinhood Chain (chainId 4663) to your wallet"
-                style={{
-                  fontSize: 'inherit',
-                  borderColor: done ? 'var(--out-ink)' : 'var(--out-ink-dim)',
-                  color: done ? 'var(--out-ink)' : 'var(--out-muted)',
-                  background: 'transparent',
-                }}
-              >
-                {pending ? '…' : done ? '✓ RPC SET' : '+ ROBINHOOD RPC'}
-              </button>
-            )}
             <button
               onClick={login}
               className="px-3 py-1 font-bold uppercase tracking-widest transition-opacity hover:opacity-90 shrink-0"
