@@ -170,6 +170,10 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
         </div>
         {INFO_TABS.map(sideItem)}
 
+        <div className="mt-auto px-4 py-4">
+          <span className="text-[11px] tracking-widest" style={{ color: 'var(--out-muted)', opacity: 0.5 }}>outrive.io</span>
+        </div>
+
       </aside>
     </>
   );
