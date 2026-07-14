@@ -259,6 +259,7 @@ export function ChatConsole() {
   const [cmdHistory, setCmdHistory]   = useState<string[]>([]);
   const [historyIdx, setHistoryIdx]   = useState(-1);
   const [credits, setCredits]         = useState<CreditInfo | null>(null);
+  const [txErrorMsg, setTxErrorMsg]   = useState<string | null>(null);
 
   const messagesEndRef      = useRef<HTMLDivElement>(null);
   const scrollContainerRef  = useRef<HTMLDivElement>(null);
@@ -267,8 +268,10 @@ export function ChatConsole() {
   const hasRecordedRef = useRef(false);
   const assistantIdRef = useRef('');
 
-  const { sendTransaction, data: hash, isPending: isSigning, isError: isSendError } = useSendTransaction();
+  const { sendTransaction, reset: resetSend, data: hash, isPending: isSigning, isError: isSendError, error: sendTxError } = useSendTransaction();
   const { isSuccess: isConfirmed, isError: isTxFailed, data: receipt } = useWaitForTransactionReceipt({ hash });
+  // Track whether we've actually initiated a send — prevents stale isSendError from firing
+  const hasSentRef = useRef(false);
 
   // Activate (launch()) state — step 2 after preLaunch confirms
   const [activateStep, setActivateStep]           = useState<ActivateStep>('idle');
@@ -306,11 +309,14 @@ export function ChatConsole() {
 
   useEffect(() => {
     hasRecordedRef.current = false;
+    hasSentRef.current     = false;
     setSignStep('idle');
+    setTxErrorMsg(null);
     setLaunchSuccess(null);
     setActivateStep('idle');
     setActivateTxHash(undefined);
     setActivateUnsignedTx(null);
+    resetSend();
   }, [txPayload]);
 
   /* ── TX confirmation state machine ── */
@@ -335,7 +341,9 @@ export function ChatConsole() {
       }
     }
     if (isTxFailed  && signStep === 'pending') setSignStep('failed');
-    if (isSendError && signStep === 'pending') setSignStep('failed');
+    // Guard: only fire isSendError if we actually attempted a send (avoids stale isError from
+    // previous failed call triggering FAILED immediately on every RETRY click)
+    if (isSendError && hasSentRef.current && signStep === 'pending') setSignStep('failed');
   }, [isConfirmed, isTxFailed, isSendError, hash, signStep]);
 
   /* ── Step 2: auto-activate after preLaunch confirms ── */
@@ -644,19 +652,32 @@ export function ChatConsole() {
   ═══════════════════════════════════════════════════════════════════════ */
   const handleLaunch = async () => {
     if (!txPayload?.launchTx) return;
+    // ── CRITICAL: reset wagmi send state FIRST.
+    // Without this, isSendError stays true from the previous attempt.
+    // The useEffect watching isSendError would immediately flip signStep back
+    // to 'failed' the moment we set it to 'pending', so MetaMask never opens.
+    resetSend();
+    hasSentRef.current = false;
+    setTxErrorMsg(null);
     setSignStep('pending');
+
     // Step 1: explicit chain switch BEFORE sending tx.
-    // Doing this separately avoids wagmi's auto-switch inside sendTransaction,
-    // which causes MetaMask to show TWO sequential popups and confuses users.
+    // Doing this separately lets us give a clear error if the chain switch fails,
+    // rather than having wagmi swallow it inside sendTransaction.
     if (chain?.id !== 4663) {
       try {
         await switchChainAsync({ chainId: 4663 });
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[OUTRIVE] switchChain failed:', msg);
+        setTxErrorMsg(`Chain switch failed: ${msg}`);
         setSignStep('failed');
         return;
       }
     }
+
     // Step 2: send the transaction — wallet is now on Robinhood Chain
+    hasSentRef.current = true;
     sendTransaction(
       {
         to:    txPayload.launchTx.to,
@@ -664,7 +685,14 @@ export function ChatConsole() {
         value: BigInt(txPayload.launchTx.value || '0'),
         // No chainId here — already switched above; avoids double MetaMask popup
       },
-      { onError: () => setSignStep('failed') },
+      {
+        onError: (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[OUTRIVE] sendTransaction failed:', msg);
+          setTxErrorMsg(msg);
+          setSignStep('failed');
+        },
+      },
     );
   };
 
@@ -853,7 +881,7 @@ export function ChatConsole() {
 
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch,
             () => setTxPayload(null), activateStep, activateTxHash,
-            activateUnsignedTx ? handleActivate : undefined, chain?.id)}
+            activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -906,7 +934,7 @@ export function ChatConsole() {
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch, () => {
             setTxPayload(null);
             setCliLines(prev => [...prev, L('  ✗ work order discarded', 'muted'), BL()]);
-          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id)}
+          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -1079,6 +1107,7 @@ function renderWorkOrder(
   activateTxHash?: `0x${string}`,
   handleActivate?: () => void,
   walletChainId?: number,
+  txErrorMsg?: string | null,
 ) {
   if (!txPayload) return null;
 
@@ -1195,9 +1224,19 @@ function renderWorkOrder(
         </div>
       ) : signStep === 'failed' ? (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
-            <span className="text-[10px]" style={{ color: 'var(--out-danger)' }}>REJECTED OR REVERTED — check wallet &amp; network</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
+              <span className="text-[10px]" style={{ color: 'var(--out-danger)' }}>
+                {txErrorMsg ? 'TX ERROR — see details below' : 'REJECTED OR REVERTED — check wallet & network'}
+              </span>
+            </div>
+            {txErrorMsg && (
+              <div className="px-2 py-1.5 text-[9px] font-mono leading-relaxed break-all"
+                style={{ background: 'rgba(255,40,40,0.06)', border: '1px solid rgba(255,40,40,0.25)', color: 'var(--out-danger)', opacity: 0.85 }}>
+                {txErrorMsg}
+              </div>
+            )}
           </div>
           <div className="flex gap-3">
             <button onClick={handleLaunch}
