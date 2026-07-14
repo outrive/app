@@ -32,6 +32,11 @@ interface VItem {
   mindshare?: number | null;
   image?: { url?: string } | null;
   category?: string;
+  // Social / project links (Virtuals API may return these)
+  socials?: Record<string, string> | null;
+  twitterUsername?: string | null;
+  telegramUrl?: string | null;
+  websiteUrl?: string | null;
 }
 
 function normalise(item: VItem) {
@@ -66,6 +71,9 @@ function normalise(item: VItem) {
     category: item.category ?? "",
     isVerified: item.isVerified ?? false,
     mindshare: item.mindshare ?? null,
+    twitter:  item.socials?.TWITTER  ?? item.twitterUsername ?? null,
+    telegram: item.socials?.TELEGRAM ?? item.telegramUrl     ?? null,
+    website:  item.socials?.WEBSITE  ?? item.websiteUrl      ?? null,
   };
 }
 

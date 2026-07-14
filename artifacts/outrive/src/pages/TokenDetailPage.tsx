@@ -49,6 +49,9 @@ export interface VToken {
   category: string;
   isVerified: boolean;
   mindshare: number | null;
+  twitter: string | null;
+  telegram: string | null;
+  website: string | null;
 }
 
 /* ── Blockscout API types ── */
@@ -400,12 +403,23 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
   /* ── Wrong chain warning ── */
   const wrongChain = !!address && !!chain && chain.id !== ROBINHOOD_CHAIN_ID && chain.id !== 46630;
 
+  /* ── Clean description (strip markdown image/link syntax) ── */
+  const cleanedDescription = token.description
+    ? token.description
+        .replace(/!\[.*?\]\(.*?\)/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/[*_`#~>|]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 220)
+    : '';
+
   return (
     <div className="flex flex-col font-mono md:h-[calc(100vh-48px)] md:overflow-hidden"
       style={{ minHeight: 'calc(100vh - 48px)', background: 'var(--out-bg)' }}>
 
-      {/* ══ STICKY HEADER BAR ══════════════════════════════════════════════ */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b shrink-0"
+      {/* ══ STICKY HEADER BAR — top-[48px] sits below the fixed Topbar ══ */}
+      <div className="sticky top-[48px] z-10 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b shrink-0"
         style={{ borderColor: 'var(--out-ink-dim)', background: 'var(--out-bg-sheet)' }}>
 
         <button onClick={onBack}
@@ -436,8 +450,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
           )}
         </div>
 
-        {/* CA + links — right side */}
-        <div className="hidden md:flex items-center gap-1.5 shrink-0">
+        {/* CA + links — always visible */}
+        <div className="flex items-center gap-1 flex-wrap shrink-0">
           {token.address && <>
             <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>CA</span>
             <span className="text-[11px] font-mono" style={{ color: 'var(--out-ink)' }}>
@@ -494,8 +508,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
         {/* mobile: flex-none so it takes natural height (page scrolls); desktop: flex-1 fills column */}
         <div className="flex-none md:flex-1 flex flex-col border-b md:border-b-0 md:border-r overflow-y-auto md:overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)' }}>
 
-          {/* Chart iframe */}
-          <div className="shrink-0 relative border-b" style={{ height: 'clamp(280px, 52vh, 600px)', borderColor: 'var(--out-grid-major)' }}>
+          {/* Chart iframe — shorter height gives trades more room */}
+          <div className="shrink-0 relative border-b" style={{ height: 'clamp(180px, 30vh, 350px)', borderColor: 'var(--out-grid-major)' }}>
             {geckoUrl ? (
               <iframe src={geckoUrl} title={`${token.ticker} chart`}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: '#050905' }}
@@ -508,21 +522,102 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             )}
           </div>
 
-          {/* CA strip */}
-          {token.address && (
-            <div className="flex items-center gap-2 px-3 py-2 border-b shrink-0" style={{ borderColor: 'var(--out-grid-major)', background: '#050905' }}>
-              <span className="text-[10px] uppercase tracking-widest shrink-0" style={{ color: 'var(--out-muted)' }}>CA</span>
-              <span className="flex-1 text-[13px] truncate font-mono" style={{ color: 'var(--out-ink)' }}>{token.address}</span>
-              <button onClick={copyCA}
-                className="text-[10px] border px-2 py-1 uppercase tracking-widest shrink-0 transition-colors"
-                style={{ borderColor: copied ? 'var(--out-ink)' : 'var(--out-ink-dim)', color: copied ? 'var(--out-ink)' : 'var(--out-muted)' }}>
-                {copied ? '✓' : 'COPY'}
-              </button>
-              <a href={`${EXPLORER}/token/${token.address}`} target="_blank" rel="noreferrer"
-                className="text-[10px] border px-2 py-1 uppercase tracking-widest shrink-0 transition-colors"
-                style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>↗</a>
+          {/* ── Token profile strip ── */}
+          <div className="shrink-0 border-b px-3 py-2.5 flex flex-col gap-2" style={{ borderColor: 'var(--out-grid-major)', background: '#060b06' }}>
+
+            {/* Identity row: avatar + name + ticker + status + description */}
+            <div className="flex items-start gap-2.5">
+              <TokenAvatar token={token} size={44} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                  <span className="text-[15px] font-bold shrink-0" style={{ color: 'var(--out-ink)' }}>${token.ticker}</span>
+                  <span className="text-[12px] shrink-0" style={{ color: 'var(--out-muted)' }}>{token.name}</span>
+                  {token.category && <span className="text-[10px] shrink-0" style={{ color: 'var(--out-muted)', opacity: 0.6 }}>· {token.category.toUpperCase()}</span>}
+                  {token.isVerified && (
+                    <span className="text-[10px] border px-1 py-0.5 shrink-0" style={{ borderColor: '#39d353', color: '#39d353' }}>✓ VERIFIED</span>
+                  )}
+                  <span className="text-[10px] border px-1.5 py-0.5 uppercase shrink-0"
+                    style={token.status === 'GRADUATED'
+                      ? { borderColor: 'var(--out-ink)', color: 'var(--out-ink)', background: '#12180f' }
+                      : { borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+                    {token.status === 'GRADUATED' ? '✓ GRAD' : '◉ BONDING'}
+                  </span>
+                </div>
+                {cleanedDescription && (
+                  <p className="text-[11px] leading-snug line-clamp-2" style={{ color: 'var(--out-muted)', opacity: 0.8 }}>
+                    {cleanedDescription}
+                  </p>
+                )}
+              </div>
             </div>
-          )}
+
+            {/* CA + links row */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {token.address && (
+                <>
+                  <span className="text-[10px] uppercase tracking-widest shrink-0" style={{ color: 'var(--out-muted)' }}>CA</span>
+                  <span className="text-[11px] font-mono shrink-0" style={{ color: 'var(--out-ink)' }}>
+                    {token.address.slice(0, 8)}…{token.address.slice(-6)}
+                  </span>
+                  <button onClick={copyCA}
+                    className="text-[10px] border px-2 py-1 uppercase tracking-widest shrink-0 transition-colors"
+                    style={{ borderColor: copied ? 'var(--out-ink)' : 'var(--out-ink-dim)', color: copied ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+                    {copied ? '✓' : 'COPY'}
+                  </button>
+                </>
+              )}
+              <div className="flex items-center gap-1 flex-wrap">
+                {token.address && (
+                  <a href={`${EXPLORER}/token/${token.address}`} target="_blank" rel="noreferrer"
+                    className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
+                    style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
+                    SCAN ↗
+                  </a>
+                )}
+                <a
+                  href={token.status === 'GRADUATED'
+                    ? `https://app.virtuals.io/virtuals/${token.id}`
+                    : `https://app.virtuals.io/prototypes/${token.id}`}
+                  target="_blank" rel="noreferrer"
+                  className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
+                  style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--out-ink)'; e.currentTarget.style.color = '#050905'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--out-ink)'; }}>
+                  {token.status === 'GRADUATED' ? 'VIRTUALS ↗' : 'PROTOTYPE ↗'}
+                </a>
+                {token.twitter && (
+                  <a href={`https://twitter.com/${token.twitter.replace(/^@/, '')}`} target="_blank" rel="noreferrer"
+                    className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
+                    style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
+                    𝕏 ↗
+                  </a>
+                )}
+                {token.telegram && (
+                  <a href={token.telegram.startsWith('http') ? token.telegram : `https://t.me/${token.telegram.replace(/^@/, '')}`}
+                    target="_blank" rel="noreferrer"
+                    className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
+                    style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
+                    TG ↗
+                  </a>
+                )}
+                {token.website && (
+                  <a href={token.website} target="_blank" rel="noreferrer"
+                    className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
+                    style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}>
+                    WEB ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Curve strip */}
           <div className="flex items-center gap-3 px-3 py-2 border-b shrink-0" style={{ borderColor: 'var(--out-grid-major)' }}>

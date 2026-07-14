@@ -43,38 +43,46 @@ export default function TokenDetail() {
   // ── Loading (only shown on deep-link, never on market click) ─────────
   if (!stateToken && isLoading) {
     return (
-      <div className="pt-20 flex flex-col items-center justify-center gap-3 font-mono"
-        style={{ color: 'var(--out-muted)', minHeight: '60vh' }}>
-        <span className="text-[24px] opacity-20" style={{ color: 'var(--out-ink)' }}>▦</span>
-        <span className="text-[12px] uppercase tracking-widest animate-pulse">◌ LOADING TOKEN DATA…</span>
-      </div>
+      <main className="pt-12">
+        <div className="pt-20 flex flex-col items-center justify-center gap-3 font-mono"
+          style={{ color: 'var(--out-muted)', minHeight: '60vh' }}>
+          <span className="text-[24px] opacity-20" style={{ color: 'var(--out-ink)' }}>▦</span>
+          <span className="text-[12px] uppercase tracking-widest animate-pulse">◌ LOADING TOKEN DATA…</span>
+        </div>
+      </main>
     );
   }
 
   // ── Not found ─────────────────────────────────────────────────────────
   if (!stateToken && (isError || !token)) {
     return (
-      <div className="pt-20 flex flex-col items-center justify-center gap-4 font-mono"
-        style={{ minHeight: '60vh' }}>
-        <span className="text-[32px] opacity-10" style={{ color: 'var(--out-ink)' }}>▦</span>
-        <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
-          TOKEN NOT FOUND
-        </span>
-        <span className="text-[11px] font-mono px-4 text-center max-w-md break-all"
-          style={{ color: 'var(--out-muted)', opacity: 0.5 }}>
-          {address}
-        </span>
-        <button
-          onClick={() => navigate('/')}
-          className="border px-4 py-2 text-[12px] uppercase tracking-widest transition-colors mt-2"
-          style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--out-ink)'; e.currentTarget.style.color = '#050905'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--out-ink)'; }}>
-          ← RETURN TO MARKET
-        </button>
-      </div>
+      <main className="pt-12">
+        <div className="pt-20 flex flex-col items-center justify-center gap-4 font-mono"
+          style={{ minHeight: '60vh' }}>
+          <span className="text-[32px] opacity-10" style={{ color: 'var(--out-ink)' }}>▦</span>
+          <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+            TOKEN NOT FOUND
+          </span>
+          <span className="text-[11px] font-mono px-4 text-center max-w-md break-all"
+            style={{ color: 'var(--out-muted)', opacity: 0.5 }}>
+            {address}
+          </span>
+          <button
+            onClick={() => navigate('/')}
+            className="border px-4 py-2 text-[12px] uppercase tracking-widest transition-colors mt-2"
+            style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--out-ink)'; e.currentTarget.style.color = '#050905'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--out-ink)'; }}>
+            ← RETURN TO MARKET
+          </button>
+        </div>
+      </main>
     );
   }
 
-  return <TokenDetailPage token={token!} onBack={() => navigate('/')} />;
+  return (
+    <main className="pt-12">
+      <TokenDetailPage token={token!} onBack={() => navigate('/')} />
+    </main>
+  );
 }
