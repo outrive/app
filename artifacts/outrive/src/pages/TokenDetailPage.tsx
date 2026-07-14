@@ -553,8 +553,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             )}
           </div>
 
-          {/* Tab content — max-h on mobile so it scrolls instead of expanding, flex-1 on desktop */}
-          <div className="overflow-y-auto font-mono max-h-[300px] md:flex-1 md:max-h-none min-h-0">
+          {/* Tab content — always flex-1 so it fills remaining column height */}
+          <div className="flex-1 overflow-y-auto font-mono min-h-0">
 
             {/* TRADES */}
             {infoTab === 'trades' && (
@@ -685,8 +685,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             )}
           </div>
 
-          {/* Description footer */}
-          {token.description && (
+          {/* Description footer — only show plain-text descriptions, skip markdown image-only strings */}
+          {token.description && !token.description.trim().startsWith('![') && (
             <div className="px-3 py-2 border-t shrink-0" style={{ borderColor: 'var(--out-grid-major)' }}>
               <p className="text-[11px] leading-relaxed line-clamp-2" style={{ color: 'var(--out-muted)' }}>
                 {token.description}
