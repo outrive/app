@@ -401,7 +401,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
   const wrongChain = !!address && !!chain && chain.id !== ROBINHOOD_CHAIN_ID && chain.id !== 46630;
 
   return (
-    <div className="flex flex-col font-mono" style={{ minHeight: 'calc(100vh - 48px)', background: 'var(--out-bg)' }}>
+    <div className="flex flex-col font-mono md:h-[calc(100vh-48px)] md:overflow-hidden"
+      style={{ minHeight: 'calc(100vh - 48px)', background: 'var(--out-bg)' }}>
 
       {/* ══ STICKY HEADER BAR ══════════════════════════════════════════════ */}
       <div className="sticky top-0 z-10 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b shrink-0"
@@ -487,7 +488,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
       </div>
 
       {/* ══ BODY — two columns ═════════════════════════════════════════════ */}
-      <div className="flex flex-col md:flex-row flex-1 min-h-0" style={{ minHeight: 'calc(100vh - 160px)' }}>
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
 
         {/* ── LEFT: chart + trades/holders ── */}
         <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)' }}>
@@ -552,8 +553,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             )}
           </div>
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto font-mono">
+          {/* Tab content — max-h on mobile so it scrolls instead of expanding, flex-1 on desktop */}
+          <div className="overflow-y-auto font-mono max-h-[300px] md:flex-1 md:max-h-none min-h-0">
 
             {/* TRADES */}
             {infoTab === 'trades' && (
