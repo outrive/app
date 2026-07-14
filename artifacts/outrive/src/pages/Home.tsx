@@ -1483,7 +1483,13 @@ export default function Home() {
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-[9px] mb-1" style={{ color: 'var(--out-muted)' }}>COMMUNITY</span>
-                <a href="https://x.com/Outrive_io" target="_blank" rel="noopener noreferrer"
+                <a href="https://outrive.io" target="_blank" rel="noopener noreferrer"
+                  className="transition-colors" style={{ color: 'var(--out-text)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--out-ink)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--out-text)')}>
+                  WEBSITE
+                </a>
+                <a href="https://x.com/outrive_io" target="_blank" rel="noopener noreferrer"
                   className="transition-colors" style={{ color: 'var(--out-text)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--out-ink)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--out-text)')}>
