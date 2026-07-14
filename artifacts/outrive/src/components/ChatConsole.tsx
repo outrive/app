@@ -807,23 +807,25 @@ export function ChatConsole() {
       <div className="flex flex-col gap-2 mb-4 border-b pb-3" style={{ borderColor: 'var(--out-ink-dim)' }}>
         <div className="flex items-center gap-0">
           <div className="flex gap-1.5 text-[13px] font-mono mr-auto">
-            {(['prompt', 'cli'] as InputMode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setInput(''); }}
-                className="flex items-center gap-1.5 px-3 py-1 uppercase tracking-widest border transition-all"
-                style={{
-                  borderColor: mode === m ? 'var(--out-ink)' : 'var(--out-ink-dim)',
-                  color:       mode === m ? 'var(--out-bg)'  : 'var(--out-muted)',
-                  background:  mode === m ? 'var(--out-ink)' : 'transparent',
-                  fontWeight:  mode === m ? 700 : 400,
-                }}
-              >
-                {m === 'prompt'
-                  ? <><span>◈</span> PROMPT</>
-                  : <><span style={{ color: mode === m ? 'var(--out-bg)' : 'var(--out-muted)' }}>$_</span> CLI</>}
-              </button>
-            ))}
+            <button
+              onClick={() => { setMode('prompt'); setInput(''); }}
+              className="flex items-center gap-1.5 px-3 py-1 uppercase tracking-widest border transition-all"
+              style={{
+                borderColor: 'var(--out-ink)',
+                color:       'var(--out-bg)',
+                background:  'var(--out-ink)',
+                fontWeight:  700,
+              }}
+            >
+              <span>◈</span> PROMPT
+            </button>
+            <button
+              disabled
+              className="flex items-center gap-1.5 px-3 py-1 uppercase tracking-widest border cursor-not-allowed"
+              style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-ink-dim)', opacity: 0.45 }}
+            >
+              <span>$_</span> CLI <span className="text-[10px] ml-0.5">SOON</span>
+            </button>
           </div>
           <span className="font-mono text-[13px]" style={{ color: 'var(--out-muted)' }}>
             {address
