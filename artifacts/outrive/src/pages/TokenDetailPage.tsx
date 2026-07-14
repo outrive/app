@@ -395,7 +395,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
 
   // GeckoTerminal embed — auto-discovers pool on Robinhood Chain
   const geckoUrl = token.address
-    ? `https://www.geckoterminal.com/${GECKO_NETWORK}/tokens/${token.address}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`
+    ? `https://www.geckoterminal.com/${GECKO_NETWORK}/tokens/${token.address}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0&tz_offset=0`
     : null;
 
   const posChg = token.priceChange24h >= 0;
