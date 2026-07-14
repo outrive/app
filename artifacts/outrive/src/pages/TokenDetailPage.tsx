@@ -491,7 +491,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
       <div className="flex flex-col md:flex-row flex-1 min-h-0">
 
         {/* ── LEFT: chart + trades/holders ── */}
-        <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)' }}>
+        {/* mobile: flex-none so it takes natural height (page scrolls); desktop: flex-1 fills column */}
+        <div className="flex-none md:flex-1 flex flex-col border-b md:border-b-0 md:border-r overflow-y-auto md:overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)' }}>
 
           {/* Chart iframe */}
           <div className="shrink-0 relative border-b" style={{ height: 'clamp(280px, 52vh, 600px)', borderColor: 'var(--out-grid-major)' }}>
@@ -696,7 +697,8 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
         </div>
 
         {/* ── RIGHT: trade panel ── */}
-        <div className="w-full md:w-[320px] shrink-0 flex flex-col" style={{ background: 'var(--out-bg-sheet)' }}>
+        {/* mobile: min-h fills viewport so buy/sell panel never leaves blank space below */}
+        <div className="w-full md:w-[320px] shrink-0 flex flex-col min-h-[calc(100vh-200px)] md:min-h-0" style={{ background: 'var(--out-bg-sheet)' }}>
 
           {/* Buy / Sell tabs */}
           <div className="flex border-b shrink-0" style={{ borderColor: 'var(--out-ink-dim)' }}>
