@@ -508,11 +508,11 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
         {/* mobile: flex-none so it takes natural height (page scrolls); desktop: flex-1 fills column */}
         <div className="flex-none md:flex-1 flex flex-col border-b md:border-b-0 md:border-r overflow-y-auto md:overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)' }}>
 
-          {/* Chart iframe — shorter height gives trades more room */}
-          <div className="shrink-0 relative border-b" style={{ height: 'clamp(180px, 30vh, 350px)', borderColor: 'var(--out-grid-major)' }}>
+          {/* Chart iframe — GeckoTerminal footer (~52px) hidden by overflow clip */}
+          <div className="shrink-0 relative border-b" style={{ height: 'clamp(200px, 33vh, 380px)', borderColor: 'var(--out-grid-major)', overflow: 'hidden' }}>
             {geckoUrl ? (
               <iframe src={geckoUrl} title={`${token.ticker} chart`}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: '#050905' }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: 'calc(100% + 52px)', border: 'none', background: '#050905' }}
                 allow="clipboard-write" loading="lazy" />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center flex-col gap-2">
