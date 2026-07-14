@@ -471,8 +471,7 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
             SCAN ↗
           </a>
           <a
-            href={token.status === 'GRADUATED'
-              `https://app.virtuals.io/virtuals/${token.id}`}
+            href={`https://app.virtuals.io/virtuals/${token.id}`}
             target="_blank" rel="noreferrer"
             className="text-[10px] border px-2 py-1 uppercase tracking-widest transition-colors"
             style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
