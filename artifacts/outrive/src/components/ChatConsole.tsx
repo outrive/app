@@ -256,7 +256,13 @@ export function ChatConsole() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [txPayload, setTxPayload]     = useState<TxPayload | null>(null);
   const [signStep, setSignStep]       = useState<SignStep>('idle');
-  const [launchSuccess, setLaunchSuccess] = useState<{ name: string; ticker: string; hash: `0x${string}` } | null>(null);
+  const [launchSuccess, setLaunchSuccess] = useState<{
+    name: string;
+    ticker: string;
+    hash: `0x${string}`;
+    tokenAddress?: `0x${string}`;
+    creatorAddress?: string;
+  } | null>(null);
   const [cmdHistory, setCmdHistory]   = useState<string[]>([]);
   const [historyIdx, setHistoryIdx]   = useState(-1);
   const [credits, setCredits]         = useState<CreditInfo | null>(null);
@@ -324,9 +330,27 @@ export function ChatConsole() {
   useEffect(() => {
     if (isConfirmed && hash && signStep === 'pending') {
       setSignStep('confirmed');
-      // Surface post-launch panel with real-time chart
+      // Surface post-launch panel — extract CA from receipt immediately (no indexer needed)
       if (txPayload) {
-        setLaunchSuccess({ name: txPayload.preview.name, ticker: txPayload.preview.ticker, hash });
+        const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+        const ZERO_PADDED  = '0x0000000000000000000000000000000000000000000000000000000000000000';
+        let ca: `0x${string}` | undefined;
+        for (const log of receipt?.logs ?? []) {
+          if (
+            log.topics?.[0]?.toLowerCase() === TRANSFER_SIG &&
+            log.topics?.[1]?.toLowerCase() === ZERO_PADDED
+          ) {
+            ca = log.address as `0x${string}`;
+            break;
+          }
+        }
+        setLaunchSuccess({
+          name: txPayload.preview.name,
+          ticker: txPayload.preview.ticker,
+          hash,
+          tokenAddress: ca,
+          creatorAddress: address,
+        });
       }
       if (txPayload && address && !hasRecordedRef.current) {
         hasRecordedRef.current = true;
@@ -890,6 +914,8 @@ export function ChatConsole() {
               name={launchSuccess.name}
               ticker={launchSuccess.ticker}
               txHash={launchSuccess.hash}
+              tokenAddress={launchSuccess.tokenAddress}
+              creatorAddress={launchSuccess.creatorAddress}
               explorerBase={explorerBase}
               onDismiss={() => setLaunchSuccess(null)}
             />
@@ -943,6 +969,8 @@ export function ChatConsole() {
               name={launchSuccess.name}
               ticker={launchSuccess.ticker}
               txHash={launchSuccess.hash}
+              tokenAddress={launchSuccess.tokenAddress}
+              creatorAddress={launchSuccess.creatorAddress}
               explorerBase={explorerBase}
               onDismiss={() => setLaunchSuccess(null)}
             />
