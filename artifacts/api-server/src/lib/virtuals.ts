@@ -373,7 +373,7 @@ export async function buildLaunchTx(params: {
       false,                                                 // needAcf_: false
       antiSniperTaxType,                                     // antiSniperTaxType_: 0=none, 1=60s
       false,                                                 // isProject60days_: false
-      "0x" as `0x${string}`,                                 // extParams_: empty
+      "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,  // extParams_: 32 zero bytes (required — empty bytes causes contract revert)
     ],
   });
 
