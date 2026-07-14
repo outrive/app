@@ -668,8 +668,14 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                 <table className="w-full text-[11px] border-collapse">
                   <thead className="sticky top-0" style={{ background: '#080d08' }}>
                     <tr style={{ borderBottom: '1px solid var(--out-grid-major)' }}>
-                      {['TYPE', 'FROM', 'TO', 'AMOUNT', 'AGE'].map(h => (
-                        <th key={h} className="px-3 py-2 text-left font-normal uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{h}</th>
+                      {([
+                        { label: 'TYPE',   align: 'text-left'  },
+                        { label: 'FROM',   align: 'text-left'  },
+                        { label: 'TO',     align: 'text-left'  },
+                        { label: 'AMOUNT', align: 'text-right' },
+                        { label: 'AGE',    align: 'text-right' },
+                      ] as const).map(({ label, align }) => (
+                        <th key={label} className={`px-3 py-2 ${align} font-normal uppercase tracking-widest`} style={{ color: 'var(--out-muted)' }}>{label}</th>
                       ))}
                     </tr>
                   </thead>
