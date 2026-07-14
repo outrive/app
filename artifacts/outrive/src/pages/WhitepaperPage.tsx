@@ -49,8 +49,8 @@ function Code({ children }: { children: string }) {
   );
 }
 
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="font-mono text-[11px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{children}</p>;
+function P({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <p className="font-mono text-[11px] leading-relaxed" style={{ color: 'var(--out-text)', ...style }}>{children}</p>;
 }
 
 function Highlight({ children }: { children: React.ReactNode }) {

@@ -3,8 +3,8 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
-import { runCalibrationCheck, getVirtualsConfig } from "./lib/virtuals.js";
-import { checkBondingRole } from "./lib/signerWallet.js";
+import { runCalibrationCheck } from "./lib/virtuals.js";
+import { checkSignerStatus } from "./lib/signerWallet.js";
 import { startIndexer } from "./lib/indexer.js";
 
 const app: Express = express();
@@ -28,12 +28,9 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
-// Boot-time calibration check + BONDING_ROLE check + indexer start (non-blocking)
+// Boot-time calibration check + signer status log + indexer start (non-blocking)
 void runCalibrationCheck().then(async () => {
-  const config = getVirtualsConfig();
-  if (config.factoryAddress) {
-    await checkBondingRole(config.factoryAddress);
-  }
+  await checkSignerStatus();
   startIndexer();
 });
 

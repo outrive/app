@@ -4,8 +4,7 @@ import { db } from "@workspace/db";
 import { conversationsTable, messagesTable, launchesTable, tokensTable, chatCreditsTable, FREE_CHAT_LIMIT, OTR_PER_CREDIT } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { getPublicClient } from "../lib/chains.js";
-import { buildLaunchTx, signAndBroadcastLaunchTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
-import { getSignerAddress, hasBondingRole } from "../lib/signerWallet.js";
+import { buildLaunchTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
 import { checkLaunchRateLimit } from "../lib/rateLimit.js";
 import { cacheGet, cacheSet } from "../lib/cache.js";
 import { SYSTEM_PROMPT } from "../lib/agentPrompt.js";
@@ -113,13 +112,10 @@ async function executeTool(
       const tickerCheck = validateTicker(ticker.toUpperCase());
       if (!tickerCheck.ok) return { result: `ERROR: ${tickerCheck.error}` };
 
-      // Server-side signing — OUTRIVE broadcasts with its BONDING_ROLE wallet
-      const signerAddr = getSignerAddress();
-      if (!signerAddr) {
-        return { result: "ERROR: OUTRIVE server signer is not configured. Launches are temporarily unavailable." };
-      }
-
-      const launchResult = await signAndBroadcastLaunchTx({
+      // Build preLaunch tx for user to sign via their wallet.
+      // Target: BondingV5 proxy (0xd4ccbfa37e2f35611b3042e4096Ad7a3459Bd007).
+      // msg.sender = user → user is creator on-chain. No BONDING_ROLE needed.
+      const buildResult = await buildLaunchTx({
         name,
         ticker: ticker.toUpperCase(),
         description,
@@ -128,25 +124,15 @@ async function executeTool(
         walletAddress: walletAddress as `0x${string}`,
       });
 
-      if ("error" in launchResult) return { result: `ERROR: ${launchResult.error}` };
-
-      // Record launch in DB
-      try {
-        await db.insert(launchesTable).values({
-          walletAddress: walletAddress.toLowerCase(),
-          name,
-          ticker: ticker.toUpperCase(),
-          txHash: launchResult.txHash,
-          status: "confirmed",
-          network: "mainnet",
-        });
-      } catch {
-        // Non-fatal — launch already succeeded on-chain
-      }
+      if ("error" in buildResult) return { result: `ERROR: ${buildResult.error}` };
 
       return {
-        result: `LAUNCH CONFIRMED — Agent token "${name}" (${ticker.toUpperCase()}) deployed on-chain. Tx: ${launchResult.txHash}`,
-        launchResult: { txHash: launchResult.txHash, preview: launchResult.preview },
+        result: `WORK ORDER READY — Agent token "${name}" (${ticker.toUpperCase()}) ready for Virtuals Instant Launch. Review the Work Order and sign to create on-chain. Note: the BondingV5 contract appends " by Virtuals" to the name automatically.`,
+        txPayload: {
+          needsApproval: buildResult.needsApproval,
+          launchTx:      buildResult.launchTx,
+          preview:       buildResult.preview,
+        },
       };
     }
 

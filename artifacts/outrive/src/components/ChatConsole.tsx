@@ -23,9 +23,10 @@ interface TxPayload {
   serverTxHash?: `0x${string}`; // present when OUTRIVE signed server-side
 }
 
-type SignStep   = 'idle' | 'launch' | 'pending' | 'confirmed' | 'failed';
-type InputMode = 'prompt' | 'cli';
-type CliColor  = 'ink' | 'dim' | 'text' | 'muted' | 'warn' | 'danger' | 'up' | 'down';
+type SignStep     = 'idle' | 'launch' | 'pending' | 'confirmed' | 'failed';
+type ActivateStep = 'idle' | 'activating' | 'done' | 'failed';
+type InputMode   = 'prompt' | 'cli';
+type CliColor    = 'ink' | 'dim' | 'text' | 'muted' | 'warn' | 'danger' | 'up' | 'down';
 
 interface CliLine { text: string; color: CliColor; bold?: boolean; }
 
@@ -266,7 +267,15 @@ export function ChatConsole() {
   const assistantIdRef = useRef('');
 
   const { sendTransaction, data: hash, isPending: isSigning } = useSendTransaction();
-  const { isSuccess: isConfirmed, isError: isTxFailed } = useWaitForTransactionReceipt({ hash });
+  const { isSuccess: isConfirmed, isError: isTxFailed, data: receipt } = useWaitForTransactionReceipt({ hash });
+
+  // Activate (launch()) state — step 2 after preLaunch confirms
+  const [activateStep, setActivateStep]           = useState<ActivateStep>('idle');
+  const [activateTxHash, setActivateTxHash]       = useState<`0x${string}` | undefined>(undefined);
+  const [activateUnsignedTx, setActivateUnsignedTx] = useState<UnsignedTx | null>(null);
+  const { sendTransaction: sendActivateTx, data: activateHash, isPending: isActivatePending } = useSendTransaction();
+  const { isSuccess: isActivateConfirmed } = useWaitForTransactionReceipt({ hash: activateHash });
+
   const recordLaunch = useRecordLaunch();
   const explorerBase = getExplorerUrl();
 
@@ -294,7 +303,14 @@ export function ChatConsole() {
     cliEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [cliLines, txPayload]);
 
-  useEffect(() => { hasRecordedRef.current = false; setSignStep('idle'); setLaunchSuccess(null); }, [txPayload]);
+  useEffect(() => {
+    hasRecordedRef.current = false;
+    setSignStep('idle');
+    setLaunchSuccess(null);
+    setActivateStep('idle');
+    setActivateTxHash(undefined);
+    setActivateUnsignedTx(null);
+  }, [txPayload]);
 
   /* ── TX confirmation state machine ── */
   useEffect(() => {
@@ -319,6 +335,55 @@ export function ChatConsole() {
     }
     if (isTxFailed && signStep === 'pending') setSignStep('failed');
   }, [isConfirmed, isTxFailed, hash, signStep]);
+
+  /* ── Step 2: auto-activate after preLaunch confirms ── */
+  useEffect(() => {
+    if (signStep !== 'confirmed' || activateStep !== 'idle' || !receipt) return;
+
+    // Extract token address from receipt: find Transfer(from=0x0) — minted by the new token contract
+    const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+    const ZERO_PADDED  = '0x0000000000000000000000000000000000000000000000000000000000000000';
+    let tokenAddr: `0x${string}` | null = null;
+    for (const log of receipt.logs ?? []) {
+      if (
+        log.topics?.[0]?.toLowerCase() === TRANSFER_SIG &&
+        log.topics?.[1]?.toLowerCase() === ZERO_PADDED
+      ) {
+        tokenAddr = log.address as `0x${string}`;
+        break;
+      }
+    }
+    if (!tokenAddr) { setActivateStep('failed'); return; }
+
+    setActivateStep('activating');
+    const baseUrl = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
+    fetch(`${baseUrl}/api/launch/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenAddress: tokenAddr }),
+    })
+      .then(r => r.json())
+      .then((data: { mode: string; txHash?: string; unsignedTx?: UnsignedTx }) => {
+        if (data.mode === 'server' && data.txHash) {
+          setActivateTxHash(data.txHash as `0x${string}`);
+          setActivateStep('done');
+        } else if (data.mode === 'user' && data.unsignedTx) {
+          setActivateUnsignedTx(data.unsignedTx);
+          setActivateStep('failed'); // shows "ACTIVATE TRADING →" button
+        } else {
+          setActivateStep('failed');
+        }
+      })
+      .catch(() => setActivateStep('failed'));
+  }, [signStep, activateStep, receipt]);
+
+  /* ── Watch for user-signed activate tx ── */
+  useEffect(() => {
+    if (isActivateConfirmed && activateHash) {
+      setActivateTxHash(activateHash);
+      setActivateStep('done');
+    }
+  }, [isActivateConfirmed, activateHash]);
 
   /* ═══════════════════════════════════════════════════════════════════════
      STREAM RUNNER
@@ -579,9 +644,19 @@ export function ChatConsole() {
     if (!txPayload?.launchTx) return;
     setSignStep('pending');
     sendTransaction({
-      to: txPayload.launchTx.to,
-      data: txPayload.launchTx.data,
+      to:    txPayload.launchTx.to,
+      data:  txPayload.launchTx.data,
       value: BigInt(txPayload.launchTx.value || '0'),
+    });
+  };
+
+  const handleActivate = () => {
+    if (!activateUnsignedTx) return;
+    setActivateStep('activating');
+    sendActivateTx({
+      to:    activateUnsignedTx.to,
+      data:  activateUnsignedTx.data,
+      value: BigInt(activateUnsignedTx.value || '0'),
     });
   };
 
@@ -747,7 +822,9 @@ export function ChatConsole() {
             </div>
           )}
 
-          {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch, () => setTxPayload(null))}
+          {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch,
+            () => setTxPayload(null), activateStep, activateTxHash,
+            activateUnsignedTx ? handleActivate : undefined)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -800,7 +877,7 @@ export function ChatConsole() {
           {renderWorkOrder(txPayload, signStep, isSigning, hash, explorerBase, handleLaunch, () => {
             setTxPayload(null);
             setCliLines(prev => [...prev, L('  ✗ work order discarded', 'muted'), BL()]);
-          })}
+          }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -969,6 +1046,9 @@ function renderWorkOrder(
   explorerBase: string,
   handleLaunch: () => void,
   handleDiscard: () => void,
+  activateStep?: ActivateStep,
+  activateTxHash?: `0x${string}`,
+  handleActivate?: () => void,
 ) {
   if (!txPayload) return null;
 
@@ -995,7 +1075,7 @@ function renderWorkOrder(
           ['NETWORK',     txPayload.preview.network],
           ['FACTORY',     txPayload.preview.targetContract.slice(0,10) + '…' + txPayload.preview.targetContract.slice(-6)],
           ['GAS (EST.)',  txPayload.preview.baseCost],
-          ['CREATOR',    txPayload.serverTxHash ? `${address ? address.slice(0,10) + '…' : 'YOUR WALLET'}  (creator of record)` : 'YOUR WALLET  (you sign, you own)'],
+          ['CREATOR',    'YOUR WALLET  (you sign, you own)'],
         ] as [string, string][]).map(([label, val]) => (
           <div key={label} className="flex items-end gap-1">
             <span className="text-[var(--out-muted)] shrink-0 w-24 sm:w-36 text-[9px] sm:text-[10px]">{label}</span>
@@ -1006,9 +1086,7 @@ function renderWorkOrder(
       </div>
 
       <div className="text-[var(--out-warn)] text-[10px] mb-4 uppercase tracking-wide">
-        {txPayload.serverTxHash
-          ? '⚠ FIELDS ARE ON-CHAIN AND IMMUTABLE — SIGNED BY OUTRIVE SERVER'
-          : '⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING'}
+        {'⚠ FIELDS ARE SUBMITTED ON-CHAIN AND IMMUTABLE AFTER SIGNING'}
       </div>
 
       {/* Action buttons — state-driven */}
@@ -1019,15 +1097,50 @@ function renderWorkOrder(
         </div>
       ) : signStep === 'confirmed' ? (
         <div className="space-y-2">
+          {/* Step 1 confirmed */}
           <div className="flex items-center gap-3">
-            <span className="text-[10px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ CONFIRMED</span>
-            <span className="text-[var(--out-ink)] text-[10px] font-bold">TOKEN COMMISSIONED ON-CHAIN</span>
+            <span className="text-[10px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 1/2 CONFIRMED</span>
+            <span className="text-[var(--out-ink)] text-[10px] font-bold">TOKEN CREATED ON-CHAIN</span>
           </div>
+
+          {/* Step 2: activate */}
+          {activateStep === 'activating' ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
+              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
+            </div>
+          ) : activateStep === 'done' ? (
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">✓ STEP 2/2 ACTIVE</span>
+              <span className="text-[var(--out-ink)] text-[10px] font-bold">TRADING LIVE ON BONDING CURVE</span>
+            </div>
+          ) : activateStep === 'failed' && handleActivate ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)]">STEP 2 REQUIRED</span>
+              <button onClick={handleActivate}
+                className="border border-[var(--out-ink)] px-3 py-0.5 text-[var(--out-ink)] text-[10px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+                ACTIVATE TRADING →
+              </button>
+            </div>
+          ) : activateStep === 'idle' ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">⟳ ACTIVATING</span>
+              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>STARTING BONDING CURVE TRADING…</span>
+            </div>
+          ) : null}
+
+          {/* TX links */}
           <div className="flex flex-wrap gap-4 mt-1">
-            {(txPayload?.serverTxHash ?? hash) && (
-              <a href={`${explorerBase}/tx/${txPayload?.serverTxHash ?? hash}`} target="_blank" rel="noreferrer"
+            {hash && (
+              <a href={`${explorerBase}/tx/${hash}`} target="_blank" rel="noreferrer"
                 className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
-                VIEW TX ON BLOCKSCOUT ↗
+                VIEW CREATE TX ↗
+              </a>
+            )}
+            {activateTxHash && (
+              <a href={`${explorerBase}/tx/${activateTxHash}`} target="_blank" rel="noreferrer"
+                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[10px]">
+                VIEW ACTIVATE TX ↗
               </a>
             )}
             <a href="https://app.virtuals.io" target="_blank" rel="noreferrer"
@@ -1036,7 +1149,9 @@ function renderWorkOrder(
             </a>
           </div>
           <div className="text-[var(--out-muted)] text-[10px] mt-1">
-            On-chain launch complete. Set up agent personality &amp; runtime on app.virtuals.io.
+            {activateStep === 'done'
+              ? 'Token live on bonding curve. Set up agent personality & runtime on app.virtuals.io.'
+              : 'Token created on-chain. Activating bonding curve trading…'}
           </div>
         </div>
       ) : signStep === 'failed' ? (

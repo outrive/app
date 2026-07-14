@@ -1,10 +1,70 @@
 import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http } from "viem";
 import { createWalletClient } from "viem";
 import { getPublicClient, getActiveChain } from "./chains.js";
-import { getSignerAccount, getSignerAddress, hasBondingRole } from "./signerWallet.js";
+import { getSignerAccount, getSignerAddress } from "./signerWallet.js";
 import { logger } from "./logger.js";
 
-// ─── Verified ABI — AgentFactory proxy ────────────────────────────────────
+// ─── BondingV5 — USER-FACING launch contract ───────────────────────────────
+// Proxy:          0xd4ccbfa37e2f35611b3042e4096Ad7a3459Bd007
+// Implementation: 0x634D91f7A67011A60985dF555A5157f9b321f7dE (BondingV5.sol, verified)
+// Source:         contracts/launchpadv2/BondingV5.sol
+//
+// CORRECT FLOW (no BONDING_ROLE needed from OUTRIVE):
+//   1. User calls preLaunch() → BondingV5 internally calls factory (BondingV5 has BONDING_ROLE)
+//      msg.sender = user → user is creator on-chain ✓
+//   2. Anyone calls launch(tokenAddress) → trading starts on bonding curve
+//
+// Anti-sniper type constants (from BondingConfig.sol):
+//   ANTI_SNIPER_NONE = 0   → no tax
+//   ANTI_SNIPER_60S  = 1   → 60s buy-only (default for Instant Launch)
+const BONDING_V5_ABI: Abi = [
+  {
+    type: "function",
+    name: "preLaunch",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "name_",              type: "string"    },
+      { name: "ticker_",            type: "string"    },
+      { name: "cores_",             type: "uint8[]"   },
+      { name: "desc_",              type: "string"    },
+      { name: "img_",               type: "string"    },
+      { name: "urls_",              type: "string[4]" },
+      { name: "purchaseAmount_",    type: "uint256"   },
+      { name: "startTime_",         type: "uint256"   },
+      { name: "launchMode_",        type: "uint8"     },
+      { name: "airdropBips_",       type: "uint16"    },
+      { name: "needAcf_",           type: "bool"      },
+      { name: "antiSniperTaxType_", type: "uint8"     },
+      { name: "isProject60days_",   type: "bool"      },
+      { name: "extParams_",         type: "bytes"     },
+    ],
+    outputs: [
+      { name: "token",         type: "address" },
+      { name: "pair",          type: "address" },
+      { name: "applicationId", type: "uint256" },
+      { name: "initialPurchase", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "launch",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "tokenAddress_", type: "address" }],
+    outputs: [
+      { name: "", type: "address" },
+      { name: "", type: "address" },
+      { name: "", type: "uint256" },
+      { name: "", type: "uint256" },
+    ],
+  },
+];
+
+// BondingV5 proxy address — override with VIRTUALS_BONDING_ADDRESS env var if needed
+const BONDING_V5_ADDRESS = (
+  process.env.VIRTUALS_BONDING_ADDRESS ?? "0xd4ccbfa37e2f35611b3042e4096Ad7a3459Bd007"
+) as `0x${string}`;
+
+// ─── Verified ABI — AgentFactory proxy (used by indexer / system status) ──
 // Proxy: 0x43e4c17b15365596caae8e7d00e42bc8e988c2d4
 // Implementation: 0xf0a8089da19568a37bccacc4bfe3a2a9f1e71675 (verified Blockscout)
 // Deployed by: 0xe4a0015b4c12f84bf9b8b9db56b7ef0bc539d88f (official Virtuals deployer)
@@ -259,76 +319,28 @@ export function validateTicker(ticker: string): { ok: boolean; error?: string } 
   return { ok: true };
 }
 
-// ─── Server-side sign & broadcast ──────────────────────────────────────────
-// Uses OUTRIVE's BONDING_ROLE wallet to sign and submit the launch tx.
-// The creator parameter is set to the user's wallet so they are the on-chain
-// creator of record even though OUTRIVE pays gas and signs.
-export async function signAndBroadcastLaunchTx(params: {
-  name: string;
-  ticker: string;
-  description?: string;
-  imageRef?: string;
-  antiSniperDuration?: number;
-  walletAddress: `0x${string}`;
-}): Promise<{ txHash: `0x${string}`; preview: LaunchPreview } | { error: string }> {
-  const signerAccount = getSignerAccount();
-  if (!signerAccount) {
-    return { error: "OUTRIVE_SIGNER_PRIVATE_KEY is not configured. Server signing is not available." };
-  }
-
-  const bondingRole = hasBondingRole();
-  if (bondingRole === false) {
-    const addr = getSignerAddress();
-    return { error: `OUTRIVE signer (${addr}) does not have BONDING_ROLE on the factory. Contact Virtuals Protocol to grant the role, then retry.` };
-  }
-
-  const buildResult = await buildLaunchTx(params);
-  if ("error" in buildResult) return buildResult;
-
-  try {
-    const chain  = getActiveChain();
-    const rpcUrl = process.env.RPC_URL_OVERRIDE ?? chain.rpcUrls.default.http[0];
-    const wallet = createWalletClient({ account: signerAccount, chain, transport: http(rpcUrl) });
-
-    const txHash = await wallet.sendTransaction({
-      to:    buildResult.launchTx.to,
-      data:  buildResult.launchTx.data,
-      value: BigInt(buildResult.launchTx.value || "0"),
-    });
-
-    logger.info({ txHash, name: params.name, ticker: params.ticker, creator: params.walletAddress },
-      "OUTRIVE signed and broadcast launch tx");
-
-    return { txHash, preview: buildResult.preview };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ err, name: params.name, ticker: params.ticker }, "signAndBroadcastLaunchTx failed");
-    return { error: `Transaction broadcast failed: ${msg}` };
-  }
-}
-
-// ─── Build launch transaction (unsigned) ────────────────────────────────────
-// tokenSupplyParams_ encodes the Virtuals Protocol v2 TokenSupplyParams struct:
-//   { maxTokensPerWallet, maxTokensPerTxn, botProtectionDurationInSeconds,
-//     vault, lpOwner, creator, projectId }
-// botProtectionDurationInSeconds = anti-sniper window (0 = disabled).
-// Default: 60 seconds (1 minute) — decays buy tax 99%→1% over the window.
+// ─── Build preLaunch transaction (unsigned — user signs) ────────────────────
+// Targets BondingV5.preLaunch() on the Virtuals bonding router.
+// msg.sender = user wallet → user is the on-chain creator of record.
+// BondingV5 internally calls AgentFactory (BondingV5 holds BONDING_ROLE) —
+// no role is required from OUTRIVE or the user.
 //
-// NOTE: dev buy is intentionally NOT included. createNewAgentTokenAndApplication
-// does not accept a buy amount; buying requires a separate bonding-curve call
-// AFTER the token address is known (only available post-confirmation).
+// The contract appends " by Virtuals" to the name automatically.
+// purchaseAmount_ = 0 → free Instant Launch (no fee, no dev buy).
+// startTime_ = 0      → immediate (uses block.timestamp internally).
+// launchMode_ = 0     → LAUNCH_MODE_NORMAL.
+// antiSniperTaxType_: 0 = ANTI_SNIPER_NONE, 1 = ANTI_SNIPER_60S (default).
 export async function buildLaunchTx(params: {
   name: string;
   ticker: string;
   description?: string;
   imageRef?: string;
-  antiSniperDuration?: number;  // seconds; default 60; 0 = disabled
+  antiSniperDuration?: number;  // seconds; default 60 → type 1; 0 → type 0 (off)
   walletAddress: `0x${string}`;
 }): Promise<LaunchTxResult | { error: string }> {
-  const config = getVirtualsConfig();
-
-  if (!_calibrated || !config.factoryAddress) {
-    return { error: config.calibrationMessage ?? "Factory not calibrated." };
+  if (!_calibrated) {
+    const config = getVirtualsConfig();
+    return { error: config.calibrationMessage ?? "Virtuals not calibrated." };
   }
 
   const tickerCheck = validateTicker(params.ticker);
@@ -338,70 +350,42 @@ export async function buildLaunchTx(params: {
 
   const chain = getActiveChain();
 
-  // ── Anti-sniper: default 60 seconds ────────────────────────────────────
-  const antiSniperSecs = BigInt(
-    typeof params.antiSniperDuration === "number" ? params.antiSniperDuration : 60
-  );
+  // ANTI_SNIPER_NONE = 0, ANTI_SNIPER_60S = 1 (60 seconds, default for Instant Launch)
+  const antiSniperOn = params.antiSniperDuration === undefined
+    ? true
+    : params.antiSniperDuration > 0;
+  const antiSniperTaxType = antiSniperOn ? 1 : 0;
 
-  // ── Encode TokenSupplyParams struct ────────────────────────────────────
-  // ABI-encoded exactly as Solidity abi.encode(TokenSupplyParams({...}))
-  // Fields: maxTokensPerWallet, maxTokensPerTxn, botProtectionDurationInSeconds,
-  //         vault, lpOwner, creator, projectId
-  const tokenSupplyParams = encodeAbiParameters(
-    [
-      { type: "uint256" }, // maxTokensPerWallet — 0 = no limit
-      { type: "uint256" }, // maxTokensPerTxn    — 0 = no limit
-      { type: "uint256" }, // botProtectionDurationInSeconds
-      { type: "address" }, // vault   — zero = factory default
-      { type: "address" }, // lpOwner — zero = factory default
-      { type: "address" }, // creator
-      { type: "bytes32" }, // projectId — zero = none
-    ],
-    [
-      0n,
-      0n,
-      antiSniperSecs,
-      ZERO_ADDR,
-      ZERO_ADDR,
-      params.walletAddress,
-      ZERO_B32,
-    ],
-  );
-
-  // ── Random TBA salt (prevents same-block replay) ────────────────────────
-  const tbaSalt = `0x${Array.from({ length: 32 }, () =>
-    Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("")}` as `0x${string}`;
-
-  // ── Encode factory call ─────────────────────────────────────────────────
-  const launchData = encodeFunctionData({
-    abi: VIRTUALS_FACTORY_ABI,
-    functionName: "createNewAgentTokenAndApplication",
+  const preLaunchData = encodeFunctionData({
+    abi: BONDING_V5_ABI,
+    functionName: "preLaunch",
     args: [
-      params.name,
-      params.ticker,
-      tokenSupplyParams,                                                    // encoded struct
-      [0] as unknown as readonly number[],                                  // cores: [BASE]
-      tbaSalt,
-      ZERO_ADDR,                                                            // tbaImplementation: factory default
-      0,                                                                    // daoVotingPeriod: factory default
-      BigInt(0),                                                            // daoThreshold: factory default
-      BigInt(0),                                                            // applicationThreshold_: factory default
-      params.walletAddress,                                                 // creator
+      params.name,                                           // name_ (appended " by Virtuals" on-chain)
+      params.ticker,                                         // ticker_
+      [0] as unknown as readonly number[],                   // cores_: [0] = BASE cognitive core
+      params.description ?? "",                              // desc_
+      params.imageRef ?? "",                                 // img_
+      ["", "", "", ""] as [string, string, string, string],  // urls_: social links (empty = none)
+      0n,                                                    // purchaseAmount_: 0 → no dev buy
+      0n,                                                    // startTime_: 0 → immediate
+      0,                                                     // launchMode_: 0 = LAUNCH_MODE_NORMAL
+      0,                                                     // airdropBips_: 0
+      false,                                                 // needAcf_: false
+      antiSniperTaxType,                                     // antiSniperTaxType_: 0=none, 1=60s
+      false,                                                 // isProject60days_: false
+      "0x" as `0x${string}`,                                 // extParams_: empty
     ],
   });
 
   const launchTx = {
-    to:    config.factoryAddress,
-    data:  launchData,
+    to:    BONDING_V5_ADDRESS,
+    data:  preLaunchData,
     value: "0x0" as `0x${string}`,
   };
 
-  // ── Build human-readable preview ─────────────────────────────────────────
-  const antiSniperLabel = antiSniperSecs === 0n
-    ? "DISABLED"
-    : antiSniperSecs === 60n
+  const antiSniperLabel = antiSniperOn
     ? "60s (1 MIN) — buy tax 99%→1%"
-    : `${antiSniperSecs}s (${Math.round(Number(antiSniperSecs) / 60)} MIN) — buy tax 99%→1%`;
+    : "DISABLED";
 
   return {
     needsApproval: false,
@@ -409,12 +393,55 @@ export async function buildLaunchTx(params: {
     preview: {
       name:           params.name,
       ticker:         params.ticker,
-      description:    params.description || "",
+      description:    params.description ?? "",
       network:        `${chain.name} (${chain.id})`,
-      targetContract: config.factoryAddress,
-      baseCost:       "GAS ONLY (ETH) — no base fee",
-      mode:           "INSTANT LAUNCH",
+      targetContract: BONDING_V5_ADDRESS,
+      baseCost:       "GAS ONLY (ETH) — no base fee, no $VIRTUAL needed",
+      mode:           "INSTANT LAUNCH — STEP 1/2: CREATE TOKEN",
       antiSniper:     antiSniperLabel,
     },
   };
+}
+
+// ─── Build activate transaction (launch()) ───────────────────────────────────
+// After preLaunch confirms, call launch(tokenAddress) to start trading.
+// For LAUNCH_MODE_NORMAL tokens, any address can call this (no role required).
+export function buildActivateLaunchTx(tokenAddress: `0x${string}`) {
+  const data = encodeFunctionData({
+    abi: BONDING_V5_ABI,
+    functionName: "launch",
+    args: [tokenAddress],
+  });
+  return {
+    to:    BONDING_V5_ADDRESS,
+    data,
+    value: "0x0" as `0x${string}`,
+  };
+}
+
+// ─── Server-side activate (launch()) ────────────────────────────────────────
+// OUTRIVE server calls launch(tokenAddress) after the user's preLaunch confirms.
+// Requires OUTRIVE_SIGNER_PRIVATE_KEY with some ETH on Robinhood Chain for gas.
+// If not configured, falls back to returning unsigned tx for user to sign.
+export async function signAndBroadcastActivateTx(
+  tokenAddress: `0x${string}`
+): Promise<{ txHash: `0x${string}` } | { error: string }> {
+  const signerAccount = getSignerAccount();
+  if (!signerAccount) {
+    return { error: "OUTRIVE_SIGNER_PRIVATE_KEY not configured — user must sign activate tx." };
+  }
+
+  const tx = buildActivateLaunchTx(tokenAddress);
+  try {
+    const chain  = getActiveChain();
+    const rpcUrl = process.env.RPC_URL_OVERRIDE ?? chain.rpcUrls.default.http[0];
+    const wallet = createWalletClient({ account: signerAccount, chain, transport: http(rpcUrl) });
+    const txHash = await wallet.sendTransaction({ to: tx.to, data: tx.data, value: 0n });
+    logger.info({ txHash, tokenAddress }, "OUTRIVE activated launch — launch() call succeeded");
+    return { txHash };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, tokenAddress }, "signAndBroadcastActivateTx failed");
+    return { error: `Activate broadcast failed: ${msg}` };
+  }
 }
