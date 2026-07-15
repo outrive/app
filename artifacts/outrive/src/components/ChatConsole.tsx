@@ -390,19 +390,19 @@ export function ChatConsole() {
     if (isConfirmed && hash && signStep === 'pending') {
       setSignStep('confirmed');
       // Surface post-launch panel — extract CA from receipt immediately (no indexer needed)
-      if (txPayload) {
-        const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-        const ZERO_PADDED  = '0x0000000000000000000000000000000000000000000000000000000000000000';
-        let ca: `0x${string}` | undefined;
-        for (const log of receipt?.logs ?? []) {
-          if (
-            log.topics?.[0]?.toLowerCase() === TRANSFER_SIG &&
-            log.topics?.[1]?.toLowerCase() === ZERO_PADDED
-          ) {
-            ca = log.address as `0x${string}`;
-            break;
-          }
+      const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      const ZERO_PADDED  = '0x0000000000000000000000000000000000000000000000000000000000000000';
+      let ca: `0x${string}` | undefined;
+      for (const log of receipt?.logs ?? []) {
+        if (
+          log.topics?.[0]?.toLowerCase() === TRANSFER_SIG &&
+          log.topics?.[1]?.toLowerCase() === ZERO_PADDED
+        ) {
+          ca = log.address as `0x${string}`;
+          break;
         }
+      }
+      if (txPayload) {
         setLaunchSuccess({
           name: txPayload.preview.name,
           ticker: txPayload.preview.ticker,
@@ -420,6 +420,7 @@ export function ChatConsole() {
             ticker: txPayload.preview.ticker,
             txHash: hash,
             network: 'mainnet',
+            tokenAddress: ca ?? null,
           },
         });
       }
