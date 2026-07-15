@@ -248,7 +248,7 @@ export function Topbar() {
                 <button
                   onClick={() => { setWalletMenuOpen(false); login(); }}
                   className="px-4 py-2.5 text-left hover:bg-[var(--out-ink)] hover:text-[var(--out-bg)] transition-colors"
-                  style={{ color: 'var(--out-text)', borderBottom: '1px solid var(--out-ink-dim)' }}
+                  style={{ color: 'var(--out-ink)', borderBottom: '1px solid var(--out-ink-dim)' }}
                 >
                   ⇄ Switch Wallet
                 </button>
