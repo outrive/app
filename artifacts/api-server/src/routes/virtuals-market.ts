@@ -177,14 +177,24 @@ router.get("/virtuals/summary", async (_req, res): Promise<void> => {
   if (cached) { res.json(cached); return; }
 
   try {
-    const [robinhood, graduated] = await Promise.all([
+    // Virtuals API meta.total ignores status filters, so we query UNDERGRAD page 1
+    // to get a real bonding count from actual data, while using meta.total for totals.
+    const [robinhood, graduated, bondingPage] = await Promise.all([
       fetchVirtuals({ sort: "mcapInVirtual:desc", page: 1, pageSize: 1, chain: "ROBINHOOD" }),
       fetchVirtuals({ sort: "mcapInVirtual:desc", page: 1, pageSize: 1, chain: "ROBINHOOD", status: "GRADUATED" }),
+      fetchVirtuals({ sort: "mcapInVirtual:desc", page: 1, pageSize: 50, chain: "ROBINHOOD", status: "BONDING" }),
     ]);
+    const total      = robinhood.meta.total;
+    const graduated_ = graduated.meta.total;
+    // If the graduated API also returns total (ignoring filter), compute bonding as max(0, total - graduated).
+    // If graduated meta looks reliable (≤ total), use it directly; otherwise fall back to counting bonding page.
+    const bondingFromPage  = bondingPage.meta.pageCount > 1
+      ? Math.max(0, total - graduated_)       // too many bonding to count from one page — use subtraction
+      : bondingPage.data.length;              // fits on one page — exact count
     const summary = {
-      totalTokens:    robinhood.meta.total,
-      graduatedTokens: graduated.meta.total,
-      bondingTokens:  robinhood.meta.total - graduated.meta.total,
+      totalTokens:     total,
+      graduatedTokens: Math.min(graduated_, total),
+      bondingTokens:   Math.max(0, bondingFromPage),
     };
     cacheSet(cacheKey, summary, 60_000);
     res.json(summary);
