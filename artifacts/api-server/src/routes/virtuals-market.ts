@@ -166,7 +166,7 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
     const p = new URLSearchParams();
     p.set("pagination[page]", "1");
     p.set("pagination[pageSize]", "100");
-    p.set("sort[0]", "mcapInVirtual:desc");
+    p.set("sort[0]", "createdAt:desc");
     p.set("filters[chain][$eq]", "ROBINHOOD");
     wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
 
