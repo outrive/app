@@ -299,6 +299,22 @@ export function ChatConsole() {
     setCliLines(makeBanner(address));
   }, [address]);
 
+  /* ── Reset chat history + command history on wallet switch ── */
+  const prevAddressRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevAddressRef.current !== undefined && prevAddressRef.current !== address) {
+      // Wallet switched — clear messages and command history so the new
+      // wallet starts with a clean session. Credits are already re-fetched
+      // by the refreshCredits effect above.
+      setMessages([]);
+      setCmdHistory([]);
+      setInput('');
+      setTxPayload(null);
+      setIsStreaming(false);
+    }
+    prevAddressRef.current = address;
+  }, [address]);
+
   /* ── Credit fetch — refresh on wallet connect/disconnect ── */
   const refreshCredits = useCallback(() => {
     if (!address) { setCredits(null); return; }
