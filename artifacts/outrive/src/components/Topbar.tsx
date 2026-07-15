@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useAccount, useReadContract } from 'wagmi';
 import { parseAbi, formatEther } from 'viem';
@@ -48,6 +48,20 @@ function useAddRobinhoodChain() {
 
 export function Topbar() {
   const { login, logout, authenticated, ready } = usePrivy();
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const walletMenuRef = useRef<HTMLDivElement>(null);
+
+  /* Close dropdown on outside click */
+  useEffect(() => {
+    if (!walletMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (walletMenuRef.current && !walletMenuRef.current.contains(e.target as Node)) {
+        setWalletMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [walletMenuOpen]);
   const { address, chain } = useAccount();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: status } = useGetSystemStatus({ query: { refetchInterval: 30_000 } as any });
@@ -203,23 +217,51 @@ export function Topbar() {
             </button>
           </div>
         ) : (
-          /* CONNECTED & CORRECT CHAIN */
-          <button
-            onClick={() => logout()}
-            className="px-3 py-1 font-bold uppercase tracking-widest transition-opacity hover:opacity-90 shrink-0"
-            style={{
-              fontSize: 'inherit',
-              background: 'var(--out-ink)',
-              color: 'var(--out-bg)',
-              fontFamily: "'Space Grotesk', sans-serif",
-            }}
-            title="Click to disconnect"
-          >
-            <span className="sm:hidden">
-              {displayName.length > 10 ? displayName.slice(0, 8) + '…' : displayName}
-            </span>
-            <span className="hidden sm:inline">{displayName}</span>
-          </button>
+          /* CONNECTED & CORRECT CHAIN — wallet menu */
+          <div ref={walletMenuRef} className="relative shrink-0">
+            <button
+              onClick={() => setWalletMenuOpen(o => !o)}
+              className="px-3 py-1 font-bold uppercase tracking-widest transition-opacity hover:opacity-90 shrink-0 flex items-center gap-1.5"
+              style={{
+                fontSize: 'inherit',
+                background: 'var(--out-ink)',
+                color: 'var(--out-bg)',
+                fontFamily: "'Space Grotesk', sans-serif",
+              }}
+            >
+              <span className="sm:hidden">
+                {displayName.length > 10 ? displayName.slice(0, 8) + '…' : displayName}
+              </span>
+              <span className="hidden sm:inline">{displayName}</span>
+              <span style={{ fontSize: 10 }}>{walletMenuOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {walletMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 flex flex-col font-mono uppercase tracking-widest z-[100] min-w-[160px]"
+                style={{
+                  border: '1px solid var(--out-ink)',
+                  background: 'var(--out-bg)',
+                  fontSize: 11,
+                }}
+              >
+                <button
+                  onClick={() => { setWalletMenuOpen(false); login(); }}
+                  className="px-4 py-2.5 text-left hover:bg-[var(--out-ink)] hover:text-[var(--out-bg)] transition-colors"
+                  style={{ color: 'var(--out-text)', borderBottom: '1px solid var(--out-ink-dim)' }}
+                >
+                  ⇄ Switch Wallet
+                </button>
+                <button
+                  onClick={() => { setWalletMenuOpen(false); logout(); }}
+                  className="px-4 py-2.5 text-left hover:bg-[var(--out-ink)] hover:text-[var(--out-bg)] transition-colors"
+                  style={{ color: 'var(--out-warn)' }}
+                >
+                  ✕ Disconnect
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </header>
