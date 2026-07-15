@@ -4,22 +4,50 @@
     "name": "launch",
     "stateMutability": "nonpayable",
     "inputs": [
-      { "name": "name", "type": "string" },
-      { "name": "ticker", "type": "string" },
-      { "name": "metadataURI", "type": "string" }
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "ticker",
+        "type": "string"
+      },
+      {
+        "name": "metadataURI",
+        "type": "string"
+      }
     ],
-    "outputs": [{ "name": "token", "type": "address" }],
-    "_comment": "STUB — replace with the real ABI from Blockscout before use"
+    "outputs": [
+      {
+        "name": "token",
+        "type": "address"
+      }
+    ]
   },
   {
     "type": "event",
     "name": "Launched",
     "inputs": [
-      { "name": "token", "type": "address", "indexed": true },
-      { "name": "creator", "type": "address", "indexed": true },
-      { "name": "name", "type": "string", "indexed": false },
-      { "name": "ticker", "type": "string", "indexed": false }
-    ],
-    "_comment": "STUB — replace with the real ABI from Blockscout before use"
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "creator",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "indexed": false
+      },
+      {
+        "name": "ticker",
+        "type": "string",
+        "indexed": false
+      }
+    ]
   }
 ]

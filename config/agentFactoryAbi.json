@@ -1,6 +1,4 @@
-
 [
-  // STUB — replace with the real ABI decoded from Blockscout before mainnet use
   {
     "type": "function",
     "name": "createToken",

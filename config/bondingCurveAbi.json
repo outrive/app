@@ -4,12 +4,20 @@
     "name": "getState",
     "stateMutability": "view",
     "inputs": [
-      { "name": "token", "type": "address" }
+      {
+        "name": "token",
+        "type": "address"
+      }
     ],
     "outputs": [
-      { "name": "price", "type": "uint256" },
-      { "name": "raised", "type": "uint256" }
-    ],
-    "_comment": "STUB — replace with the real bonding curve ABI from Blockscout before use"
+      {
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "name": "raised",
+        "type": "uint256"
+      }
+    ]
   }
 ]
