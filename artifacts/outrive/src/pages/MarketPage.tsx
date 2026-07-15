@@ -119,15 +119,12 @@ function useVirtualsSummary() {
     staleTime: 30_000,
   });
 }
-function useOutriveCreators() {
-  return useQuery<Set<string>>({
-    queryKey: ['outrive-creators'],
-    queryFn: () =>
-      fetch(apiUrl('/api/launches/creators'))
-        .then(r => r.json())
-        .then((d: { creators: string[] }) => new Set(d.creators.map(a => a.toLowerCase()))),
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+function useOutriveTokens() {
+  return useQuery<{ tokens: VToken[]; meta: { total: number } }>({
+    queryKey: ['outrive-tokens'],
+    queryFn: () => fetch(apiUrl('/api/outrive/tokens')).then(r => r.json()),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 }
 
@@ -219,7 +216,7 @@ export function MarketPage() {
   const vp = useVirtualPrice();
   const { data, isLoading, isFetching, refetch } = useVirtualsTokens({ sort, chain, status, search: debSearch, page });
   const { data: summary } = useVirtualsSummary();
-  const { data: outriveCreators } = useOutriveCreators();
+  const { data: outriveData, isLoading: outriveLoading } = useOutriveTokens();
 
   useEffect(() => {
     let c = REFRESH_MS / 1000;
@@ -235,20 +232,14 @@ export function MarketPage() {
     refetch(); setLastSync(new Date()); setCountdown(REFRESH_MS / 1000);
   }, [refetch]);
 
-  const allTokens = data?.tokens ?? [];
-  const connectedAddr = address?.toLowerCase();
-  const tokens = outriveOnly
-    ? allTokens.filter(t => {
-        const creator = t.creator?.toLowerCase();
-        // MINE badge logic: creator matches connected wallet
-        const isMine = !!connectedAddr && creator === connectedAddr;
-        // DB logic: creator is any known OUTRIVE launcher
-        const isOutriveLauncher = !!outriveCreators?.has(creator ?? '');
-        return isMine || isOutriveLauncher;
-      })
-    : allTokens;
-  const meta   = data?.meta;
-  const apiErr = data?.error;
+  // When OUTRIVE filter active: use dedicated public list (all wallets in DB, no page limit)
+  // When normal: use paginated Virtuals API
+  const outriveTokenSet = new Set((outriveData?.tokens ?? []).map(t => t.address.toLowerCase()));
+  const tokens = outriveOnly ? (outriveData?.tokens ?? []) : (data?.tokens ?? []);
+  const meta   = outriveOnly
+    ? { total: outriveData?.meta.total ?? 0, page: 1, pageCount: 1, pageSize: 100 }
+    : data?.meta;
+  const apiErr = outriveOnly ? undefined : data?.error;
 
   const syncStr = lastSync.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' }) + ' UTC';
 
@@ -387,7 +378,7 @@ export function MarketPage() {
                   const rank      = (page - 1) * 50 + i + 1;
                   const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                   const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                  const isOutrive = !!outriveCreators?.has(t.creator?.toLowerCase());
+                  const isOutrive = outriveTokenSet.has(t.address?.toLowerCase());
                   const posChg    = t.priceChange24h >= 0;
                   return (
                     <div key={t.id}
@@ -453,7 +444,7 @@ export function MarketPage() {
                       const rank      = (page - 1) * 50 + i + 1;
                       const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                       const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                      const isOutrive = !!outriveCreators?.has(t.creator?.toLowerCase());
+                      const isOutrive = outriveTokenSet.has(t.address?.toLowerCase());
                       const posChg    = t.priceChange24h >= 0;
                       return (
                         <tr key={t.id}

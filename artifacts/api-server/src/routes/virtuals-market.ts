@@ -5,6 +5,8 @@
 import { Router, type IRouter } from "express";
 import { cacheGet, cacheSet } from "../lib/cache.js";
 import { logger } from "../lib/logger.js";
+import { db } from "@workspace/db";
+import { launchesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 const VIRTUALS_BASE = "https://api.virtuals.io/api";
@@ -142,6 +144,57 @@ async function fetchVirtuals(opts: {
     meta: json.meta?.pagination ?? { total: 0, page: 1, pageCount: 1, pageSize: opts.pageSize },
   };
 }
+
+// GET /api/outrive/tokens — all tokens launched via OUTRIVE agent (public, no auth needed)
+// Fetches creator wallets from DB then queries Virtuals API filtered by those wallets.
+router.get("/outrive/tokens", async (_req, res): Promise<void> => {
+  const cacheKey = "outrive:tokens:v1";
+  const cached = cacheGet<unknown>(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    // 1. Get all unique creator wallets from launchesTable
+    const rows = await db.select({ walletAddress: launchesTable.walletAddress }).from(launchesTable);
+    const wallets = [...new Set(rows.map(r => r.walletAddress.toLowerCase()))];
+
+    if (wallets.length === 0) {
+      res.json({ tokens: [], meta: { total: 0 } });
+      return;
+    }
+
+    // 2. Fetch from Virtuals API filtering by walletAddress[$in]
+    const p = new URLSearchParams();
+    p.set("pagination[page]", "1");
+    p.set("pagination[pageSize]", "100");
+    p.set("sort[0]", "mcapInVirtual:desc");
+    p.set("filters[chain][$eq]", "ROBINHOOD");
+    wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
+
+    const url = `${VIRTUALS_BASE}/virtuals?${p.toString()}`;
+    logger.debug({ url, wallets }, "Fetching OUTRIVE tokens from Virtuals API");
+
+    const apiRes = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!apiRes.ok) throw new Error(`Virtuals API ${apiRes.status}`);
+
+    const json = await apiRes.json() as {
+      data: VItem[];
+      meta: { pagination: { total: number } };
+    };
+
+    const tokens = (json.data ?? []).map(normalise);
+    const result = { tokens, meta: { total: json.meta?.pagination?.total ?? tokens.length } };
+
+    cacheSet(cacheKey, result, 60_000);
+    res.json(result);
+  } catch (err) {
+    logger.warn({ err }, "OUTRIVE tokens fetch failed");
+    res.status(502).json({ tokens: [], meta: { total: 0 }, error: String(err) });
+  }
+});
 
 // GET /api/virtuals/tokens
 router.get("/virtuals/tokens", async (req, res): Promise<void> => {
