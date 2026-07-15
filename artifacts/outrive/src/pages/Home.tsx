@@ -1409,6 +1409,21 @@ export default function Home() {
                 <span style={{ color: 'var(--out-ink)' }}>your wallet signs it</span>,
                 and you are the creator of record on Virtuals Protocol.
               </p>
+
+              {/* $OTR Contract Address */}
+              <div className="mt-4 inline-flex flex-wrap items-center gap-2 border px-3 py-2"
+                style={{ borderColor: 'var(--out-grid-major)', fontFamily: 'JetBrains Mono, monospace' }}>
+                <span className="text-[11px]" style={{ color: 'var(--out-muted)' }}>$OTR CA</span>
+                <span className="text-[11px] sm:text-[12px]" style={{ color: 'var(--out-ink)' }}>
+                  0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef
+                </span>
+                <button
+                  onClick={() => navigator.clipboard.writeText('0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef')}
+                  className="shrink-0 text-[10px] border px-1.5 py-0.5 transition-colors hover:border-[var(--out-ink)] hover:text-[var(--out-ink)]"
+                  style={{ borderColor: 'var(--out-muted)', color: 'var(--out-muted)' }}
+                  title="Copy contract address"
+                >⎘ COPY</button>
+              </div>
             </div>
           </Sheet>
 
