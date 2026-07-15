@@ -2,9 +2,9 @@ import { type Abi, encodeFunctionData, parseEther } from "viem";
 import { getPublicClient, getActiveChain } from "./chains.js";
 import { logger } from "./logger.js";
 
-// Load stub ABI from config/noxaFactoryAbi.json
+// Load stub ABI from config/agentFactoryAbi.json
 // In production, replace with the real ABI decoded from Blockscout
-const NOXA_FACTORY_ABI: Abi = [
+const AGENT_FACTORY_ABI: Abi = [
   {
     type: "function",
     name: "createToken",
@@ -34,7 +34,7 @@ const BLOCKED_SYMBOLS = new Set([
   "DOGE", "MATIC", "DOT", "SHIB", "AVAX", "LINK", "UNI", "WETH",
 ]);
 
-export interface NoxaConfig {
+export interface AgentFactoryConfig {
   factoryAddress: `0x${string}` | null;
   createFeeWei: bigint;
   calibrated: boolean;
@@ -62,9 +62,9 @@ let _calibrationChecked = false;
 let _calibrated = false;
 let _calibrationMessage: string | null = null;
 
-export function getNoxaConfig(): NoxaConfig {
-  const factoryAddress = process.env.NOXA_FACTORY_ADDRESS as `0x${string}` | undefined;
-  const createFeeWei = BigInt(process.env.NOXA_CREATE_FEE_WEI ?? "0");
+export function getAgentFactoryConfig(): AgentFactoryConfig {
+  const factoryAddress = process.env.AGENT_FACTORY_ADDRESS as `0x${string}` | undefined;
+  const createFeeWei = BigInt(process.env.AGENT_CREATE_FEE_WEI ?? "0");
 
   return {
     factoryAddress: factoryAddress || null,
@@ -82,11 +82,11 @@ export async function runCalibrationCheck(): Promise<void> {
   if (_calibrationChecked) return;
   _calibrationChecked = true;
 
-  const factoryAddress = process.env.NOXA_FACTORY_ADDRESS;
+  const factoryAddress = process.env.AGENT_FACTORY_ADDRESS;
   if (!factoryAddress) {
     _calibrated = false;
-    _calibrationMessage = "NOXA_FACTORY_ADDRESS is not set. Deploy tool is disabled.";
-    logger.warn("Calibration failed: NOXA_FACTORY_ADDRESS not configured");
+    _calibrationMessage = "AGENT_FACTORY_ADDRESS is not set. Deploy tool is disabled.";
+    logger.warn("Calibration failed: AGENT_FACTORY_ADDRESS not configured");
     return;
   }
 
@@ -95,17 +95,17 @@ export async function runCalibrationCheck(): Promise<void> {
     // Simulate createToken with dummy args to verify factory is reachable
     await client.simulateContract({
       address: factoryAddress as `0x${string}`,
-      abi: NOXA_FACTORY_ABI,
+      abi: AGENT_FACTORY_ABI,
       functionName: "createToken",
       args: ["TestToken", "TST", "ipfs://test"],
-      value: BigInt(process.env.NOXA_CREATE_FEE_WEI ?? "0"),
+      value: BigInt(process.env.AGENT_CREATE_FEE_WEI ?? "0"),
       // Use zero address as from — a revert here is expected (no real balance),
       // but if it reverts with "execution reverted" that's actually OK — the factory exists
       account: "0x0000000000000000000000000000000000000000",
     });
     _calibrated = true;
     _calibrationMessage = null;
-    logger.info("Noxa factory calibration OK");
+    logger.info("agent factory calibration OK");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     // If simulation reverts, it means the contract exists but rejected zero-address call
@@ -113,7 +113,7 @@ export async function runCalibrationCheck(): Promise<void> {
     if (msg.includes("execution reverted") || msg.includes("ContractFunctionRevertedError")) {
       _calibrated = true;
       _calibrationMessage = null;
-      logger.info("Noxa factory calibration OK (simulation reverted as expected)");
+      logger.info("agent factory calibration OK (simulation reverted as expected)");
     } else {
       _calibrated = false;
       _calibrationMessage = `RPC error: ${msg.slice(0, 120)}`;
@@ -141,7 +141,7 @@ export function buildDeployCalldata(params: {
   metadataUri: string;
   walletAddress: `0x${string}`;
 }): { unsignedTx: UnsignedTx; preview: DeployPreview } | { error: string } {
-  const config = getNoxaConfig();
+  const config = getAgentFactoryConfig();
 
   if (!config.calibrated || !config.factoryAddress) {
     return { error: config.calibrationMessage ?? "Factory not calibrated." };
@@ -157,7 +157,7 @@ export function buildDeployCalldata(params: {
   }
 
   const data = encodeFunctionData({
-    abi: NOXA_FACTORY_ABI,
+    abi: AGENT_FACTORY_ABI,
     functionName: "createToken",
     args: [params.name, params.symbol, params.metadataUri],
   });
