@@ -635,7 +635,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
         </div>
 
         {/* Explorer link */}
-        <div className="mt-4 flex flex-wrap gap-4 font-mono text-[12px]">
+        <div className="mt-4 flex flex-col gap-2 font-mono text-[12px]">
           <a href={explorerUrl} target="_blank" rel="noreferrer"
             className="underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)] transition-colors"
             style={{ color: 'var(--out-muted)' }}>
