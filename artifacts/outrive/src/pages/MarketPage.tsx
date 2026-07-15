@@ -236,8 +236,16 @@ export function MarketPage() {
   }, [refetch]);
 
   const allTokens = data?.tokens ?? [];
-  const tokens = outriveOnly && outriveCreators
-    ? allTokens.filter(t => outriveCreators.has(t.creator?.toLowerCase()))
+  const connectedAddr = address?.toLowerCase();
+  const tokens = outriveOnly
+    ? allTokens.filter(t => {
+        const creator = t.creator?.toLowerCase();
+        // MINE badge logic: creator matches connected wallet
+        const isMine = !!connectedAddr && creator === connectedAddr;
+        // DB logic: creator is any known OUTRIVE launcher
+        const isOutriveLauncher = !!outriveCreators?.has(creator ?? '');
+        return isMine || isOutriveLauncher;
+      })
     : allTokens;
   const meta   = data?.meta;
   const apiErr = data?.error;
