@@ -245,12 +245,22 @@ export function Topbar() {
                   fontSize: 11,
                 }}
               >
+                {/* Wallet address display */}
+                <div
+                  className="px-4 py-2.5 font-mono"
+                  style={{ color: 'var(--out-muted)', borderBottom: '1px solid var(--out-ink-dim)', fontSize: 10, wordBreak: 'break-all' }}
+                >
+                  {address}
+                </div>
                 <button
-                  onClick={() => { setWalletMenuOpen(false); login(); }}
+                  onClick={() => {
+                    if (address) navigator.clipboard.writeText(address);
+                    setWalletMenuOpen(false);
+                  }}
                   className="px-4 py-2.5 text-left hover:bg-[var(--out-ink)] hover:text-[var(--out-bg)] transition-colors"
                   style={{ color: 'var(--out-ink)', borderBottom: '1px solid var(--out-ink-dim)' }}
                 >
-                  ⇄ Switch Wallet
+                  ⎘ Copy Address
                 </button>
                 <button
                   onClick={() => { setWalletMenuOpen(false); logout(); }}
