@@ -746,9 +746,9 @@ export function TokenDetailPage({ token, onBack }: { token: VToken; onBack: () =
                 <span>YOU PAY ({spendLabel})</span>
                 <span>BAL: {spendBal}</span>
               </div>
-              <div className="flex items-center border" style={{ borderColor: 'var(--out-ink-dim)', background: '#050905' }}>
+              <div className="flex items-center border overflow-hidden" style={{ borderColor: 'var(--out-ink-dim)', background: '#050905' }}>
                 <input type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)}
-                  placeholder="0.00" className="flex-1 bg-transparent px-3 py-3 text-[16px] outline-none"
+                  placeholder="0.00" className="flex-1 min-w-0 bg-transparent px-3 py-3 text-[16px] outline-none"
                   style={{ color: 'var(--out-text)', fontFamily: 'JetBrains Mono, monospace' }}
                   disabled={!address || txStep === 'pending' || txStep === 'done'} />
                 <span className="px-2 text-[11px] shrink-0" style={{ color: 'var(--out-muted)' }}>{spendLabel}</span>
