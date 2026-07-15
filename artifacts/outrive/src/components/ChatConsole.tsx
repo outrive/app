@@ -276,6 +276,8 @@ export function ChatConsole() {
   const inputRef       = useRef<HTMLInputElement>(null);
   const hasRecordedRef = useRef(false);
   const assistantIdRef = useRef('');
+  // Prevents txPayload rebuild (image upload) from resetting imagePreviewUrl
+  const isRebuildRef   = useRef(false);
 
   const { sendTransaction, reset: resetSend, data: hash, isPending: isSigning, isError: isSendError, error: sendTxError } = useSendTransaction();
   const { isSuccess: isConfirmed, isError: isTxFailed, data: receipt } = useWaitForTransactionReceipt({ hash });
@@ -356,7 +358,8 @@ export function ChatConsole() {
       if (!rbRes.ok) throw new Error('Calldata rebuild failed');
       const rebuilt = await rbRes.json() as { launchTx: { to: `0x${string}`; data: `0x${string}`; value: string }; preview: typeof txPayload.preview };
 
-      // 4. Update txPayload with new calldata + imageRef
+      // 4. Update txPayload with new calldata + imageRef (mark as rebuild so reset effect is skipped)
+      isRebuildRef.current = true;
       setTxPayload(prev => prev ? {
         ...prev,
         launchTx: rebuilt.launchTx,
@@ -372,6 +375,8 @@ export function ChatConsole() {
   }, [txPayload, address]);
 
   useEffect(() => {
+    // Skip full reset when txPayload changed only due to image calldata rebuild
+    if (isRebuildRef.current) { isRebuildRef.current = false; return; }
     hasRecordedRef.current = false;
     hasSentRef.current     = false;
     setSignStep('idle');
