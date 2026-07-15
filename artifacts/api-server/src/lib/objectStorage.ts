@@ -262,8 +262,7 @@ async function signObjectURL({
   );
   if (!response.ok) {
     throw new Error(
-      `Failed to sign object URL, errorcode: ${response.status}, ` +
-        `make sure you're running on Replit`,
+      `Failed to sign object URL — storage service returned status ${response.status}.`,
     );
   }
 
