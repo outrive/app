@@ -119,13 +119,13 @@ function useVirtualsSummary() {
     staleTime: 30_000,
   });
 }
-function useOutriveAddresses() {
+function useOutriveCreators() {
   return useQuery<Set<string>>({
-    queryKey: ['outrive-addresses'],
+    queryKey: ['outrive-creators'],
     queryFn: () =>
-      fetch(apiUrl('/api/launches/addresses'))
+      fetch(apiUrl('/api/launches/creators'))
         .then(r => r.json())
-        .then((d: { addresses: string[] }) => new Set(d.addresses.map(a => a.toLowerCase()))),
+        .then((d: { creators: string[] }) => new Set(d.creators.map(a => a.toLowerCase()))),
     refetchInterval: 30_000,
     staleTime: 15_000,
   });
@@ -219,7 +219,7 @@ export function MarketPage() {
   const vp = useVirtualPrice();
   const { data, isLoading, isFetching, refetch } = useVirtualsTokens({ sort, chain, status, search: debSearch, page });
   const { data: summary } = useVirtualsSummary();
-  const { data: outriveAddrs } = useOutriveAddresses();
+  const { data: outriveCreators } = useOutriveCreators();
 
   useEffect(() => {
     let c = REFRESH_MS / 1000;
@@ -236,8 +236,8 @@ export function MarketPage() {
   }, [refetch]);
 
   const allTokens = data?.tokens ?? [];
-  const tokens = outriveOnly && outriveAddrs
-    ? allTokens.filter(t => outriveAddrs.has(t.address?.toLowerCase()))
+  const tokens = outriveOnly && outriveCreators
+    ? allTokens.filter(t => outriveCreators.has(t.creator?.toLowerCase()))
     : allTokens;
   const meta   = data?.meta;
   const apiErr = data?.error;
@@ -379,7 +379,7 @@ export function MarketPage() {
                   const rank      = (page - 1) * 50 + i + 1;
                   const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                   const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                  const isOutrive = !!outriveAddrs?.has(t.address?.toLowerCase());
+                  const isOutrive = !!outriveCreators?.has(t.creator?.toLowerCase());
                   const posChg    = t.priceChange24h >= 0;
                   return (
                     <div key={t.id}
@@ -445,7 +445,7 @@ export function MarketPage() {
                       const rank      = (page - 1) * 50 + i + 1;
                       const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                       const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                      const isOutrive = !!outriveAddrs?.has(t.address?.toLowerCase());
+                      const isOutrive = !!outriveCreators?.has(t.creator?.toLowerCase());
                       const posChg    = t.priceChange24h >= 0;
                       return (
                         <tr key={t.id}

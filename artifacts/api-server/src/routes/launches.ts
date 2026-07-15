@@ -91,23 +91,27 @@ router.get("/launches", async (req, res): Promise<void> => {
   res.json(launches);
 });
 
-/* GET /launches/addresses — all token addresses launched via OUTRIVE.
-   Triggers a background backfill so legacy launches (tokenAddress=null) get filled in. */
+/* GET /launches/addresses — all token addresses launched via OUTRIVE (backfill-augmented). */
 router.get("/launches/addresses", async (_req, res): Promise<void> => {
-  // Fire backfill in background (idempotent, won't run twice in parallel)
   backfillTokenAddresses().catch(() => {});
-
   const rows = await db
     .select({ tokenAddress: launchesTable.tokenAddress })
     .from(launchesTable)
     .where(isNotNull(launchesTable.tokenAddress))
     .orderBy(desc(launchesTable.createdAt));
-
-  const addresses = rows
-    .map(r => r.tokenAddress!.toLowerCase())
-    .filter(Boolean);
-
+  const addresses = rows.map(r => r.tokenAddress!.toLowerCase()).filter(Boolean);
   res.json({ addresses });
+});
+
+/* GET /launches/creators — all unique creator wallets that have ever launched via OUTRIVE.
+   This is the primary filter for the ▲ OUTRIVE tab: match token.creator against these wallets. */
+router.get("/launches/creators", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({ walletAddress: launchesTable.walletAddress })
+    .from(launchesTable)
+    .orderBy(desc(launchesTable.createdAt));
+  const creators = [...new Set(rows.map(r => r.walletAddress.toLowerCase()))];
+  res.json({ creators });
 });
 
 router.post("/launches", async (req, res): Promise<void> => {
