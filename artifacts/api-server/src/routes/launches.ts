@@ -1,11 +1,75 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { launchesTable, usersTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNull, isNotNull } from "drizzle-orm";
 import { ListLaunchesQueryParams, RecordLaunchBody } from "@workspace/api-zod";
+import { getPublicClient } from "../lib/chains.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   BACKFILL — for launches that have a txHash but no tokenAddress yet.
+   Fetches the receipt from chain, extracts the mint Transfer(from=0x0) log,
+   and writes the token address into the DB.
+───────────────────────────────────────────────────────────────────────────── */
+const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const ZERO_PADDED  = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+let backfillRunning = false;
+
+async function backfillTokenAddresses(): Promise<void> {
+  if (backfillRunning) return;
+  backfillRunning = true;
+  try {
+    const missing = await db
+      .select({ id: launchesTable.id, txHash: launchesTable.txHash })
+      .from(launchesTable)
+      .where(isNull(launchesTable.tokenAddress));
+
+    if (missing.length === 0) return;
+    logger.info({ count: missing.length }, "backfill: fetching tokenAddress from receipts");
+
+    const client = getPublicClient();
+
+    for (const row of missing) {
+      if (!row.txHash) continue;
+      try {
+        const receipt = await client.getTransactionReceipt({
+          hash: row.txHash as `0x${string}`,
+        });
+        let tokenAddress: string | null = null;
+        for (const log of receipt.logs) {
+          if (
+            log.topics[0]?.toLowerCase() === TRANSFER_SIG &&
+            log.topics[1]?.toLowerCase() === ZERO_PADDED
+          ) {
+            tokenAddress = log.address.toLowerCase();
+            break;
+          }
+        }
+        if (tokenAddress) {
+          await db
+            .update(launchesTable)
+            .set({ tokenAddress })
+            .where(eq(launchesTable.id, row.id));
+          logger.info({ id: row.id, tokenAddress }, "backfill: tokenAddress updated");
+        }
+      } catch {
+        // Receipt not found or RPC error — skip, will retry next call
+      }
+    }
+  } finally {
+    backfillRunning = false;
+  }
+}
+
+// Run once at startup (fire-and-forget)
+backfillTokenAddresses().catch(() => {});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ROUTES
+───────────────────────────────────────────────────────────────────────────── */
 router.get("/launches", async (req, res): Promise<void> => {
   const params = ListLaunchesQueryParams.safeParse(req.query);
   const walletAddress = params.success ? params.data.walletAddress : undefined;
@@ -27,15 +91,22 @@ router.get("/launches", async (req, res): Promise<void> => {
   res.json(launches);
 });
 
-/* GET /launches/addresses — all token addresses launched via OUTRIVE */
+/* GET /launches/addresses — all token addresses launched via OUTRIVE.
+   Triggers a background backfill so legacy launches (tokenAddress=null) get filled in. */
 router.get("/launches/addresses", async (_req, res): Promise<void> => {
+  // Fire backfill in background (idempotent, won't run twice in parallel)
+  backfillTokenAddresses().catch(() => {});
+
   const rows = await db
     .select({ tokenAddress: launchesTable.tokenAddress })
     .from(launchesTable)
+    .where(isNotNull(launchesTable.tokenAddress))
     .orderBy(desc(launchesTable.createdAt));
+
   const addresses = rows
-    .map(r => r.tokenAddress?.toLowerCase())
-    .filter(Boolean) as string[];
+    .map(r => r.tokenAddress!.toLowerCase())
+    .filter(Boolean);
+
   res.json({ addresses });
 });
 
