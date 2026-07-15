@@ -99,7 +99,7 @@ export function Topbar() {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between font-mono overflow-hidden"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between font-mono"
       style={{
         height: 48,
         borderBottom: '1px solid var(--out-ink-dim)',
