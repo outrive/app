@@ -478,6 +478,12 @@ export function ChatConsole() {
             network: 'mainnet',
             tokenAddress: ca ?? null,
           },
+        }, {
+          onError: (err) => {
+            console.error('[OUTRIVE] recordLaunch failed — launch not persisted to DB:', err);
+            // Allow retry on next visit by clearing the guard
+            hasRecordedRef.current = false;
+          },
         });
       }
     }
@@ -698,6 +704,11 @@ export function ChatConsole() {
               ticker:        event.preview.ticker,
               txHash:        event.txHash,
               network:       'mainnet',
+            },
+          }, {
+            onError: (err) => {
+              console.error('[OUTRIVE] recordLaunch (server-signed) failed:', err);
+              hasRecordedRef.current = false;
             },
           });
         }

@@ -1,6 +1,7 @@
 import { parseAbiItem, decodeEventLog, type Log } from "viem";
 import { db } from "@workspace/db";
 import { tokensTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { getVirtualsConfig } from "./virtuals.js";
 import { getPublicClient, getActiveChain } from "./chains.js";
 import { fetchFactoryLogs } from "./blockscout.js";
