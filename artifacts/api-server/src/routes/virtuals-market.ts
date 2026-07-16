@@ -6,7 +6,8 @@ import { Router, type IRouter } from "express";
 import { cacheGet, cacheSet } from "../lib/cache.js";
 import { logger } from "../lib/logger.js";
 import { db } from "@workspace/db";
-import { launchesTable } from "@workspace/db";
+import { launchesTable, tokensTable } from "@workspace/db";
+import { and, not, like, ne, desc, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 const VIRTUALS_BASE = "https://api.virtuals.io/api";
@@ -145,54 +146,60 @@ async function fetchVirtuals(opts: {
   };
 }
 
-// GET /api/outrive/tokens — all tokens launched via OUTRIVE agent (public, no auth needed)
-// Fetches creator wallets from DB then queries Virtuals API filtered by those wallets.
+// GET /api/outrive/tokens — all tokens launched via OUTRIVE agent, served from local DB.
+// Merges creators from launchesTable (frontend-recorded) + tokensTable (on-chain indexed).
 router.get("/outrive/tokens", async (_req, res): Promise<void> => {
-  const cacheKey = "outrive:tokens:v1";
+  const cacheKey = "outrive:tokens:v2";
   const cached = cacheGet<unknown>(cacheKey);
   if (cached) { res.json(cached); return; }
 
   try {
-    // 1. Get all unique creator wallets from launchesTable
-    const rows = await db.select({ walletAddress: launchesTable.walletAddress }).from(launchesTable);
-    const wallets = [...new Set(rows.map(r => r.walletAddress.toLowerCase()))];
+    // 1. Collect all known OUTRIVE creator wallets from both sources
+    const [launchRows, tokenCreatorRows] = await Promise.all([
+      db.select({ walletAddress: launchesTable.walletAddress }).from(launchesTable),
+      db
+        .select({ creator: tokensTable.creator })
+        .from(tokensTable)
+        .where(
+          and(
+            not(like(tokensTable.address, "app-%")),
+            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000"),
+            ne(tokensTable.creator, "")
+          )
+        ),
+    ]);
 
-    if (wallets.length === 0) {
-      res.json({ tokens: [], meta: { total: 0 } });
+    const creators = [
+      ...new Set([
+        ...launchRows.map(r => r.walletAddress.toLowerCase()),
+        ...tokenCreatorRows.map(r => r.creator.toLowerCase()),
+      ]),
+    ];
+
+    if (creators.length === 0) {
+      cacheSet(cacheKey, [], 10_000);
+      res.json([]);
       return;
     }
 
-    // 2. Fetch from Virtuals API filtering by walletAddress[$in]
-    const p = new URLSearchParams();
-    p.set("pagination[page]", "1");
-    p.set("pagination[pageSize]", "100");
-    p.set("sort[0]", "createdAt:desc");
-    p.set("filters[chain][$eq]", "ROBINHOOD");
-    wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
+    // 2. Fetch all tokens from local DB where creator is an OUTRIVE wallet
+    const tokens = await db
+      .select()
+      .from(tokensTable)
+      .where(
+        and(
+          not(like(tokensTable.address, "app-%")),
+          inArray(tokensTable.creator, creators)
+        )
+      )
+      .orderBy(desc(tokensTable.createdAt))
+      .limit(100);
 
-    const url = `${VIRTUALS_BASE}/virtuals?${p.toString()}`;
-    logger.debug({ url, wallets }, "Fetching OUTRIVE tokens from Virtuals API");
-
-    const apiRes = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!apiRes.ok) throw new Error(`Virtuals API ${apiRes.status}`);
-
-    const json = await apiRes.json() as {
-      data: VItem[];
-      meta: { pagination: { total: number } };
-    };
-
-    const tokens = (json.data ?? []).map(normalise);
-    const result = { tokens, meta: { total: json.meta?.pagination?.total ?? tokens.length } };
-
-    cacheSet(cacheKey, result, 60_000);
-    res.json(result);
+    cacheSet(cacheKey, tokens, 10_000); // 10s cache for near-real-time
+    res.json(tokens);
   } catch (err) {
     logger.warn({ err }, "OUTRIVE tokens fetch failed");
-    res.status(502).json({ tokens: [], meta: { total: 0 }, error: String(err) });
+    res.status(500).json([]);
   }
 });
 

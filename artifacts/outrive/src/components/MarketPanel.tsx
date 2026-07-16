@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sheet } from '@/components/Sheet';
-import { useListMarketTokens, useGetMarketSummary } from '@workspace/api-client-react';
+import { useListOutriveTokens, useGetMarketSummary } from '@workspace/api-client-react';
 import { useNavigate } from 'react-router-dom';
 
 type Tab = 'newest' | 'trending' | 'my';
@@ -54,8 +54,7 @@ export function MarketPanel({ walletAddress }: { walletAddress?: string }) {
   const countdown = useCountdown(REFRESH_INTERVAL, forceRefetch);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: tokens, isLoading, refetch: refetchTokens } = useListMarketTokens(
-    { tab: tab === 'my' ? 'newest' : tab },
+  const { data: tokens, isLoading, refetch: refetchTokens } = useListOutriveTokens(
     { query: { refetchInterval: REFRESH_INTERVAL * 1000 } as any }
   );
 
@@ -71,9 +70,13 @@ export function MarketPanel({ walletAddress }: { walletAddress?: string }) {
     }
   }, [refetchKey]);
 
-  const displayed = tab === 'my' && walletAddress
-    ? (tokens ?? []).filter(t => t.creator?.toLowerCase() === walletAddress.toLowerCase())
+  const sorted = tab === 'trending'
+    ? [...(tokens ?? [])].sort((a, b) => parseFloat(b.volume24h ?? '0') - parseFloat(a.volume24h ?? '0'))
     : (tokens ?? []);
+
+  const displayed = tab === 'my' && walletAddress
+    ? sorted.filter(t => t.creator?.toLowerCase() === walletAddress.toLowerCase())
+    : sorted;
 
   const syncStr = lastSync.toLocaleTimeString('en-GB', {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
