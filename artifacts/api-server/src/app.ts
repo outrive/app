@@ -32,7 +32,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/cli/outrive-cli.mjs", (_req, res) => {
+app.get("/api/cli/outrive-cli.mjs", (_req, res) => {
   res.setHeader("Content-Type", "text/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.send(cliScript);

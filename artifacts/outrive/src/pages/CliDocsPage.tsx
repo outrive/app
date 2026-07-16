@@ -735,8 +735,8 @@ npm --version`}</Code>
 
             <Step n="3" title="Download the CLI">
               <P>Copy <Cmd>outrive-cli.mjs</Cmd> to your VPS. Choose the method that works for you.</P>
-              <Code label="option A — wget">{`wget https://outrive.io/outrive-cli.mjs`}</Code>
-              <Code label="option B — curl">{`curl -O https://outrive.io/outrive-cli.mjs`}</Code>
+              <Code label="option A — wget">{`wget https://outrive.io/api/cli/outrive-cli.mjs -O outrive-cli.mjs`}</Code>
+              <Code label="option B — curl">{`curl -fsSL https://outrive.io/api/cli/outrive-cli.mjs -o outrive-cli.mjs`}</Code>
               <Code label="option C — scp from your local machine">{`scp outrive-cli.mjs root@YOUR_VPS_IP:~/outrive-cli.mjs`}</Code>
               <Code label="make executable (optional)">{`chmod +x outrive-cli.mjs`}</Code>
             </Step>
