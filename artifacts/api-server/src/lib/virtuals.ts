@@ -229,8 +229,135 @@ const ERC20_ABI = parseAbi([
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
 // ══════════════════════════════════════════════════════════════════════════════
+// VIRTUAL BONDING CURVE — ETH router wrapper (OTR and similar tokens)
+// Some agent tokens (e.g. OTR) use a VIRTUAL-based bonding curve instead of ETH.
+// BondingV5 also manages these, but via a separate buy(uint256,address,...) overload.
+// The ETH router (0x7180727...) wraps ETH↔VIRTUAL conversion transparently.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ETH router — wraps ETH→VIRTUAL→token (buy) and token→VIRTUAL→ETH (sell)
+const ETH_ROUTER_ADDRESS = getAddress("0x7180727d660150F0aD79028C0cef361c89c7e62C");
+
+const ETH_ROUTER_ABI: Abi = [
+  {
+    // payable with ETH; router converts ETH→VIRTUAL, then buys token on BondingV5
+    type: "function", name: "buy", stateMutability: "payable",
+    inputs: [
+      { name: "token",        type: "address" },
+      { name: "minTokensOut", type: "uint256" },
+      { name: "deadline",     type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    // sells token→VIRTUAL via BondingV5, then converts VIRTUAL→ETH; needs token approval to router
+    type: "function", name: "sell", stateMutability: "nonpayable",
+    inputs: [
+      { name: "token",       type: "address" },
+      { name: "tokenAmount", type: "uint256" },
+      { name: "minEth",      type: "uint256" },
+      { name: "deadline",    type: "uint256" },
+    ],
+    outputs: [],
+  },
+];
+
+// BondingV5 tokenInfo — full on-chain state for VIRTUAL-based bonding curve tokens
+// Verified implementation: 0x634D91f7A67011A60985dF555A5157f9b321f7dE
+const BONDING_V5_TOKEN_INFO_ABI: Abi = [{
+  type: "function", name: "tokenInfo", stateMutability: "view",
+  inputs: [{ name: "", type: "address" }],
+  outputs: [
+    { name: "creator",          type: "address" },
+    { name: "token",            type: "address" },
+    { name: "pair",             type: "address" },
+    { name: "agentToken",       type: "address" },
+    { name: "data",             type: "tuple", components: [
+      { name: "token",          type: "address" },
+      { name: "name",           type: "string"  },
+      { name: "_name",          type: "string"  },
+      { name: "ticker",         type: "string"  },
+      { name: "supply",         type: "uint256" },
+      { name: "price",          type: "uint256" }, // VIRTUAL per token (1e18 units)
+      { name: "marketCap",      type: "uint256" },
+      { name: "liquidity",      type: "uint256" },
+      { name: "volume",         type: "uint256" },
+      { name: "volume24H",      type: "uint256" },
+      { name: "prevPrice",      type: "uint256" },
+      { name: "lastUpdated",    type: "uint256" },
+    ]},
+    { name: "description",      type: "string"  },
+    { name: "image",            type: "string"  },
+    { name: "twitter",          type: "string"  },
+    { name: "telegram",         type: "string"  },
+    { name: "youtube",          type: "string"  },
+    { name: "website",          type: "string"  },
+    { name: "trading",          type: "bool"    }, // true = trading is active
+    { name: "tradingOnUniswap", type: "bool"    }, // true = graduated to Uniswap (skip router)
+    { name: "applicationId",    type: "uint256" },
+    { name: "initialPurchase",  type: "uint256" },
+    { name: "virtualId",        type: "uint256" },
+    { name: "launchExecuted",   type: "bool"    },
+  ],
+}];
+
+interface VirtualBondingCurveInfo {
+  priceInVirtual:   bigint;  // VIRTUAL tokens per 1e18 agent tokens
+  trading:          boolean;
+  tradingOnUniswap: boolean;
+}
+
+// Calls BondingV5.tokenInfo to detect VIRTUAL-based bonding curve tokens.
+// Returns error if the token is not registered (not a VIRTUAL bonding curve token).
+async function detectVirtualBondingCurve(
+  tokenAddress: `0x${string}`,
+): Promise<VirtualBondingCurveInfo | { error: string }> {
+  try {
+    const client = getPublicClient();
+    type TokenInfoReturn = readonly [
+      `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`,
+      { token: `0x${string}`; name: string; _name: string; ticker: string;
+        supply: bigint; price: bigint; marketCap: bigint; liquidity: bigint;
+        volume: bigint; volume24H: bigint; prevPrice: bigint; lastUpdated: bigint },
+      string, string, string, string, string, string,
+      boolean, boolean, bigint, bigint, bigint, boolean
+    ];
+    const info = await client.readContract({
+      address: BONDING_V5_ADDRESS,
+      abi:     BONDING_V5_TOKEN_INFO_ABI,
+      functionName: "tokenInfo",
+      args:    [tokenAddress],
+    }) as TokenInfoReturn;
+    return {
+      priceInVirtual:   info[4].price,
+      trading:          info[11],
+      tradingOnUniswap: info[12],
+    };
+  } catch (e) {
+    return { error: `tokenInfo: ${e instanceof Error ? e.message.slice(0, 80) : String(e)}` };
+  }
+}
+
+// Quote 1 VIRTUAL → WETH9 on V3 to get the ETH/VIRTUAL exchange rate.
+// Returns wei-of-ETH per 1e18 VIRTUAL, or null on failure.
+async function getVirtualEthRate(): Promise<bigint | null> {
+  const config = getVirtualsConfig();
+  if (!config.virtualTokenAddress) return null;
+  try {
+    const client = getPublicClient();
+    const res = await client.simulateContract({
+      address: UNI_V3_QUOTER_V2, abi: QUOTER_V2_ABI,
+      functionName: "quoteExactInputSingle",
+      args: [{ tokenIn: config.virtualTokenAddress, tokenOut: WETH9_ADDRESS, amountIn: parseEther("1"), fee: 3000, sqrtPriceLimitX96: 0n }],
+    });
+    const ethOut = (res.result as unknown as readonly [bigint, bigint, number, bigint])[0];
+    return ethOut > 0n ? ethOut : null;
+  } catch { return null; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // UNISWAP V2 / V3 / V4 INTEGRATION — Robinhood Chain (4663)
-// Auto-detection order: BondingV5 getState() → V3 QuoterV2 → V4 Quoter → V2
+// Auto-detection order: BondingV5 ETH getState() → VIRTUAL tokenInfo → Uniswap V3/V4/V2
 // Source: developers.uniswap.org + docs.robinhood.com/chain/contracts
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -851,7 +978,7 @@ export interface TradePreview {
   slippage: number;
   currentPrice: string;   // "0.00001234 ETH per token"
   network: string;
-  protocol: "bonding_curve" | UniswapProtocol;
+  protocol: "bonding_curve" | "virtual_bonding_curve" | UniswapProtocol;
 }
 
 export interface TradeTxResult {
@@ -905,6 +1032,34 @@ export async function buildBuyTx(params: {
         priceImpact: `~${priceImpactPct.toFixed(2)}%`,
         slippage, currentPrice: `${priceDisplay} ETH / token`, network: "Robinhood Chain (4663)",
         protocol: "bonding_curve",
+      },
+    };
+  }
+
+  // ── Try VIRTUAL bonding curve (OTR-style tokens, ETH router wrapper) ────────
+  // These tokens use $VIRTUAL as the bonding-curve base currency.
+  // The ETH router (0x7180727...) wraps ETH→VIRTUAL→token transparently.
+  // minTokensOut = 0n: the router computes the output at execution time; the
+  // on-chain curve price is the source of truth — no reliable off-chain quote
+  // is available without the exact BondingConfig curve formula.
+  const vbcBuy = await detectVirtualBondingCurve(params.tokenAddress);
+  if (!("error" in vbcBuy) && vbcBuy.trading && !vbcBuy.tradingOnUniswap) {
+    if (!params.userAddress || params.userAddress === ZERO_ADDR) {
+      return { error: "Wallet not connected — connect your wallet to trade." };
+    }
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+    const buyData = encodeFunctionData({ abi: ETH_ROUTER_ABI, functionName: "buy", args: [params.tokenAddress, 0n, deadline] });
+    logger.info({ tokenAddress: params.tokenAddress, ethAmount: ethAmount.toString() }, "VIRTUAL bonding curve buy tx built");
+    return {
+      needsApprove: false,
+      tradeTx: { to: ETH_ROUTER_ADDRESS, data: buyData, value: ethAmount.toString() },
+      preview: {
+        side: "buy", tokenName: params.tokenName, tokenTicker: params.tokenTicker, tokenAddress: params.tokenAddress,
+        amountIn: `${params.ethAmountEther} ETH`,
+        amountOutMin: `market rate (set by bonding curve at execution)`,
+        priceImpact: "varies by curve depth",
+        slippage, currentPrice: "via $VIRTUAL bonding curve", network: "Robinhood Chain (4663)",
+        protocol: "virtual_bonding_curve",
       },
     };
   }
@@ -1009,6 +1164,37 @@ export async function buildSellTx(params: {
         priceImpact: `~${priceImpactPct.toFixed(2)}%`,
         slippage, currentPrice: `${priceDisplay} ETH / token`, network: "Robinhood Chain (4663)",
         protocol: "bonding_curve",
+      },
+    };
+  }
+
+  // ── Try VIRTUAL bonding curve (OTR-style tokens, ETH router wrapper) ────────
+  // minEthAmount = 0n: router computes output at execution time via BondingV5.
+  // No reliable off-chain output quote without the exact bonding curve formula.
+  const vbcSell = await detectVirtualBondingCurve(params.tokenAddress);
+  if (!("error" in vbcSell) && vbcSell.trading && !vbcSell.tradingOnUniswap) {
+    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 1200);
+    const tokenDisplay = (Number(tokenAmount) / 1e18).toLocaleString("en", { maximumFractionDigits: 2 });
+
+    let currentAllowance = 0n;
+    try {
+      currentAllowance = await client.readContract({ address: params.tokenAddress, abi: ERC20_ABI, functionName: "allowance", args: [params.userAddress, ETH_ROUTER_ADDRESS] }) as bigint;
+    } catch { /* treat as 0 */ }
+    const needsApprove = currentAllowance < tokenAmount;
+
+    const sellData = encodeFunctionData({ abi: ETH_ROUTER_ABI, functionName: "sell", args: [params.tokenAddress, tokenAmount, 0n, deadline] });
+    logger.info({ tokenAddress: params.tokenAddress, tokenAmount: tokenAmount.toString() }, "VIRTUAL bonding curve sell tx built");
+    return {
+      needsApprove,
+      approveTx: needsApprove ? makeApproveTx(ETH_ROUTER_ADDRESS, tokenAmount) : undefined,
+      tradeTx: { to: ETH_ROUTER_ADDRESS, data: sellData, value: "0x0" },
+      preview: {
+        side: "sell", tokenName: params.tokenName, tokenTicker: params.tokenTicker, tokenAddress: params.tokenAddress,
+        amountIn: `${tokenDisplay} ${params.tokenTicker}`,
+        amountOutMin: `market rate (set by bonding curve at execution)`,
+        priceImpact: "varies by curve depth",
+        slippage, currentPrice: "via $VIRTUAL bonding curve", network: "Robinhood Chain (4663)",
+        protocol: "virtual_bonding_curve",
       },
     };
   }

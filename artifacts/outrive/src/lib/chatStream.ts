@@ -28,7 +28,7 @@ export interface TradePreview {
   slippage: number;       // 1
   currentPrice: string;   // "0.00001234 ETH per token"
   network: string;
-  protocol: 'bonding_curve' | 'uniswap_v2' | 'uniswap_v3' | 'uniswap_v4';
+  protocol: 'bonding_curve' | 'virtual_bonding_curve' | 'uniswap_v2' | 'uniswap_v3' | 'uniswap_v4';
 }
 
 export type ChatEvent =
