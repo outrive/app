@@ -5,6 +5,7 @@ import { eq, desc, isNull, isNotNull, and, not, like, ne } from "drizzle-orm";
 import { ListLaunchesQueryParams, RecordLaunchBody } from "@workspace/api-zod";
 import { getPublicClient } from "../lib/chains.js";
 import { logger } from "../lib/logger.js";
+import { cacheGet } from "../lib/cache.js";
 
 const router: IRouter = Router();
 
@@ -141,7 +142,18 @@ router.get("/launches", async (req, res): Promise<void> => {
     : await db.select().from(launchesTable)
         .orderBy(desc(launchesTable.createdAt)).limit(cap);
 
-  res.json(rows);
+  // Enrich imageUri from Virtuals API cache (zero extra API calls when cache is warm).
+  // The cache is populated by GET /api/virtuals/token-by-address/:address calls.
+  type CachedToken = { image?: string | null };
+  const enriched = rows.map(row => {
+    if (row.tokenAddress && !row.imageUri) {
+      const tok = cacheGet<CachedToken>(`virtuals:by-addr:${row.tokenAddress.toLowerCase()}`);
+      if (tok?.image) return { ...row, imageUri: tok.image };
+    }
+    return row;
+  });
+
+  res.json(enriched);
 });
 
 /* GET /launches/addresses — all token addresses launched via OUTRIVE (backfill-augmented). */

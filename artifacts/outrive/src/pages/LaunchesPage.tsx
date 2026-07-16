@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Sheet } from '@/components/Sheet';
 
@@ -88,6 +88,31 @@ export function LaunchesPage() {
   });
 
   const launches = Array.isArray(data) ? data : [];
+
+  // For confirmed tokens that still have no imageUri (existing DB records), fetch from Virtuals API.
+  // The server caches each result for 5 minutes so subsequent calls are instant.
+  const needsImage = launches.filter(
+    l => l.tokenAddress && !l.imageUri && !l.tokenAddress.startsWith('0x000'),
+  );
+  const imageQueries = useQueries({
+    queries: needsImage.map(l => ({
+      queryKey: ['token-img', l.tokenAddress],
+      queryFn: () =>
+        fetch(apiUrl(`/api/virtuals/token-by-address/${l.tokenAddress}`))
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+      staleTime: 5 * 60_000,
+      retry: 1,
+    })),
+  });
+
+  // Build address → imageUrl lookup from query results
+  const imageMap = new Map<string, string>();
+  needsImage.forEach((l, i) => {
+    const img = (imageQueries[i]?.data as { image?: string | null } | null)?.image;
+    if (img && l.tokenAddress) imageMap.set(l.tokenAddress.toLowerCase(), img);
+  });
+
   const filtered = search.trim()
     ? launches.filter(l =>
         l.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -202,7 +227,7 @@ export function LaunchesPage() {
           {!isLoading && filtered.length > 0 && (
             <div className="flex flex-col">
               {filtered.map((l, i) => (
-                <LaunchRow key={l.id} launch={l} rank={i + 1} />
+                <LaunchRow key={l.id} launch={l} rank={i + 1} imageMap={imageMap} />
               ))}
             </div>
           )}
@@ -216,12 +241,16 @@ export function LaunchesPage() {
   );
 }
 
-function LaunchRow({ launch: l, rank }: { launch: Launch; rank: number }) {
+function LaunchRow({ launch: l, rank, imageMap }: { launch: Launch; rank: number; imageMap: Map<string, string> }) {
   const navigate       = useNavigate();
   const explorerTx     = l.txHash      ? `${EXPLORER}/tx/${l.txHash}` : null;
   const explorerAddr   = l.tokenAddress ? `${EXPLORER}/token/${l.tokenAddress}` : null;
   const explorerWallet = `${EXPLORER}/address/${l.walletAddress}`;
   const canOpen        = !!l.tokenAddress;
+
+  // Resolve image: prefer DB imageUri, fall back to Virtuals API cache lookup
+  const resolvedImg = l.imageUri
+    ?? (l.tokenAddress ? (imageMap.get(l.tokenAddress.toLowerCase()) ?? null) : null);
 
   const handleRowClick = () => {
     if (canOpen) navigate(`/token/${l.tokenAddress}`);
@@ -233,7 +262,7 @@ function LaunchRow({ launch: l, rank }: { launch: Launch; rank: number }) {
       <div className="sm:hidden flex gap-3 py-3 border-b items-start"
         onClick={handleRowClick}
         style={{ borderColor: 'var(--out-grid-major)', cursor: canOpen ? 'pointer' : 'default' }}>
-        <TokenAvatar name={l.name} ticker={l.ticker} img={l.imageUri} />
+        <TokenAvatar name={l.name} ticker={l.ticker} img={resolvedImg} />
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono font-bold text-[14px]" style={{ color: 'var(--out-ink)' }}>{l.name}</span>
@@ -268,7 +297,7 @@ function LaunchRow({ launch: l, rank }: { launch: Launch; rank: number }) {
       <div className="hidden sm:grid items-center gap-3 px-3 py-2 border-b transition-colors hover:bg-[#0d1200]"
         onClick={handleRowClick}
         style={{ gridTemplateColumns: '36px 1fr 160px 160px 100px 80px 90px', borderColor: 'var(--out-grid-major)', cursor: canOpen ? 'pointer' : 'default' }}>
-        <TokenAvatar name={l.name} ticker={l.ticker} img={l.imageUri} />
+        <TokenAvatar name={l.name} ticker={l.ticker} img={resolvedImg} />
         <div className="flex flex-col min-w-0">
           <span className="font-mono font-bold text-[14px] truncate" style={{ color: 'var(--out-ink)' }}>{l.name}</span>
           <span className="font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>${l.ticker}</span>
