@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Sheet } from '@/components/Sheet';
 
@@ -89,28 +89,22 @@ export function LaunchesPage() {
 
   const launches = Array.isArray(data) ? data : [];
 
-  // For confirmed tokens that still have no imageUri (existing DB records), fetch from Virtuals API.
-  // The server caches each result for 5 minutes so subsequent calls are instant.
-  const needsImage = launches.filter(
-    l => l.tokenAddress && !l.imageUri && !l.tokenAddress.startsWith('0x000'),
-  );
-  const imageQueries = useQueries({
-    queries: needsImage.map(l => ({
-      queryKey: ['token-img', l.tokenAddress],
-      queryFn: () =>
-        fetch(apiUrl(`/api/virtuals/token-by-address/${l.tokenAddress}`))
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null),
-      staleTime: 5 * 60_000,
-      retry: 1,
-    })),
+  // Bulk-fetch the full Robinhood token list from Virtuals API (already server-cached, fast).
+  // This replaces individual per-token lookups which returned 404 and timed out.
+  const { data: virtualsTokens } = useQuery<{ tokens: { address: string; image: string | null }[] }>({
+    queryKey: ['virtuals-tokens-bulk'],
+    queryFn: () =>
+      fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=100&sort=createdAt:desc'))
+        .then(r => r.ok ? r.json() : { tokens: [] })
+        .catch(() => ({ tokens: [] })),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
-  // Build address → imageUrl lookup from query results
+  // Build address → imageUrl lookup from bulk response
   const imageMap = new Map<string, string>();
-  needsImage.forEach((l, i) => {
-    const img = (imageQueries[i]?.data as { image?: string | null } | null)?.image;
-    if (img && l.tokenAddress) imageMap.set(l.tokenAddress.toLowerCase(), img);
+  (virtualsTokens?.tokens ?? []).forEach(t => {
+    if (t.image && t.address) imageMap.set(t.address.toLowerCase(), t.image);
   });
 
   const filtered = search.trim()
