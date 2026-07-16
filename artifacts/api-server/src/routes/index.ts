@@ -11,7 +11,6 @@ import conversationsRouter from "./conversations.js";
 import chatRouter from "./chat.js";
 import creditsRouter from "./credits.js";
 import cliAuthRouter from "./cli-auth.js";
-
 const router: IRouter = Router();
 
 router.use(healthRouter);
