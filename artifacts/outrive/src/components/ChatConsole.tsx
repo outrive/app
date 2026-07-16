@@ -255,13 +255,21 @@ function parseCmd(raw: string): ParseResult {
 /* ═══════════════════════════════════════════════════════════════════════════
    COMPONENT
 ═══════════════════════════════════════════════════════════════════════════ */
-export function ChatConsole() {
+export function ChatConsole({ prefill }: { prefill?: string } = {}) {
   const { address, chain } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const [mode, setMode]           = useState<InputMode>('prompt');
   const [messages, setMessages]   = useState<LocalMessage[]>([]);
   const [cliLines, setCliLines]   = useState<CliLine[]>(() => makeBanner());
   const [input, setInput]         = useState('');
+
+  // Inject prefill text (from prompt chips) into input whenever it changes
+  useEffect(() => {
+    if (prefill) {
+      setInput(prefill);
+      setMode('prompt');
+    }
+  }, [prefill]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [txPayload, setTxPayload]     = useState<TxPayload | null>(null);
   const [signStep, setSignStep]       = useState<SignStep>('idle');
@@ -1090,27 +1098,72 @@ export function ChatConsole() {
           style={{ minHeight: 240, scrollBehavior: 'smooth' }}
         >
           {messages.length === 0 && !isStreaming && !txPayload ? (
-            <div className="flex flex-col items-center justify-center h-full gap-5 py-10">
-              <img
-                src="/outrive-logo.png"
-                alt="OUTRIVE"
-                width={56}
-                height={56}
-                style={{
-                  filter: 'drop-shadow(0 0 12px var(--out-ink)) drop-shadow(0 0 28px color-mix(in srgb, var(--out-ink) 40%, transparent))',
-                  opacity: 0.92,
-                }}
-              />
-              <div className="text-center space-y-2">
-                <div className="text-[11px] font-bold tracking-[0.2em] uppercase"
-                  style={{ color: 'var(--out-ink)', fontFamily: "'Space Grotesk', sans-serif" }}>
-                  OUTRIVE AGENT
+            <div className="flex flex-col gap-4 py-6 px-1">
+              {/* Logo + tagline */}
+              <div className="flex flex-col items-center gap-3 pb-2">
+                <img
+                  src="/outrive-logo.png"
+                  alt="OUTRIVE"
+                  width={44}
+                  height={44}
+                  style={{
+                    filter: 'drop-shadow(0 0 10px var(--out-ink))',
+                    opacity: 0.9,
+                  }}
+                />
+                <div className="text-center">
+                  <div className="text-[11px] font-bold tracking-[0.2em] uppercase"
+                    style={{ color: 'var(--out-ink)', fontFamily: "'Space Grotesk', sans-serif" }}>
+                    OUTRIVE AGENT
+                  </div>
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--out-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    Your wallet signs. You own it on-chain.
+                  </div>
                 </div>
-                <div className="text-[11px] leading-relaxed max-w-xs"
-                  style={{ color: 'var(--out-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-                  Describe your agent token.<br />
-                  <span style={{ color: 'var(--out-ink)' }}>Your wallet signs. You own it on-chain.</span>
+              </div>
+
+              {/* Example prompts — RWA × AI × Stock */}
+              <div className="flex flex-col gap-2">
+                <div className="text-[10px] uppercase tracking-widest font-mono px-1"
+                  style={{ color: 'var(--out-ink-dim)' }}>
+                  · EXAMPLE PROMPTS — RWA × AI AGENT × STOCK
                 </div>
+                {([
+                  {
+                    label: 'GOLDVAULT · $GVLT',
+                    text: 'Launch an AI agent token called GoldVault, ticker GVLT. It bridges real-world gold assets and gold mining stocks — the agent tracks price discovery between physical gold ETFs and mining equities, generating AI-driven rebalancing signals for RWA portfolio holders.',
+                  },
+                  {
+                    label: 'EQUITYMIND · $EQMND',
+                    text: 'Create an AI agent token called EquityMind, ticker EQMND. It monitors S&P 500 momentum, analyzes tokenized RWA bond yields, and cross-references equity market data to synthesize on-chain portfolio signals at the intersection of TradFi stocks and real-world assets.',
+                  },
+                  {
+                    label: 'REALBRIDGE · $RBRG',
+                    text: 'Deploy an AI agent token called RealBridge, ticker RBRG. It connects tokenized real estate RWAs with public equity markets — comparing REIT stock performance against on-chain property valuations and surfacing pricing gaps between physical and digital assets.',
+                  },
+                  {
+                    label: 'TRIFECTAAI · $TRFX',
+                    text: 'Launch an AI agent token called TrifectaAI, ticker TRFX — where RWA tokenization, equity markets, and AI intelligence converge. The agent tracks tokenized commodity prices, equity index movements, and DeFi liquidity in real-time to generate cross-asset alpha signals.',
+                  },
+                ] as { label: string; text: string }[]).map(p => (
+                  <button
+                    key={p.label}
+                    onClick={() => { setInput(p.text); setMode('prompt'); setTimeout(() => inputRef.current?.focus(), 50); }}
+                    className="text-left border px-3 py-2.5 transition-colors group"
+                    style={{ borderColor: 'var(--out-grid-major)', background: '#080d08' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--out-ink)'; e.currentTarget.style.background = '#0d1500'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--out-grid-major)'; e.currentTarget.style.background = '#080d08'; }}
+                  >
+                    <div className="font-mono text-[10px] uppercase tracking-widest mb-1"
+                      style={{ color: 'var(--out-ink)' }}>
+                      {p.label}
+                    </div>
+                    <div className="font-mono text-[11px] leading-relaxed"
+                      style={{ color: 'var(--out-muted)' }}>
+                      {p.text}
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
