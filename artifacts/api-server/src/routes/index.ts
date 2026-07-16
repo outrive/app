@@ -10,6 +10,7 @@ import uploadRouter from "./upload.js";
 import conversationsRouter from "./conversations.js";
 import chatRouter from "./chat.js";
 import creditsRouter from "./credits.js";
+import cliAuthRouter from "./cli-auth.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(uploadRouter);
 router.use(conversationsRouter);
 router.use(chatRouter);
 router.use(creditsRouter);
+router.use(cliAuthRouter);
 
 export default router;

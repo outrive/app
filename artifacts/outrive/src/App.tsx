@@ -9,6 +9,7 @@ import { Topbar } from './components/Topbar';
 import { CalibrationBanner } from './components/CalibrationBanner';
 import Home from './pages/Home';
 import TokenDetail from './pages/TokenDetail';
+import CliAuthPage from './pages/CliAuthPage';
 import NotFound from './pages/not-found';
 
 // Privy App ID — public identifier, safe in source.
@@ -45,6 +46,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/token/:address" element={<TokenDetail />} />
+              <Route path="/cli-auth" element={<CliAuthPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
