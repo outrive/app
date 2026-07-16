@@ -13,6 +13,7 @@ import { MarketPanel } from '@/components/MarketPanel';
 import { MarketPage } from '@/pages/MarketPage';
 import { WhitepaperPage } from '@/pages/WhitepaperPage';
 import { OutrivePage } from '@/pages/OutrivePage';
+import { CliDocsPage } from '@/pages/CliDocsPage';
 import { TickerStrip } from '@/components/MarketTicker';
 import { CalibrationBanner } from '@/components/CalibrationBanner';
 import { useListLaunches, useGetSystemStatus, useGetMarketSummary } from '@workspace/api-client-react';
@@ -1368,12 +1369,7 @@ export default function Home() {
     if (view === 'dashboard')    return <Dashboard walletAddress={address} />;
     if (view === 'docs')         return <Docs />;
     if (view === 'howto')        return <HowTo />;
-    if (view === 'cli')          return (
-      <div className="flex flex-col items-center justify-center flex-1 gap-3 font-mono" style={{ color: 'var(--out-muted)' }}>
-        <Terminal size={32} style={{ color: 'var(--out-ink-dim)' }} />
-        <span className="text-[11px] uppercase tracking-widest">CLI — Coming Soon</span>
-      </div>
-    );
+    if (view === 'cli')          return <CliDocsPage />;
     if (view === 'architecture') return <Architecture />;
     if (view === 'faq')          return <Faq />;
     if (view === 'about')        return <About />;

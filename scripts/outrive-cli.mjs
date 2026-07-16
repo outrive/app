@@ -2,15 +2,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // OUTRIVE CLI — Terminal interface for the OUTRIVE AI agent
 // Requires Node.js 18+ (native fetch + crypto). No npm install needed.
-//
-// Usage:
-//   node outrive-cli.mjs auth               # Authorize via wallet (one-time)
-//   node outrive-cli.mjs status             # Show connection status
-//   node outrive-cli.mjs buy 0.05 0xTOKEN   # Buy tokens with ETH
-//   node outrive-cli.mjs sell 1000000 0xTOK # Sell tokens for ETH
-//   node outrive-cli.mjs chat "message"     # Free-form agent chat
-//   node outrive-cli.mjs logout             # Remove credentials
-//   node outrive-cli.mjs help               # Show this help
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -45,6 +36,70 @@ const fmt = {
   accent: (s) => `${C.lime}${C.bold}${s}${C.reset}`,
   dim:    (s) => `${C.gray}${s}${C.reset}`,
 };
+
+// ─── ASCII art ────────────────────────────────────────────────────────────────
+const ASCII_LOGO = `${C.lime}${C.bold}
+  ██████╗ ██╗   ██╗████████╗██████╗ ██╗██╗   ██╗███████╗
+  ██╔═══██╗██║   ██║╚══██╔══╝██╔══██╗██║██║   ██║██╔════╝
+  ██║   ██║██║   ██║   ██║   ██████╔╝██║╚██╗ ██╔╝█████╗
+  ██║   ██║██║   ██║   ██║   ██╔══██╗██║ ╚████╔╝ ██╔══╝
+  ╚██████╔╝╚██████╔╝   ██║   ██║  ██║██║  ╚██╔╝  ███████╗
+   ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝${C.reset}`;
+
+const BOX_WIDTH = 62;
+
+function boxLine(content = "", color = C.gray) {
+  // Strip ANSI for length calculation
+  const plain = content.replace(/\x1b\[[0-9;]*m/g, "");
+  const pad   = Math.max(0, BOX_WIDTH - 2 - plain.length);
+  return `${C.gray}║${C.reset}  ${content}${" ".repeat(pad)}${C.gray}║${C.reset}`;
+}
+function boxTop()    { return `${C.gray}╔${"═".repeat(BOX_WIDTH)}╗${C.reset}`; }
+function boxDiv()    { return `${C.gray}╠${"═".repeat(BOX_WIDTH)}╣${C.reset}`; }
+function boxBottom() { return `${C.gray}╚${"═".repeat(BOX_WIDTH)}╝${C.reset}`; }
+
+function printDashboard(cfg, apiStatus) {
+  const wallet  = cfg?.walletAddress  ?? "—";
+  const apiUrl  = cfg?.apiUrl          ?? "—";
+  const online  = apiStatus?.ok;
+  const factory = apiStatus?.body?.factoryAddress ?? "—";
+  const chain   = apiStatus?.body?.chainId         ?? 4663;
+
+  const short = (s) => s.length > 44 ? s.slice(0, 20) + "…" + s.slice(-20) : s;
+
+  console.log();
+  console.log(boxTop());
+  console.log(boxLine());
+  // Logo lines (strip per-line)
+  const logoLines = ASCII_LOGO.trim().split("\n");
+  for (const ll of logoLines) {
+    const plain = ll.replace(/\x1b\[[0-9;]*m/g, "");
+    const pad   = Math.max(0, BOX_WIDTH - 2 - plain.length);
+    console.log(`${C.gray}║${C.reset}  ${ll}${" ".repeat(pad)}${C.gray}║${C.reset}`);
+  }
+  console.log(boxLine());
+  console.log(boxLine(`${C.gray}AI AGENT CLI           ROBINHOOD CHAIN · VIRTUALS PROTOCOL${C.reset}`));
+  console.log(boxLine());
+  console.log(boxDiv());
+  console.log(boxLine(`${C.gray}WALLET ${C.reset}  ${C.white}${C.bold}${short(wallet)}${C.reset}`));
+  console.log(boxLine(`${C.gray}API    ${C.reset}  ${C.white}${short(apiUrl)}${C.reset}`));
+  console.log(boxLine(`${C.gray}NETWORK${C.reset}  ${C.white}Robinhood Chain (chainId ${chain})${C.reset}`));
+  if (factory !== "—") {
+    console.log(boxLine(`${C.gray}FACTORY${C.reset}  ${C.gray}${short(factory)}${C.reset}`));
+  }
+  console.log(boxLine(
+    online
+      ? `${C.gray}STATUS ${C.reset}  ${C.lime}${C.bold}● ONLINE${C.reset}`
+      : `${C.gray}STATUS ${C.reset}  ${C.red}${C.bold}● UNREACHABLE${C.reset}`
+  ));
+  console.log(boxDiv());
+  console.log(boxLine(`${C.gray}buy    ${C.reset}${C.cyan}<eth>${C.reset}  ${C.gray}<address>  [--name N] [--ticker T]${C.reset}`));
+  console.log(boxLine(`${C.gray}sell   ${C.reset}${C.cyan}<amt>${C.reset}  ${C.gray}<address>  [--name N] [--ticker T]${C.reset}`));
+  console.log(boxLine(`${C.cyan}chat   ${C.reset}${C.gray}"<message>"${C.reset}`));
+  console.log(boxLine(`${C.gray}logout${C.reset}`));
+  console.log(boxBottom());
+  console.log();
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const CONFIG_DIR  = join(homedir(), ".outrive");
@@ -150,14 +205,14 @@ function printWorkOrder(event) {
   const row = (label, val) =>
     console.log(`  ${C.gray}${label.padEnd(14)}${C.reset} ${C.white}${val}${C.reset}`);
 
-  row("Side",     p.side.toUpperCase());
-  row("Token",    `${p.tokenName} ($${p.tokenTicker})`);
-  row("Address",  p.tokenAddress);
+  row("Side",      p.side.toUpperCase());
+  row("Token",     `${p.tokenName} ($${p.tokenTicker})`);
+  row("Address",   p.tokenAddress);
   row("Amount In", p.amountIn);
-  row("Min Out",  p.amountOutMin);
-  row("Protocol", protoLabels[p.protocol] ?? p.protocol);
-  row("Network",  p.network);
-  row("Slippage", `${p.slippage}%`);
+  row("Min Out",   p.amountOutMin);
+  row("Protocol",  protoLabels[p.protocol] ?? p.protocol);
+  row("Network",   p.network);
+  row("Slippage",  `${p.slippage}%`);
 
   console.log();
   console.log(`${C.bold}  Raw Transactions${C.reset}`);
@@ -199,7 +254,8 @@ async function cmdAuth() {
   let apiUrl = "";
   let appUrl = "";
   try {
-    console.log(fmt.info("Enter your OUTRIVE API URL (the API server base URL, e.g. https://xxxxx.replit.dev/api-server)"));
+    console.log(fmt.info("Enter your OUTRIVE API URL"));
+    console.log(fmt.dim("  e.g. https://xxxxx.replit.dev/api-server"));
     apiUrl = (await rl.question(`  ${C.cyan}API URL:${C.reset} `)).trim().replace(/\/$/, "");
 
     if (!apiUrl.startsWith("http")) {
@@ -208,13 +264,13 @@ async function cmdAuth() {
     }
 
     console.log();
-    console.log(fmt.info("Enter your OUTRIVE web app URL (e.g. https://xxxxx.replit.dev/outrive)"));
+    console.log(fmt.info("Enter your OUTRIVE web app URL"));
+    console.log(fmt.dim("  e.g. https://xxxxx.replit.dev/outrive"));
     appUrl = (await rl.question(`  ${C.cyan}App URL:${C.reset} `)).trim().replace(/\/$/, "");
   } finally {
     rl.close();
   }
 
-  // Generate session ID and register it
   const sessionId = randomUUID();
 
   const sp = spinner("Registering session…");
@@ -229,14 +285,31 @@ async function cmdAuth() {
   const authUrl = `${appUrl}/cli-auth?session=${sessionId}`;
 
   console.log();
-  console.log(`${C.lime}${C.bold}Open this URL in your browser to authorize:${C.reset}`);
+  console.log(boxTop());
+  console.log(boxLine(`${C.lime}${C.bold}Open this URL in your browser to authorize:${C.reset}`));
+  console.log(boxLine());
+  // Split long URL across lines if needed
+  const urlStr = `${C.cyan}${C.bold}${authUrl}${C.reset}`;
+  const urlPlain = authUrl;
+  if (urlPlain.length <= BOX_WIDTH - 4) {
+    console.log(boxLine(`${C.cyan}${C.bold}${authUrl}${C.reset}`));
+  } else {
+    // Print outside box if too long
+    console.log(`${C.gray}╚${"═".repeat(BOX_WIDTH)}╝${C.reset}`);
+    console.log();
+    console.log(`  ${C.cyan}${C.bold}${authUrl}${C.reset}`);
+    console.log();
+  }
+  if (urlPlain.length <= BOX_WIDTH - 4) {
+    console.log(boxLine());
+    console.log(boxLine(`${C.gray}Connect wallet → sign message → done${C.reset}`));
+    console.log(boxBottom());
+  }
+
   console.log();
-  console.log(`  ${C.cyan}${C.bold}${authUrl}${C.reset}`);
-  console.log();
-  console.log(fmt.dim("Connect your wallet and sign the authorization message. Waiting…"));
+  console.log(fmt.dim("Waiting for confirmation (timeout: 5 min)…"));
   console.log();
 
-  // Poll every 2 s for up to 5 min
   const started = Date.now();
   while (Date.now() - started < 5 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -253,12 +326,12 @@ async function cmdAuth() {
       console.log(`  ${fmt.label("API URL")}  ${fmt.value(apiUrl)}`);
       console.log(`  ${fmt.label("Config")}   ${fmt.value(CONFIG_FILE)}`);
       console.log();
-      console.log(fmt.info("You can now run: outrive buy / sell / chat"));
+      console.log(fmt.info("Run: outrive status  to see the dashboard"));
       return;
     }
 
     if (poll.body?.status === "expired") {
-      console.log(fmt.err("Session expired. Run `outrive auth` again."));
+      console.log(fmt.err("Session expired. Run outrive auth again."));
       process.exit(1);
     }
 
@@ -266,37 +339,23 @@ async function cmdAuth() {
   }
 
   console.log();
-  console.log(fmt.err("Timed out waiting for authorization. Run `outrive auth` again."));
+  console.log(fmt.err("Timed out waiting for authorization. Run outrive auth again."));
   process.exit(1);
 }
 
 // ── status ────────────────────────────────────────────────────────────────────
 async function cmdStatus() {
   const cfg = await loadConfig();
-  if (!cfg) {
-    console.log(fmt.warn("Not authorized. Run: outrive auth"));
+  if (!cfg?.walletAddress) {
+    console.log(fmt.warn("Not authorized. Run: node outrive-cli.mjs auth"));
     return;
   }
 
-  console.log();
-  console.log(`  ${fmt.label("Wallet")}   ${fmt.value(cfg.walletAddress)}`);
-  console.log(`  ${fmt.label("API URL")}  ${fmt.value(cfg.apiUrl)}`);
-  console.log();
-
-  const sp = spinner("Checking API…");
+  const sp = spinner("Fetching API status…");
   const res = await apiGet(cfg.apiUrl, "/api/system/status").catch(() => null);
-  sp.stop();
+  sp.stop("");
 
-  if (!res?.ok) {
-    console.log(fmt.err("API unreachable — check your API URL."));
-    return;
-  }
-
-  const s = res.body;
-  console.log(fmt.ok("API is online"));
-  if (s?.calibrated)    console.log(`  ${fmt.label("Factory")}  ${fmt.value(s.factoryAddress ?? "—")}`);
-  if (s?.signerAddress) console.log(`  ${fmt.label("Signer")}   ${fmt.value(s.signerAddress)}`);
-  console.log();
+  printDashboard(cfg, res);
 }
 
 // ── chat (core) ───────────────────────────────────────────────────────────────
@@ -341,7 +400,7 @@ async function runChat(cfg, message) {
 // ── buy ───────────────────────────────────────────────────────────────────────
 async function cmdBuy(args) {
   const cfg = await loadConfig();
-  if (!cfg) { console.log(fmt.warn("Not authorized. Run: outrive auth")); return; }
+  if (!cfg?.walletAddress) { console.log(fmt.warn("Not authorized. Run: node outrive-cli.mjs auth")); return; }
 
   const ethAmount    = args[0];
   const tokenAddress = args[1];
@@ -357,7 +416,7 @@ async function cmdBuy(args) {
   }
 
   console.log();
-  console.log(fmt.info(`Buy ${C.bold}${ethAmount} ETH${C.reset} of ${C.bold}$${tokenTicker}${C.reset}`));
+  console.log(fmt.info(`Buy ${C.bold}${ethAmount} ETH${C.reset} of ${C.lime}${C.bold}$${tokenTicker}${C.reset}`));
 
   const message = `buy ${ethAmount} eth of ${tokenName} token at address ${tokenAddress}`;
   await runChat(cfg, message);
@@ -366,7 +425,7 @@ async function cmdBuy(args) {
 // ── sell ──────────────────────────────────────────────────────────────────────
 async function cmdSell(args) {
   const cfg = await loadConfig();
-  if (!cfg) { console.log(fmt.warn("Not authorized. Run: outrive auth")); return; }
+  if (!cfg?.walletAddress) { console.log(fmt.warn("Not authorized. Run: node outrive-cli.mjs auth")); return; }
 
   const tokenAmount  = args[0];
   const tokenAddress = args[1];
@@ -382,7 +441,7 @@ async function cmdSell(args) {
   }
 
   console.log();
-  console.log(fmt.info(`Sell ${C.bold}${Number(tokenAmount).toLocaleString()} $${tokenTicker}${C.reset}`));
+  console.log(fmt.info(`Sell ${C.bold}${Number(tokenAmount).toLocaleString()} ${C.lime}$${tokenTicker}${C.reset}`));
 
   const message = `sell ${tokenAmount} ${tokenName} token at address ${tokenAddress}`;
   await runChat(cfg, message);
@@ -391,11 +450,11 @@ async function cmdSell(args) {
 // ── chat ──────────────────────────────────────────────────────────────────────
 async function cmdChat(args) {
   const cfg = await loadConfig();
-  if (!cfg) { console.log(fmt.warn("Not authorized. Run: outrive auth")); return; }
+  if (!cfg?.walletAddress) { console.log(fmt.warn("Not authorized. Run: node outrive-cli.mjs auth")); return; }
 
   const message = args.join(" ");
   if (!message.trim()) {
-    console.log(fmt.err("Usage: outrive chat \"<your message>\""));
+    console.log(fmt.err('Usage: outrive chat "<your message>"'));
     return;
   }
 
@@ -410,56 +469,59 @@ async function cmdLogout() {
     return;
   }
   await writeFile(CONFIG_FILE, JSON.stringify({}));
-  console.log(fmt.ok("Logged out. Run `outrive auth` to reconnect."));
+  console.log(fmt.ok("Logged out. Run outrive auth to reconnect."));
 }
 
 // ── help ──────────────────────────────────────────────────────────────────────
 function cmdHelp() {
-  console.log(`
-${C.lime}${C.bold}OUTRIVE CLI${C.reset}  ${C.gray}— AI-powered token trading in your terminal${C.reset}
-
-${C.bold}Usage${C.reset}
-  node outrive-cli.mjs <command> [arguments]
-
-${C.bold}Commands${C.reset}
-  ${C.cyan}auth${C.reset}                         Authorize via wallet (required once)
-  ${C.cyan}status${C.reset}                       Show connection and API status
-  ${C.cyan}buy${C.reset} <eth> <address>           Buy tokens using ETH
-  ${C.cyan}sell${C.reset} <amount> <address>       Sell tokens for ETH
-  ${C.cyan}chat${C.reset} <message>                Free-form agent command
-  ${C.cyan}logout${C.reset}                        Remove stored credentials
-  ${C.cyan}help${C.reset}                          Show this help
-
-${C.bold}Options${C.reset} (for buy/sell)
-  --name <NAME>        Token name (for agent context, e.g. OTR)
-  --ticker <TICKER>    Token ticker symbol (e.g. OTR)
-
-${C.bold}Examples${C.reset}
-  ${C.gray}# Authorize once:${C.reset}
-  node outrive-cli.mjs auth
-
-  ${C.gray}# Buy 0.05 ETH of OTR:${C.reset}
-  node outrive-cli.mjs buy 0.05 0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef --name OTR --ticker OTR
-
-  ${C.gray}# Sell 1 million OTR:${C.reset}
-  node outrive-cli.mjs sell 1000000 0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef --name OTR --ticker OTR
-
-  ${C.gray}# Ask the agent anything:${C.reset}
-  node outrive-cli.mjs chat "what tokens are trending right now?"
-
-${C.bold}Config file${C.reset}
-  ${C.gray}${CONFIG_FILE}${C.reset}
-
-${C.bold}Requirements${C.reset}
-  Node.js 18+  (uses native fetch + crypto — no npm install needed)
-`);
+  console.log();
+  console.log(ASCII_LOGO);
+  console.log();
+  console.log(boxTop());
+  console.log(boxLine(`${C.gray}AI-NATIVE TERMINAL INTERFACE FOR VIRTUALS PROTOCOL${C.reset}`));
+  console.log(boxLine(`${C.gray}ROBINHOOD CHAIN · NODE 18+ · ZERO INSTALL${C.reset}`));
+  console.log(boxDiv());
+  console.log(boxLine(`${C.lime}${C.bold}COMMANDS${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.cyan}auth${C.reset}                     ${C.gray}Authorize via wallet (one-time)${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}status${C.reset}                   ${C.gray}Show dashboard (wallet, API, network)${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}buy${C.reset}  ${C.white}<eth> <address>${C.reset}    ${C.gray}Buy tokens with ETH${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}sell${C.reset} ${C.white}<amt> <address>${C.reset}    ${C.gray}Sell tokens for ETH${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}chat${C.reset} ${C.white}"<message>"${C.reset}        ${C.gray}Free-form AI agent command${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}logout${C.reset}                   ${C.gray}Remove stored credentials${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}help${C.reset}                     ${C.gray}Show this screen${C.reset}`));
+  console.log(boxDiv());
+  console.log(boxLine(`${C.lime}${C.bold}OPTIONS  ${C.reset}${C.gray}(for buy / sell)${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.gray}--name   <NAME>   ${C.reset}Token name for agent context`));
+  console.log(boxLine(`  ${C.gray}--ticker <TICKER> ${C.reset}Token ticker symbol`));
+  console.log(boxDiv());
+  console.log(boxLine(`${C.lime}${C.bold}EXAMPLES${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.gray}# authorize once${C.reset}`));
+  console.log(boxLine(`  ${C.white}node outrive-cli.mjs auth${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.gray}# buy 0.05 ETH of OTR${C.reset}`));
+  console.log(boxLine(`  ${C.white}node outrive-cli.mjs buy 0.05 0xd1c262... \\${C.reset}`));
+  console.log(boxLine(`  ${C.white}    --name OTR --ticker OTR${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.gray}# sell 1M OTR${C.reset}`));
+  console.log(boxLine(`  ${C.white}node outrive-cli.mjs sell 1000000 0xd1c262...${C.reset}`));
+  console.log(boxLine());
+  console.log(boxLine(`  ${C.gray}# ask the agent${C.reset}`));
+  console.log(boxLine(`  ${C.white}node outrive-cli.mjs chat "what's trending?"${C.reset}`));
+  console.log(boxDiv());
+  console.log(boxLine(`${C.gray}CONFIG    ${C.reset}${CONFIG_FILE}`));
+  console.log(boxLine(`${C.gray}DOCS      ${C.reset}open the OUTRIVE app → CLI tab`));
+  console.log(boxBottom());
+  console.log();
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 const [,, cmd, ...args] = process.argv;
 
-// Banner
-console.log(`${C.bold}${C.lime}OUTRIVE${C.reset} ${C.gray}cli${C.reset}`);
+// Tiny banner (not the full logo — that's in help/status)
+process.stdout.write(`${C.lime}${C.bold}OUTRIVE${C.reset} ${C.gray}cli${C.reset}\n`);
 
 switch (cmd) {
   case "auth":    await cmdAuth();        break;
@@ -472,7 +534,7 @@ switch (cmd) {
   case "--help":
   case "-h":      cmdHelp();              break;
   case undefined:
-    console.log(fmt.warn("No command given. Run: outrive-cli.mjs help"));
+    cmdHelp();
     break;
   default:
     console.log(fmt.err(`Unknown command: ${cmd}`));
