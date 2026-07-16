@@ -255,7 +255,7 @@ async function cmdAuth() {
   let appUrl = "";
   try {
     console.log(fmt.info("Enter your OUTRIVE API URL"));
-    console.log(fmt.dim("  e.g. https://xxxxx.replit.dev/api-server"));
+    console.log(fmt.dim("  e.g. https://outrive.io/api-server"));
     apiUrl = (await rl.question(`  ${C.cyan}API URL:${C.reset} `)).trim().replace(/\/$/, "");
 
     if (!apiUrl.startsWith("http")) {
@@ -265,7 +265,7 @@ async function cmdAuth() {
 
     console.log();
     console.log(fmt.info("Enter your OUTRIVE web app URL"));
-    console.log(fmt.dim("  e.g. https://xxxxx.replit.dev/outrive"));
+    console.log(fmt.dim("  e.g. https://outrive.io/outrive"));
     appUrl = (await rl.question(`  ${C.cyan}App URL:${C.reset} `)).trim().replace(/\/$/, "");
   } finally {
     rl.close();

@@ -319,7 +319,7 @@ export function CliDocsPage() {
   ║  AI AGENT CLI           ROBINHOOD CHAIN · VIRTUALS PROTOCOL  ║
   ╠══════════════════════════════════════════════════════════════╣
   ║  WALLET    0x74Ae8C6dE15bf...664E6bB45                      ║
-  ║  API       https://your-api.replit.dev/api-server           ║
+  ║  API       https://outrive.io/api-server                    ║
   ║  NETWORK   Robinhood Chain (chainId 4663)                   ║
   ║  FACTORY   0x43e4c17b15365596caae8e7d00e42bc8e988c2d4       ║
   ║  STATUS    ● ONLINE                                          ║
@@ -370,7 +370,7 @@ export function CliDocsPage() {
               rows={[
                 ['Node.js 18+', 'Uses native fetch + crypto (Web Crypto API). No npm install required.'],
                 ['OUTRIVE web app access', 'You need to open the /cli-auth page in a browser once to authorize your wallet.'],
-                ['OUTRIVE API URL', 'The base URL of your OUTRIVE API server (e.g. https://xxxxx.replit.dev/api-server).'],
+                ['OUTRIVE API URL', 'The base URL of the OUTRIVE API server: https://outrive.io/api-server'],
                 ['EVM wallet (MetaMask, etc.)', 'For signing authorization message during outrive auth.'],
                 ['Connected to Robinhood Chain', 'chainId 4663. RPC: https://rpc.mainnet.chain.robinhood.com'],
               ]}
@@ -394,24 +394,25 @@ v20.11.0   ← must be 18.0.0 or higher`}</Code>
 
 OUTRIVE cli
 → Enter your OUTRIVE API URL:
-  API URL: https://xxxxx.replit.dev/api-server
+  API URL: https://outrive.io/api-server
 
 → Enter your OUTRIVE web app URL:
-  App URL: https://xxxxx.replit.dev/outrive
+  App URL: https://outrive.io/outrive
 
 → Registering session…
 
 ╔══════════════════════════════════════════╗
 ║   Open this URL in your browser:         ║
 ║                                          ║
-║   https://...outrive/cli-auth?session=…  ║
+║   https://outrive.io/outrive/            ║
+║   cli-auth?session=550e8400-…            ║
 ╚══════════════════════════════════════════╝
 
 Waiting for authorization… .....
 ✓ Authorization successful!
 
   Wallet   0x74Ae8C6dE15bfef8798Ea058ef174dE664E6bB45
-  API URL  https://xxxxx.replit.dev/api-server
+  API URL  https://outrive.io/api-server
   Config   ~/.outrive/config.json`}</Code>
             </Step>
 
@@ -618,8 +619,8 @@ OUTRIVE cli
           <Section id="cli-s8" n="§8" title="Config & Storage">
             <P>The CLI stores one file on your machine after <Cmd>auth</Cmd>:</P>
             <Code label="~/.outrive/config.json">{`{
-  "apiUrl":        "https://your-api.replit.dev/api-server",
-  "appUrl":        "https://your-app.replit.dev/outrive",
+  "apiUrl":        "https://outrive.io/api-server",
+  "appUrl":        "https://outrive.io/outrive",
   "walletAddress": "0x74Ae8C6dE15bfef8798Ea058ef174dE664E6bB45",
   "sessionId":     "550e8400-e29b-41d4-a716-446655440000"
 }`}</Code>
@@ -657,11 +658,11 @@ OUTRIVE cli
           <Section id="cli-s10" n="§10" title="Full Session Example">
             <Code label="complete VPS session">{`# ─── Step 1: authorize once ───────────────────────────────────────
 $ node outrive-cli.mjs auth
-  API URL: https://xxxxxx.replit.dev/api-server
-  App URL: https://xxxxxx.replit.dev/outrive
+  API URL: https://outrive.io/api-server
+  App URL: https://outrive.io/outrive
 
   Open in browser:
-  https://xxxxxx.replit.dev/outrive/cli-auth?session=550e8400-…
+  https://outrive.io/outrive/cli-auth?session=550e8400-…
 
   (open browser → connect MetaMask → sign message)
 
@@ -681,7 +682,7 @@ $ node outrive-cli.mjs status
   ║   ╚═════╝  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝  ║
   ╠════════════════════════════════════════════════════════════╣
   ║  WALLET    0x74Ae8C6dE15bf...664E6bB45                     ║
-  ║  API       https://xxxxxx.replit.dev/api-server            ║
+  ║  API       https://outrive.io/api-server                   ║
   ║  NETWORK   Robinhood Chain (4663)                           ║
   ║  FACTORY   0x43e4c17b15365596caae8e7d00e42bc8e988c2d4      ║
   ║  STATUS    ● ONLINE                                         ║
