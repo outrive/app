@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sheet } from '@/components/Sheet';
 
-function Section({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+function Section({ id, n, title, children }: { id: string; n: string; title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div id={id} className="flex flex-col gap-4 scroll-mt-32">
       <div className="flex items-baseline gap-3 border-b pb-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
         <span className="font-mono text-[11px] font-bold" style={{ color: 'var(--out-ink)' }}>{n}</span>
         <h2 className="font-mono text-[13px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{title}</h2>
@@ -69,25 +69,57 @@ function Tag({ label, ok }: { label: string; ok: boolean }) {
 }
 
 const TOC = [
-  '1. Executive Summary',
-  '2. Verified vs. Calibration-Required',
-  '3. Network Foundation (Robinhood Chain)',
-  '4. Launch Layer (Virtuals Protocol)',
-  '5. System Architecture',
-  '6. Core Flows (F1–F7)',
-  '7. AI Agent Design',
-  '8. Data Model',
-  '9. CLI Access & Operations',
-  '10. Security Model & Threat Analysis',
-  '11. Environment & Configuration',
-  '12. Roadmap',
-  '13. Token Economics',
-  '14. Risk Disclosure & Legal Posture',
-  '15. Glossary',
+  { label: '1. Executive Summary',                   id: 'wp-s1'  },
+  { label: '2. Verified vs. Calibration-Required',   id: 'wp-s2'  },
+  { label: '3. Network Foundation (Robinhood Chain)', id: 'wp-s3'  },
+  { label: '4. Launch Layer (Virtuals Protocol)',     id: 'wp-s4'  },
+  { label: '5. System Architecture',                 id: 'wp-s5'  },
+  { label: '6. Core Flows (F1–F7)',                  id: 'wp-s6'  },
+  { label: '7. AI Agent Design',                     id: 'wp-s7'  },
+  { label: '8. Data Model',                          id: 'wp-s8'  },
+  { label: '9. CLI Access & Operations',             id: 'wp-s9'  },
+  { label: '10. Security Model & Threat Analysis',   id: 'wp-s10' },
+  { label: '11. Environment & Configuration',        id: 'wp-s11' },
+  { label: '12. Roadmap',                            id: 'wp-s12' },
+  { label: '13. Token Economics',                    id: 'wp-s13' },
+  { label: '14. Risk Disclosure & Legal Posture',    id: 'wp-s14' },
+  { label: '15. Glossary',                           id: 'wp-s15' },
 ];
 
 export function WhitepaperPage() {
-  const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState<number>(0);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Auto-highlight the TOC item that is currently in view
+  useEffect(() => {
+    observerRef.current?.disconnect();
+
+    const sectionEls = TOC.map(t => document.getElementById(t.id)).filter(Boolean) as HTMLElement[];
+    if (sectionEls.length === 0) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        // Pick the topmost visible section
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length > 0) {
+          const idx = TOC.findIndex(t => t.id === visible[0].target.id);
+          if (idx >= 0) setActiveSection(idx);
+        }
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: 0 }
+    );
+
+    sectionEls.forEach(el => observerRef.current!.observe(el));
+    return () => observerRef.current?.disconnect();
+  }, []);
+
+  function scrollTo(i: number) {
+    setActiveSection(i);
+    const el = document.getElementById(TOC[i].id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 flex gap-6">
@@ -96,13 +128,13 @@ export function WhitepaperPage() {
       <aside className="hidden xl:flex flex-col gap-1 w-56 shrink-0 sticky top-28 self-start font-mono text-[10px]">
         <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>CONTENTS</div>
         {TOC.map((item, i) => (
-          <button key={i} onClick={() => setActiveSection(i)}
+          <button key={i} onClick={() => scrollTo(i)}
             className="text-left py-1 px-2 transition-colors border-l-2"
             style={{
               borderLeftColor: activeSection === i ? 'var(--out-ink)' : 'transparent',
               color: activeSection === i ? 'var(--out-ink)' : 'var(--out-muted)',
             }}>
-            {item}
+            {item.label}
           </button>
         ))}
         <div className="mt-4 pt-4 border-t text-[9px] uppercase tracking-widest" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)' }}>
@@ -138,7 +170,7 @@ export function WhitepaperPage() {
           </div>
 
           {/* §1 Executive Summary */}
-          <Section n="§1" title="Executive Summary">
+          <Section id="wp-s1" n="§1" title="Executive Summary">
             <P>
               OUTRIVE is a <Highlight>chat-first launchpad client</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard.
             </P>
@@ -149,7 +181,7 @@ export function WhitepaperPage() {
           </Section>
 
           {/* §2 Verified vs Calibration */}
-          <Section n="§2" title="Verified vs. Calibration-Required">
+          <Section id="wp-s2" n="§2" title="Verified vs. Calibration-Required">
             <P>Honest engineering starts with an inventory of certainty. Every downstream decision traces back to this table.</P>
 
             <div className="font-mono text-[10px] uppercase tracking-widest mb-1 flex items-center gap-2" style={{ color: 'var(--out-ink)' }}>
@@ -193,7 +225,7 @@ export function WhitepaperPage() {
           </Section>
 
           {/* §3 Network Foundation */}
-          <Section n="§3" title="Network Foundation (Robinhood Chain)">
+          <Section id="wp-s3" n="§3" title="Network Foundation (Robinhood Chain)">
             <P>Robinhood Chain is an Ethereum Layer-2 built on Arbitrum technology, fully EVM-compatible, with ETH as the gas token. Standard EVM tooling (viem, wagmi, Foundry, Hardhat) works unmodified.</P>
             <Code>{`MAINNET                              TESTNET
 chainId   4663                       chainId   46630
@@ -218,7 +250,7 @@ API       {explorer}/api/v2          faucet    faucet.testnet.chain.robinhood.co
           </Section>
 
           {/* §4 Launch Layer */}
-          <Section n="§4" title="Launch Layer (Virtuals Protocol)">
+          <Section id="wp-s4" n="§4" title="Launch Layer (Virtuals Protocol)">
             <P>Virtuals Protocol is the launch and tokenization layer for AI agents. A launch through Virtuals has two halves:</P>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {[
@@ -254,7 +286,7 @@ API       {explorer}/api/v2          faucet    faucet.testnet.chain.robinhood.co
           </Section>
 
           {/* §5 Architecture */}
-          <Section n="§5" title="System Architecture">
+          <Section id="wp-s5" n="§5" title="System Architecture">
             <Code>{`┌────────────────────────────────────────────────────────────────────┐
 │                     FRONTEND — React + Vite                         │
 │  ┌─────────────┐  ┌────────────────┐  ┌──────────────────────────┐ │
@@ -299,7 +331,7 @@ API       {explorer}/api/v2          faucet    faucet.testnet.chain.robinhood.co
           </Section>
 
           {/* §6 Core Flows */}
-          <Section n="§6" title="Core Flows (F1–F7)">
+          <Section id="wp-s6" n="§6" title="Core Flows (F1–F7)">
             {[
               {
                 id: 'F1', title: 'INSTANT LAUNCH via chat (primary flow)',
@@ -396,7 +428,7 @@ frontend: dashboard revalidates every 20s (LIVE dot + last-sync time)`,
           </Section>
 
           {/* §7 AI Agent Design */}
-          <Section n="§7" title="AI Agent Design (LLM Layer)">
+          <Section id="wp-s7" n="§7" title="AI Agent Design (LLM Layer)">
             <P><Highlight>Model:</Highlight> Anthropic Messages API with tool use (<code style={{ color: 'var(--out-ink)' }}>claude-sonnet-4-6</code>).</P>
             <P><Highlight>Loop:</Highlight> user msg → LLM → (tool_use? → deterministic execution → tool_result → LLM)* → final text. Streaming to the client via SSE.</P>
 
@@ -419,7 +451,7 @@ frontend: dashboard revalidates every 20s (LIVE dot + last-sync time)`,
           </Section>
 
           {/* §8 Data Model */}
-          <Section n="§8" title="Data Model">
+          <Section id="wp-s8" n="§8" title="Data Model">
             <P>PostgreSQL via Drizzle ORM:</P>
             <Code>{`users        (id, wallet_address UNIQUE, created_at)
 conversations(id, user_id, title, created_at)
@@ -443,7 +475,7 @@ watchlist    (user_id, token_address, PRIMARY KEY(user_id, token_address))`}</Co
           </Section>
 
           {/* §9 CLI */}
-          <Section n="§9" title="CLI Access & Operations">
+          <Section id="wp-s9" n="§9" title="CLI Access & Operations">
             <P>
               OUTRIVE ships two CLI layers: the <Highlight>in-app Agent CLI</Highlight> (browser terminal, natural language + structured commands)
               and the <Highlight>operator scripts</Highlight> (server-side npm tasks for calibration, indexing, and maintenance).
@@ -590,7 +622,7 @@ npm run backfill -- --from-block <n>
           </Section>
 
           {/* §10 Security */}
-          <Section n="§10" title="Security Model & Threat Analysis">
+          <Section id="wp-s10" n="§10" title="Security Model & Threat Analysis">
             <Table
               headers={['THREAT', 'MITIGATION']}
               rows={[
@@ -607,7 +639,7 @@ npm run backfill -- --from-block <n>
           </Section>
 
           {/* §11 Environment */}
-          <Section n="§11" title="Environment & Configuration Reference">
+          <Section id="wp-s11" n="§11" title="Environment & Configuration Reference">
             <Code>{`# REQUIRED
 ANTHROPIC_API_KEY=                 # LLM (Claude Sonnet 4)
 DATABASE_URL=                      # PostgreSQL connection string
@@ -628,7 +660,7 @@ SESSION_SECRET=                    # session signing`}</Code>
           </Section>
 
           {/* §12 Roadmap */}
-          <Section n="§12" title="Roadmap">
+          <Section id="wp-s12" n="§12" title="Roadmap">
             <div className="flex flex-col gap-3">
               {[
                 { ver: 'v1 (CURRENT)', items: ['Chat launch (Instant Launch)', 'Optional initial $VIRTUAL dev buy', 'Live Virtuals Protocol market dashboard', 'Creator-fee readout post-calibration'] },
@@ -651,7 +683,7 @@ SESSION_SECRET=                    # session signing`}</Code>
           </Section>
 
           {/* §13 Token Economics */}
-          <Section n="§13" title="Token Economics">
+          <Section id="wp-s13" n="§13" title="Token Economics">
 
             {/* 13.1 Virtuals Bonding Curve */}
             <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>§13.1 VIRTUALS BONDING CURVE — CONSTANT PRODUCT WITH VIRTUAL RESERVES</div>
@@ -795,7 +827,7 @@ Example (illustrative):
           </Section>
 
           {/* §14 Legal */}
-          <Section n="§14" title="Risk Disclosure & Legal Posture">
+          <Section id="wp-s14" n="§14" title="Risk Disclosure & Legal Posture">
             <div className="border p-4" style={{ borderColor: '#f59e0b', background: '#120f02' }}>
               <p className="text-[11px] leading-relaxed font-mono" style={{ color: '#f59e0b' }}>
                 OUTRIVE is a non-custodial software interface. It never holds user funds or keys, executes nothing without a user signature, and provides no financial advice. Agent/launchpad tokens are highly speculative and may lose all value. Protocol parameters cited here (fees, thresholds, modes) belong to Virtuals Protocol and can change at any time; OUTRIVE's healthcheck-and-config architecture exists precisely because of that. OUTRIVE is not affiliated with Virtuals Protocol, Robinhood, or Anthropic. Operators should obtain their own legal advice for their jurisdiction before public release.
@@ -804,7 +836,7 @@ Example (illustrative):
           </Section>
 
           {/* §15 Glossary */}
-          <Section n="§15" title="Glossary">
+          <Section id="wp-s15" n="§15" title="Glossary">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { term: 'Bonding Curve', def: 'Deterministic pricing contract; buying raises price, selling lowers it.' },

@@ -185,7 +185,7 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
         ),
     ]);
 
-    const wallets = [
+    const allWallets = [
       ...new Set([
         ...launchRows.map(r => r.walletAddress.toLowerCase()),
         ...tokenCreatorRows.map(r => r.creator.toLowerCase()),
@@ -193,37 +193,75 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
       ]),
     ].filter(Boolean);
 
-    // 2. Build Virtuals API query
-    const p = new URLSearchParams();
-    p.set("pagination[page]", "1");
-    p.set("pagination[pageSize]", "100");
-    p.set("sort[0]", "createdAt:desc");
-    p.set("filters[chain][$eq]", "ROBINHOOD");
+    // Virtuals API has URL-length limits; batch wallets in groups of 40
+    // If no wallets known yet, fall back to all Robinhood chain tokens
+    const WALLET_BATCH = 40;
 
-    if (wallets.length > 0) {
-      // Strategy A: filter by known creator wallets
-      wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
-      logger.debug({ walletCount: wallets.length }, "OUTRIVE tokens: filtering by creator wallets");
-    } else {
-      // Strategy C: fall back to all Robinhood chain tokens while DB builds up
-      logger.debug("OUTRIVE tokens: no wallets tracked yet — returning all Robinhood tokens");
+    function buildQuery(wallets: string[]): URLSearchParams {
+      const p = new URLSearchParams();
+      p.set("pagination[page]", "1");
+      p.set("pagination[pageSize]", "100");
+      p.set("sort[0]", "createdAt:desc");
+      p.set("filters[chain][$eq]", "ROBINHOOD");
+      if (wallets.length > 0) {
+        wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
+      }
+      return p;
     }
 
-    const url = `${VIRTUALS_BASE}/virtuals?${p.toString()}`;
-    const apiRes = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
-      signal: AbortSignal.timeout(10_000),
-    });
+    let tokens: ReturnType<typeof normalise>[] = [];
+    let total = 0;
 
-    if (!apiRes.ok) throw new Error(`Virtuals API ${apiRes.status}`);
+    if (allWallets.length === 0) {
+      // No wallets tracked — return all Robinhood tokens (first boot / empty DB)
+      logger.debug("OUTRIVE tokens: no wallets tracked yet — returning all Robinhood tokens");
+      const apiRes = await fetch(`${VIRTUALS_BASE}/virtuals?${buildQuery([]).toString()}`, {
+        headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!apiRes.ok) throw new Error(`Virtuals API ${apiRes.status}`);
+      const json = await apiRes.json() as { data: VItem[]; meta: { pagination: { total: number } } };
+      tokens = (json.data ?? []).map(normalise);
+      total = json.meta?.pagination?.total ?? tokens.length;
+    } else {
+      // Batch wallets to stay within URL limits
+      const batches: string[][] = [];
+      for (let i = 0; i < allWallets.length; i += WALLET_BATCH) {
+        batches.push(allWallets.slice(i, i + WALLET_BATCH));
+      }
+      logger.debug({ walletCount: allWallets.length, batches: batches.length }, "OUTRIVE tokens: filtering by wallets (batched)");
 
-    const json = await apiRes.json() as {
-      data: VItem[];
-      meta: { pagination: { total: number } };
-    };
+      const batchResults = await Promise.all(
+        batches.map(async (batch) => {
+          const apiRes = await fetch(`${VIRTUALS_BASE}/virtuals?${buildQuery(batch).toString()}`, {
+            headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!apiRes.ok) {
+            logger.warn({ status: apiRes.status }, "OUTRIVE tokens batch fetch failed");
+            return { data: [] as VItem[], total: 0 };
+          }
+          const json = await apiRes.json() as { data: VItem[]; meta: { pagination: { total: number } } };
+          return { data: json.data ?? [], total: json.meta?.pagination?.total ?? 0 };
+        })
+      );
 
-    const tokens = (json.data ?? []).map(normalise);
-    const result = { tokens, meta: { total: json.meta?.pagination?.total ?? tokens.length } };
+      // Merge + deduplicate by token address
+      const seen = new Set<string>();
+      for (const { data, total: t } of batchResults) {
+        total += t;
+        for (const item of data) {
+          const addr = (item.tokenAddress ?? item.id ?? "").toLowerCase();
+          if (!addr || seen.has(addr)) continue;
+          seen.add(addr);
+          tokens.push(normalise(item));
+        }
+      }
+      // Sort merged list newest first
+      tokens.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    }
+
+    const result = { tokens, meta: { total } };
 
     cacheSet(cacheKey, result, 20_000); // 20s cache for near-real-time
     res.json(result);
