@@ -111,17 +111,20 @@ setInterval(() => reconcilePendingLaunches().catch(() => {}), 30_000);
 ───────────────────────────────────────────────────────────────────────────── */
 // Map a tokensTable row into a launch-compatible shape so the frontend can render it
 function tokenToLaunch(t: typeof tokensTable.$inferSelect) {
+  const isAppEntry = t.address.startsWith("app-");
+  const appId      = isAppEntry ? t.address.replace("app-", "") : null;
   return {
-    id:           -(Math.abs(parseInt(t.address.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "1", 16)) || 0),
+    id:            isAppEntry ? parseInt(appId ?? "0") : -(Math.abs(parseInt(t.address.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "1", 16)) || 0),
     walletAddress: t.creator,
-    tokenAddress:  t.address,
-    name:          t.name,
-    ticker:        t.ticker,
+    tokenAddress:  isAppEntry ? null : t.address,   // app-* don't have real addresses yet
+    applicationId: appId,
+    name:          isAppEntry ? `Agent #${appId}` : t.name,
+    ticker:        isAppEntry ? `#${appId}` : t.ticker,
     imageUri:      t.imageUri ?? null,
     txHash:        t.txHash ?? "",
     blockNumber:   t.createdBlock ?? null,
     network:       t.network,
-    status:        "confirmed" as const,
+    status:        isAppEntry ? ("pending" as const) : ("confirmed" as const),
     createdAt:     t.createdAt,
   };
 }
@@ -129,8 +132,8 @@ function tokenToLaunch(t: typeof tokensTable.$inferSelect) {
 router.get("/launches", async (req, res): Promise<void> => {
   const params = ListLaunchesQueryParams.safeParse(req.query);
   const walletAddress = params.success ? params.data.walletAddress : undefined;
-  const limit = params.success ? (params.data.limit ?? 20) : 20;
-  const cap = Math.min(limit, 100);
+  const limit = params.success ? (params.data.limit ?? 50) : 50;
+  const cap = Math.min(limit, 500);
 
   // Query launchesTable (frontend-recorded)
   const launchRows = walletAddress
@@ -146,33 +149,28 @@ router.get("/launches", async (req, res): Promise<void> => {
         .orderBy(desc(launchesTable.createdAt))
         .limit(cap);
 
-  // Also query tokensTable (on-chain indexed) to catch launches that bypassed the frontend
+  // On-chain indexed tokens — include app-* (pending) AND confirmed addresses.
+  // Require a real creator wallet (not zero-addr, not empty) so only indexer-captured
+  // launches with a known deployer are returned.
+  const tokenFilter = and(
+    ne(tokensTable.creator, "0x0000000000000000000000000000000000000000"),
+    ne(tokensTable.creator, "")
+  );
   const tokenRows = walletAddress
     ? await db
         .select()
         .from(tokensTable)
-        .where(
-          and(
-            eq(tokensTable.creator, walletAddress.toLowerCase()),
-            not(like(tokensTable.address, "app-%")),
-            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
-          )
-        )
+        .where(and(eq(tokensTable.creator, walletAddress.toLowerCase()), tokenFilter))
         .orderBy(desc(tokensTable.createdAt))
         .limit(cap)
     : await db
         .select()
         .from(tokensTable)
-        .where(
-          and(
-            not(like(tokensTable.address, "app-%")),
-            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
-          )
-        )
+        .where(tokenFilter)
         .orderBy(desc(tokensTable.createdAt))
         .limit(cap);
 
-  // Merge: prefer launchesTable rows (they have richer data); fill gaps from tokensTable
+  // Merge: prefer launchesTable rows; fill gaps from tokensTable
   const seenAddresses = new Set(launchRows.map(l => l.tokenAddress?.toLowerCase()).filter(Boolean));
   const merged = [
     ...launchRows,
@@ -183,6 +181,7 @@ router.get("/launches", async (req, res): Promise<void> => {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, cap);
 
+  // Return array for backward-compat; callers that want total can check .length
   res.json(merged);
 });
 

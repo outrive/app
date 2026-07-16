@@ -5,13 +5,14 @@ import {
   Bot, TrendingUp, LayoutDashboard,
   BookOpen, Play, Terminal, Network,
   HelpCircle, Info, ScrollText,
-  Menu, X, Coins,
+  Menu, X, Coins, Rocket,
 } from 'lucide-react';
 import { Sheet } from '@/components/Sheet';
 import { ChatConsole } from '@/components/ChatConsole';
 import { MarketPanel } from '@/components/MarketPanel';
 import { MarketPage } from '@/pages/MarketPage';
 import { WhitepaperPage } from '@/pages/WhitepaperPage';
+import { LaunchesPage } from '@/pages/LaunchesPage';
 import { OutrivePage } from '@/pages/OutrivePage';
 import { CliDocsPage } from '@/pages/CliDocsPage';
 import { TickerStrip } from '@/components/MarketTicker';
@@ -20,7 +21,7 @@ import { useListLaunches, useGetSystemStatus, useGetMarketSummary } from '@works
 import type { Launch } from '@workspace/api-client-react';
 
 type StepState = 'active' | 'locked' | 'done';
-type View = 'agent' | 'market' | 'dashboard' | 'outrive' | 'docs' | 'faq' | 'architecture' | 'about' | 'howto' | 'cli' | 'whitepaper';
+type View = 'agent' | 'market' | 'launches' | 'dashboard' | 'outrive' | 'docs' | 'faq' | 'architecture' | 'about' | 'howto' | 'cli' | 'whitepaper';
 
 function StepBadge({ label, state }: { label: string; state: StepState }) {
   const color = state === 'active'
@@ -40,6 +41,7 @@ type TabDef = { id: View; label: string; Icon: React.ElementType };
 const APP_TABS: TabDef[] = [
   { id: 'agent',     label: 'AGENT',     Icon: Bot            },
   { id: 'market',    label: 'MARKET',    Icon: TrendingUp     },
+  { id: 'launches',  label: 'LAUNCHES',  Icon: Rocket         },
   { id: 'dashboard', label: 'DASHBOARD', Icon: LayoutDashboard },
   { id: 'outrive',   label: 'OUTRIVE',   Icon: Coins          },
 ];
@@ -1374,6 +1376,7 @@ export default function Home() {
     if (view === 'faq')          return <Faq />;
     if (view === 'about')        return <About />;
     if (view === 'whitepaper')   return <WhitepaperPage />;
+    if (view === 'launches')     return <LaunchesPage />;
     if (view === 'outrive')      return <OutrivePage />;
 
     // market — full-width rich page
