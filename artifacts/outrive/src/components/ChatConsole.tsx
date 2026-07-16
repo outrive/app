@@ -1014,13 +1014,6 @@ export function ChatConsole() {
             >
               <span>◈</span> PROMPT
             </button>
-            <button
-              disabled
-              className="flex items-center gap-1.5 px-3 py-1 uppercase tracking-widest border cursor-not-allowed"
-              style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-ink-dim)', opacity: 0.45 }}
-            >
-              <span>$_</span> CLI <span className="text-[10px] ml-0.5">SOON</span>
-            </button>
           </div>
           <span className="font-mono text-[13px]" style={{ color: 'var(--out-muted)' }}>
             {address
