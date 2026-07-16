@@ -1,4 +1,4 @@
-import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http, getAddress } from "viem";
+import { type Abi, encodeFunctionData, encodeAbiParameters, parseAbi, http, getAddress, parseEther, formatEther } from "viem";
 import { createWalletClient } from "viem";
 import { getPublicClient, getActiveChain } from "./chains.js";
 import { getSignerAccount, getSignerAddress } from "./signerWallet.js";
@@ -55,6 +55,38 @@ const BONDING_V5_ABI: Abi = [
       { name: "", type: "address" },
       { name: "", type: "uint256" },
       { name: "", type: "uint256" },
+    ],
+  },
+  // ── Trading ─────────────────────────────────────────────────────────────
+  {
+    type: "function",
+    name: "buy",
+    stateMutability: "payable",
+    inputs: [
+      { name: "agentToken_", type: "address" },
+      { name: "minAmount_",  type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "sell",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentToken_",   type: "address" },
+      { name: "amountIn_",     type: "uint256" },
+      { name: "minAmountOut_", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "getState",
+    stateMutability: "view",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [
+      { name: "price",  type: "uint256" },
+      { name: "raised", type: "uint256" },
     ],
   },
 ];
@@ -220,7 +252,9 @@ export interface LaunchPreview {
   targetContract: string;
   baseCost: string;
   mode: string;
-  antiSniper: string;   // "60s (1 MIN)" | "DISABLED" | "Xs (N MIN)"
+  antiSniper: string;        // "60s (1 MIN)" | "DISABLED"
+  antiSniperDuration: number; // raw seconds (0 or 60) — used to rebuild calldata
+  imageRef: string;           // current image URL (empty string if none)
 }
 
 // Dev buy is intentionally NOT supported:
@@ -420,6 +454,207 @@ export function buildActivateLaunchTx(tokenAddress: `0x${string}`) {
     to:    BONDING_V5_ADDRESS,
     data,
     value: "0x0" as `0x${string}`,
+  };
+}
+
+// ─── Read bonding curve real-time state ──────────────────────────────────────
+// Returns live price (ETH wei per 1e18 tokens) and raised (total ETH wei raised).
+export async function readBondingCurveState(
+  tokenAddress: `0x${string}`
+): Promise<{ price: bigint; raised: bigint } | { error: string }> {
+  try {
+    const client = getPublicClient();
+    const result = await client.readContract({
+      address: BONDING_V5_ADDRESS,
+      abi:     BONDING_V5_ABI,
+      functionName: "getState",
+      args: [tokenAddress],
+    }) as [bigint, bigint];
+    return { price: result[0], raised: result[1] };
+  } catch (err) {
+    return { error: `Failed to read bonding curve state: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+// ─── Trade preview types ──────────────────────────────────────────────────────
+export interface TradePreview {
+  side: "buy" | "sell";
+  tokenName: string;
+  tokenTicker: string;
+  tokenAddress: string;
+  amountIn: string;       // "0.05 ETH"  or  "500 $TOKEN"
+  amountOutMin: string;   // "~4521 $TOKEN (min)"  or  "~0.048 ETH (min)"
+  priceImpact: string;    // "~0.30%"
+  slippage: number;
+  currentPrice: string;   // "0.00001234 ETH per token"
+  network: string;
+}
+
+export interface TradeTxResult {
+  needsApprove: boolean;
+  approveTx?: { to: `0x${string}`; data: `0x${string}`; value: string };
+  tradeTx:     { to: `0x${string}`; data: `0x${string}`; value: string };
+  preview:     TradePreview;
+}
+
+// ─── Build BUY transaction (ETH → agent token) ───────────────────────────────
+// ETH is native — no approve needed. Single tx: BondingV5.buy(token, minTokens).
+export async function buildBuyTx(params: {
+  tokenAddress: `0x${string}`;
+  ethAmountEther: string;   // e.g. "0.05"
+  slippagePercent?: number; // default 1
+  tokenName: string;
+  tokenTicker: string;
+}): Promise<TradeTxResult | { error: string }> {
+  const slippage = Math.min(Math.max(params.slippagePercent ?? 1, 0.1), 50);
+
+  let ethAmount: bigint;
+  try {
+    ethAmount = parseEther(params.ethAmountEther);
+  } catch {
+    return { error: `Invalid ETH amount: ${params.ethAmountEther}` };
+  }
+  if (ethAmount <= 0n) return { error: "ETH amount must be greater than 0." };
+
+  const state = await readBondingCurveState(params.tokenAddress);
+  if ("error" in state) return { error: state.error };
+  if (state.price === 0n) return { error: "Token price is zero — token may not be active on the bonding curve." };
+
+  // Estimated tokens out = ethAmount * 1e18 / price
+  const estimatedTokens = (ethAmount * 10n ** 18n) / state.price;
+  // minTokenAmount with slippage: estimatedTokens * (100 - slippage) / 100
+  const slippageBps = BigInt(Math.round((100 - slippage) * 100)); // e.g. 1% → 9900
+  const minTokenAmount = (estimatedTokens * slippageBps) / 10000n;
+
+  // Price impact ≈ ethAmount / (raised + ethAmount)
+  const priceImpactPct = state.raised > 0n
+    ? Number((ethAmount * 100000n) / (state.raised + ethAmount)) / 1000
+    : 0;
+
+  const data = encodeFunctionData({
+    abi: BONDING_V5_ABI,
+    functionName: "buy",
+    args: [params.tokenAddress, minTokenAmount],
+  });
+
+  const estTokensDisplay   = (Number(estimatedTokens) / 1e18).toLocaleString("en", { maximumFractionDigits: 2 });
+  const minTokensDisplay   = (Number(minTokenAmount)   / 1e18).toLocaleString("en", { maximumFractionDigits: 2 });
+  const currentPriceDisplay = (Number(state.price) / 1e18).toFixed(10).replace(/\.?0+$/, "");
+
+  return {
+    needsApprove: false,
+    tradeTx: {
+      to:    BONDING_V5_ADDRESS,
+      data,
+      value: ethAmount.toString(),
+    },
+    preview: {
+      side:         "buy",
+      tokenName:    params.tokenName,
+      tokenTicker:  params.tokenTicker,
+      tokenAddress: params.tokenAddress,
+      amountIn:     `${params.ethAmountEther} ETH`,
+      amountOutMin: `~${minTokensDisplay} ${params.tokenTicker} (min, est. ~${estTokensDisplay})`,
+      priceImpact:  `~${priceImpactPct.toFixed(2)}%`,
+      slippage,
+      currentPrice: `${currentPriceDisplay} ETH / token`,
+      network:      "Robinhood Chain (4663)",
+    },
+  };
+}
+
+// ─── Build SELL transaction (agent token → ETH) ───────────────────────────────
+// Sell is nonpayable — if allowance is insufficient, approveTx is returned first.
+export async function buildSellTx(params: {
+  tokenAddress: `0x${string}`;
+  tokenAmountWhole: string;  // e.g. "500" (whole tokens, 18 decimals internally)
+  slippagePercent?: number;
+  tokenName: string;
+  tokenTicker: string;
+  userAddress: `0x${string}`;
+}): Promise<TradeTxResult | { error: string }> {
+  const slippage = Math.min(Math.max(params.slippagePercent ?? 1, 0.1), 50);
+
+  let tokenAmount: bigint;
+  try {
+    tokenAmount = parseEther(params.tokenAmountWhole);
+  } catch {
+    return { error: `Invalid token amount: ${params.tokenAmountWhole}` };
+  }
+  if (tokenAmount <= 0n) return { error: "Token amount must be greater than 0." };
+
+  const state = await readBondingCurveState(params.tokenAddress);
+  if ("error" in state) return { error: state.error };
+  if (state.price === 0n) return { error: "Token price is zero — token may not be active on the bonding curve." };
+
+  // Estimated ETH out = tokenAmount * price / 1e18
+  const estimatedEth = (tokenAmount * state.price) / 10n ** 18n;
+  const slippageBps  = BigInt(Math.round((100 - slippage) * 100));
+  const minEthAmount = (estimatedEth * slippageBps) / 10000n;
+
+  const priceImpactPct = state.raised > 0n
+    ? Number((estimatedEth * 100000n) / state.raised) / 1000
+    : 0;
+
+  // Check ERC-20 allowance on the agent token → BondingV5
+  const client = getPublicClient();
+  let currentAllowance = 0n;
+  try {
+    currentAllowance = await client.readContract({
+      address:      params.tokenAddress,
+      abi:          ERC20_ABI,
+      functionName: "allowance",
+      args:         [params.userAddress, BONDING_V5_ADDRESS],
+    }) as bigint;
+  } catch { /* treat as 0 */ }
+
+  const needsApprove = currentAllowance < tokenAmount;
+
+  let approveTx: TradeTxResult["approveTx"];
+  if (needsApprove) {
+    const approveData = encodeFunctionData({
+      abi:          ERC20_ABI,
+      functionName: "approve",
+      args:         [BONDING_V5_ADDRESS, tokenAmount],
+    });
+    approveTx = {
+      to:    params.tokenAddress,
+      data:  approveData,
+      value: "0x0",
+    };
+  }
+
+  const sellData = encodeFunctionData({
+    abi:          BONDING_V5_ABI,
+    functionName: "sell",
+    args:         [params.tokenAddress, tokenAmount, minEthAmount],
+  });
+
+  const tokenDisplay  = (Number(tokenAmount)   / 1e18).toLocaleString("en", { maximumFractionDigits: 2 });
+  const minEthDisplay = formatEther(minEthAmount);
+  const estEthDisplay = formatEther(estimatedEth);
+  const currentPriceDisplay = (Number(state.price) / 1e18).toFixed(10).replace(/\.?0+$/, "");
+
+  return {
+    needsApprove,
+    approveTx,
+    tradeTx: {
+      to:    BONDING_V5_ADDRESS,
+      data:  sellData,
+      value: "0x0",
+    },
+    preview: {
+      side:         "sell",
+      tokenName:    params.tokenName,
+      tokenTicker:  params.tokenTicker,
+      tokenAddress: params.tokenAddress,
+      amountIn:     `${tokenDisplay} ${params.tokenTicker}`,
+      amountOutMin: `~${minEthDisplay} ETH (min, est. ~${estEthDisplay})`,
+      priceImpact:  `~${priceImpactPct.toFixed(2)}%`,
+      slippage,
+      currentPrice: `${currentPriceDisplay} ETH / token`,
+      network:      "Robinhood Chain (4663)",
+    },
   };
 }
 

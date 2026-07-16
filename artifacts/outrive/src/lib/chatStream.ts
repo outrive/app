@@ -17,12 +17,26 @@ export interface LaunchPreview {
   imageRef: string;          // current image URL (empty string if none)
 }
 
+export interface TradePreview {
+  side: 'buy' | 'sell';
+  tokenName: string;
+  tokenTicker: string;
+  tokenAddress: string;
+  amountIn: string;       // "0.05 ETH" or "500 $TOKEN"
+  amountOutMin: string;   // "~4521 $TOKEN (min)" or "~0.048 ETH (min)"
+  priceImpact: string;    // "~0.30%"
+  slippage: number;       // 1
+  currentPrice: string;   // "0.00001234 ETH per token"
+  network: string;
+}
+
 export type ChatEvent =
   | { type: "text"; content: string }
   | { type: "tool_call"; toolName: string; status: "running" | "done"; duration?: number }
   | { type: "tx_payload"; needsApproval: false; launchTx: UnsignedTx; preview: LaunchPreview }
   | { type: "launch_result"; txHash: `0x${string}`; preview: LaunchPreview }
   | { type: "launch_error"; message: string; preview?: LaunchPreview }
+  | { type: "tx_payload_trade"; needsApprove: boolean; approveTx?: UnsignedTx; tradeTx: UnsignedTx; preview: TradePreview }
   | { type: "credits_required"; freeRemaining: number; otrCredits: number }
   | { type: "done" }
   | { type: "error"; message: string };

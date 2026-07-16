@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sheet } from '@/components/Sheet';
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
 import { getAddress } from 'viem';
-import { streamChat, fetchCredits, type ChatEvent, type CreditInfo, type UnsignedTx, type LaunchPreview } from '@/lib/chatStream';
+import { streamChat, fetchCredits, type ChatEvent, type CreditInfo, type UnsignedTx, type LaunchPreview, type TradePreview } from '@/lib/chatStream';
 import { useRecordLaunch } from '@workspace/api-client-react';
 import { getExplorerUrl } from '@/lib/chains';
 import { LaunchSuccessPanel } from '@/components/LaunchSuccessPanel';
@@ -24,9 +24,18 @@ interface TxPayload {
   serverTxHash?: `0x${string}`; // present when OUTRIVE signed server-side
 }
 
-type SignStep     = 'idle' | 'launch' | 'pending' | 'confirmed' | 'failed';
-type ActivateStep = 'idle' | 'activating' | 'done' | 'failed';
-type InputMode   = 'prompt' | 'cli';
+interface TradePayload {
+  needsApprove: boolean;
+  approveTx?: UnsignedTx;
+  tradeTx: UnsignedTx;
+  preview: TradePreview;
+}
+
+type SignStep      = 'idle' | 'launch' | 'pending' | 'confirmed' | 'failed';
+type ActivateStep  = 'idle' | 'activating' | 'done' | 'failed';
+// Trade step: ready → approving (sell w/ approve) → approve_done → trading → done | failed
+type TradeSignStep = 'idle' | 'ready' | 'approving' | 'approve_done' | 'trading' | 'done' | 'failed';
+type InputMode    = 'prompt' | 'cli';
 type CliColor    = 'ink' | 'dim' | 'text' | 'muted' | 'warn' | 'danger' | 'up' | 'down';
 
 interface CliLine { text: string; color: CliColor; bold?: boolean; }
@@ -291,6 +300,32 @@ export function ChatConsole() {
   const { sendTransaction: sendActivateTx, data: activateHash, isPending: isActivatePending } = useSendTransaction();
   const { isSuccess: isActivateConfirmed } = useWaitForTransactionReceipt({ hash: activateHash });
 
+  // ── Trade state (buy / sell) ────────────────────────────────────────────────
+  const [tradePayload,   setTradePayload]   = useState<TradePayload | null>(null);
+  const [tradeStep,      setTradeStep]      = useState<TradeSignStep>('idle');
+  const [tradeErrorMsg,  setTradeErrorMsg]  = useState<string | null>(null);
+  const [approveTxHash,  setApproveTxHash]  = useState<`0x${string}` | undefined>(undefined);
+  const [tradeTxHash,    setTradeTxHash]    = useState<`0x${string}` | undefined>(undefined);
+  const hasSentApproveRef = useRef(false);
+  const hasSentTradeRef   = useRef(false);
+
+  const {
+    sendTransaction: sendApproveTx,
+    reset: resetApprove,
+    data: approveHash,
+    isPending: isApprovePending,
+    isError: isApproveError,
+  } = useSendTransaction();
+  const {
+    sendTransaction: sendTradeTx,
+    reset: resetTrade,
+    data: tradeHash,
+    isPending: isTradePending,
+    isError: isTradeError,
+  } = useSendTransaction();
+  const { isSuccess: isApproveConfirmed } = useWaitForTransactionReceipt({ hash: approveHash });
+  const { isSuccess: isTradeConfirmed   } = useWaitForTransactionReceipt({ hash: tradeHash });
+
   const recordLaunch = useRecordLaunch();
   const explorerBase = getExplorerUrl();
 
@@ -501,6 +536,60 @@ export function ChatConsole() {
     }
   }, [isActivateConfirmed, activateHash]);
 
+  /* ── Trade: reset when a new tradePayload arrives ── */
+  useEffect(() => {
+    hasSentApproveRef.current = false;
+    hasSentTradeRef.current   = false;
+    setTradeErrorMsg(null);
+    setApproveTxHash(undefined);
+    setTradeTxHash(undefined);
+    resetApprove();
+    resetTrade();
+    setTradeStep(tradePayload ? 'ready' : 'idle');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradePayload]);
+
+  /* ── Trade: approve confirmed → auto-trigger sell ── */
+  useEffect(() => {
+    if (!isApproveConfirmed || tradeStep !== 'approving' || !tradePayload?.tradeTx) return;
+    setTradeStep('trading');
+    hasSentTradeRef.current = true;
+    sendTradeTx(
+      {
+        to:    getAddress(tradePayload.tradeTx.to.toLowerCase() as `0x${string}`),
+        data:  tradePayload.tradeTx.data,
+        value: BigInt(tradePayload.tradeTx.value || '0'),
+      },
+      {
+        onError: (err) => {
+          setTradeErrorMsg(err instanceof Error ? err.message : String(err));
+          setTradeStep('failed');
+        },
+      }
+    );
+  }, [isApproveConfirmed, tradeStep, tradePayload]);
+
+  /* ── Trade: sell / buy confirmed → done ── */
+  useEffect(() => {
+    if (isTradeConfirmed && tradeStep === 'trading') {
+      setTradeStep('done');
+    }
+  }, [isTradeConfirmed, tradeStep]);
+
+  /* ── Trade: error guards (prevent stale isSendError double-fire) ── */
+  useEffect(() => {
+    if (isApproveError && hasSentApproveRef.current && tradeStep === 'approving') {
+      setTradeErrorMsg('Approve rejected or failed.');
+      setTradeStep('failed');
+    }
+  }, [isApproveError, tradeStep]);
+
+  useEffect(() => {
+    if (isTradeError && hasSentTradeRef.current && tradeStep === 'trading') {
+      setTradeStep('failed');
+    }
+  }, [isTradeError, tradeStep]);
+
   /* ═══════════════════════════════════════════════════════════════════════
      STREAM RUNNER
   ═══════════════════════════════════════════════════════════════════════ */
@@ -508,6 +597,7 @@ export function ChatConsole() {
     if (!address || isStreaming) return;
     setIsStreaming(true);
     setTxPayload(null);
+    setTradePayload(null);
     assistantIdRef.current = '';
 
     const newUserMsg: LocalMessage = {
@@ -624,6 +714,14 @@ export function ChatConsole() {
       } else if (event.type === 'tx_payload') {
         setTxPayload(event);
         setSignStep('launch');
+        if (mode === 'cli') setCliLines(prev => [...prev, BL()]);
+      } else if (event.type === 'tx_payload_trade') {
+        setTradePayload({
+          needsApprove: event.needsApprove,
+          approveTx:    event.approveTx,
+          tradeTx:      event.tradeTx,
+          preview:      event.preview,
+        });
         if (mode === 'cli') setCliLines(prev => [...prev, BL()]);
       } else if (event.type === 'credits_required') {
         setIsStreaming(false);
@@ -825,6 +923,75 @@ export function ChatConsole() {
     );
   };
 
+  /* ── Trade handlers ── */
+  const handleApprove = async () => {
+    if (!tradePayload?.approveTx) return;
+    resetApprove();
+    hasSentApproveRef.current = false;
+    setTradeErrorMsg(null);
+    setTradeStep('approving');
+
+    if (chain?.id !== 4663) {
+      try { await switchChainAsync({ chainId: 4663 }); }
+      catch (err) {
+        setTradeErrorMsg(`Chain switch failed: ${err instanceof Error ? err.message : String(err)}`);
+        setTradeStep('failed');
+        return;
+      }
+    }
+
+    hasSentApproveRef.current = true;
+    sendApproveTx(
+      {
+        to:    getAddress(tradePayload.approveTx.to.toLowerCase() as `0x${string}`),
+        data:  tradePayload.approveTx.data,
+        value: 0n,
+      },
+      {
+        onError: (err) => {
+          setTradeErrorMsg(err instanceof Error ? err.message : String(err));
+          setTradeStep('failed');
+        },
+      }
+    );
+  };
+
+  const handleTradeTx = async () => {
+    if (!tradePayload?.tradeTx) return;
+    resetTrade();
+    hasSentTradeRef.current = false;
+    setTradeErrorMsg(null);
+    setTradeStep('trading');
+
+    if (chain?.id !== 4663) {
+      try { await switchChainAsync({ chainId: 4663 }); }
+      catch (err) {
+        setTradeErrorMsg(`Chain switch failed: ${err instanceof Error ? err.message : String(err)}`);
+        setTradeStep('failed');
+        return;
+      }
+    }
+
+    hasSentTradeRef.current = true;
+    sendTradeTx(
+      {
+        to:    getAddress(tradePayload.tradeTx.to.toLowerCase() as `0x${string}`),
+        data:  tradePayload.tradeTx.data,
+        value: BigInt(tradePayload.tradeTx.value || '0'),
+      },
+      {
+        onError: (err) => {
+          setTradeErrorMsg(err instanceof Error ? err.message : String(err));
+          setTradeStep('failed');
+        },
+      }
+    );
+  };
+
+  const handleTradeDiscard = () => {
+    setTradePayload(null);
+  };
+
   /* ═══════════════════════════════════════════════════════════════════════
      RENDER
   ═══════════════════════════════════════════════════════════════════════ */
@@ -993,6 +1160,9 @@ export function ChatConsole() {
             () => setTxPayload(null), activateStep, activateTxHash,
             activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg,
             imageUploading, imagePreviewUrl, handleImageSelect)}
+          {renderTradeWorkOrder(tradePayload, tradeStep, isApprovePending, isTradePending,
+            approveHash, tradeHash, explorerBase, handleApprove, handleTradeTx,
+            handleTradeDiscard, chain?.id, tradeErrorMsg)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -1049,6 +1219,12 @@ export function ChatConsole() {
             setCliLines(prev => [...prev, L('  ✗ work order discarded', 'muted'), BL()]);
           }, activateStep, activateTxHash, activateUnsignedTx ? handleActivate : undefined, chain?.id, txErrorMsg,
             imageUploading, imagePreviewUrl, handleImageSelect)}
+          {renderTradeWorkOrder(tradePayload, tradeStep, isApprovePending, isTradePending,
+            approveHash, tradeHash, explorerBase, handleApprove, handleTradeTx,
+            () => {
+              setTradePayload(null);
+              setCliLines(prev => [...prev, L('  ✗ trade order discarded', 'muted'), BL()]);
+            }, chain?.id, tradeErrorMsg)}
           {launchSuccess && (
             <LaunchSuccessPanel
               name={launchSuccess.name}
@@ -1419,6 +1595,166 @@ function renderWorkOrder(
           <button onClick={handleLaunch}
             className="flex-1 border border-[var(--out-ink)] px-4 py-2 text-[var(--out-ink)] font-mono text-[11px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
             SIGN &amp; LAUNCH →
+          </button>
+          <button onClick={handleDiscard}
+            className="border border-[var(--out-ink-dim)] px-4 py-2 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">
+            DISCARD
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRADE WORK ORDER CARD
+═══════════════════════════════════════════════════════════════════════════ */
+function renderTradeWorkOrder(
+  tradePayload:    { needsApprove: boolean; approveTx?: UnsignedTx; tradeTx: UnsignedTx; preview: TradePreview } | null,
+  tradeStep:       'idle' | 'ready' | 'approving' | 'approve_done' | 'trading' | 'done' | 'failed',
+  isApprovePending: boolean,
+  isTradePending:   boolean,
+  approveHash:     `0x${string}` | undefined,
+  tradeHash:       `0x${string}` | undefined,
+  explorerBase:    string,
+  handleApprove:   () => void,
+  handleTradeTx:   () => void,
+  handleDiscard:   () => void,
+  walletChainId?:  number,
+  tradeErrorMsg?:  string | null,
+) {
+  if (!tradePayload || tradeStep === 'idle') return null;
+
+  const { preview } = tradePayload;
+  const isBuy       = preview.side === 'buy';
+  const totalSteps  = isBuy ? 1 : (tradePayload.needsApprove ? 2 : 1);
+  const isPending   = isApprovePending || isTradePending || tradeStep === 'approving' || tradeStep === 'trading';
+
+  const rows: [string, string][] = [
+    ['TYPE',         isBuy ? 'BUY (ETH → TOKEN)'  : 'SELL (TOKEN → ETH)'],
+    ['TOKEN',        `${preview.tokenName}  (${preview.tokenTicker})`],
+    ['ADDRESS',      `${preview.tokenAddress.slice(0, 10)}…${preview.tokenAddress.slice(-6)}`],
+    ['YOU SEND',     preview.amountIn],
+    ['YOU RECEIVE',  preview.amountOutMin],
+    ['SPOT PRICE',   preview.currentPrice],
+    ['PRICE IMPACT', preview.priceImpact],
+    ['SLIPPAGE',     `${preview.slippage}%`],
+    ['NETWORK',      preview.network],
+    ...(totalSteps === 2 ? [['STEPS', 'APPROVE token, then SELL'] as [string, string]] : []),
+  ];
+
+  return (
+    <div className="my-4 border border-[var(--out-ink)] bg-[#0A100A] p-4 font-mono text-xs w-full">
+      {/* Header */}
+      <div className="border-b border-[var(--out-ink)] pb-2 mb-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+        <span className="text-[var(--out-ink)] uppercase tracking-[0.12em] font-bold text-[13px]">
+          ▲ WORK ORDER — {isBuy ? 'BUY TOKEN' : 'SELL TOKEN'}
+        </span>
+        <span className="sm:ml-auto text-[var(--out-muted)] text-[12px] font-normal uppercase tracking-widest">
+          VIRTUALS PROTOCOL / ROBINHOOD CHAIN
+        </span>
+      </div>
+
+      {/* Fields */}
+      <div className="space-y-1.5 mb-4">
+        {rows.map(([label, val]) => (
+          <div key={label} className="flex items-end gap-1">
+            <span className="text-[var(--out-muted)] shrink-0 w-28 sm:w-36 text-[12px] sm:text-[13px]">{label}</span>
+            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] mb-[3px]" />
+            <span className="text-[var(--out-text)] text-right text-[12px] sm:text-[13px] max-w-[160px] sm:max-w-[220px] truncate">{val}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Chain warning */}
+      {walletChainId !== undefined && walletChainId !== 4663 && walletChainId !== 46630 && tradeStep !== 'done' && (
+        <div className="mb-4 px-3 py-2 border text-[13px] font-mono uppercase tracking-wide flex items-center gap-2"
+          style={{ borderColor: 'var(--out-warn)', color: 'var(--out-warn)', background: 'rgba(255,160,0,0.05)' }}>
+          <span>⚠</span>
+          <span>WALLET ON WRONG CHAIN (chainId {walletChainId}) — signing will switch to Robinhood Chain (4663) first</span>
+        </div>
+      )}
+
+      {/* State-driven actions */}
+      {tradeStep === 'done' ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="text-[13px] border border-[var(--out-ink)] px-2 py-0.5 text-[var(--out-ink)]">
+              ✓ {isBuy ? 'BUY' : 'SELL'} CONFIRMED
+            </span>
+            <span className="text-[var(--out-ink)] text-[13px] font-bold">TRANSACTION COMPLETE</span>
+          </div>
+          <div className="flex flex-wrap gap-4 mt-1">
+            {(tradeHash ?? approveHash) && (
+              <a href={`${explorerBase}/tx/${tradeHash ?? approveHash}`} target="_blank" rel="noreferrer"
+                className="text-[var(--out-ink-dim)] hover:text-[var(--out-ink)] underline decoration-dotted underline-offset-4 text-[13px]">
+                VIEW TX ↗
+              </a>
+            )}
+          </div>
+          <button onClick={handleDiscard}
+            className="mt-2 border border-[var(--out-ink-dim)] px-4 py-1 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">
+            DISMISS
+          </button>
+        </div>
+      ) : tradeStep === 'failed' ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] border border-[var(--out-danger)] px-2 py-0.5 text-[var(--out-danger)]">✗ FAILED</span>
+              <span className="text-[13px]" style={{ color: 'var(--out-danger)' }}>
+                {tradeErrorMsg ? 'TX ERROR — see details below' : 'REJECTED OR REVERTED — check wallet & network'}
+              </span>
+            </div>
+            {tradeErrorMsg && (
+              <div className="px-2 py-1.5 text-[12px] font-mono leading-relaxed break-all"
+                style={{ background: 'rgba(255,40,40,0.06)', border: '1px solid rgba(255,40,40,0.25)', color: 'var(--out-danger)', opacity: 0.85 }}>
+                {tradeErrorMsg}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={tradePayload.needsApprove && !isBuy ? handleApprove : handleTradeTx}
+              className="flex-1 border border-[var(--out-ink)] px-4 py-2 text-[var(--out-ink)] font-mono text-[11px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+              RETRY →
+            </button>
+            <button onClick={handleDiscard}
+              className="border border-[var(--out-ink-dim)] px-4 py-2 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">
+              DISCARD
+            </button>
+          </div>
+        </div>
+      ) : isPending ? (
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] border border-[var(--out-warn)] px-2 py-0.5 text-[var(--out-warn)] animate-pulse">
+            {tradeStep === 'approving' ? 'APPROVING…' : 'PENDING…'}
+          </span>
+          <span className="text-[var(--out-muted)] text-[13px]">AWAITING WALLET CONFIRMATION…</span>
+        </div>
+      ) : tradePayload.needsApprove && !isBuy ? (
+        /* Sell with approve — 2-step */
+        <div className="flex flex-col gap-2">
+          <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
+            STEP 1/2 — Approve ${preview.tokenTicker} spend on BondingV5, then STEP 2/2 executes automatically.
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleApprove}
+              className="flex-1 border border-[var(--out-ink)] px-4 py-2 text-[var(--out-ink)] font-mono text-[11px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+              STEP 1/2 — APPROVE ${preview.tokenTicker} →
+            </button>
+            <button onClick={handleDiscard}
+              className="border border-[var(--out-ink-dim)] px-4 py-2 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">
+              DISCARD
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Buy or sell with sufficient allowance — 1-step */
+        <div className="flex gap-3">
+          <button onClick={handleTradeTx}
+            className="flex-1 border border-[var(--out-ink)] px-4 py-2 text-[var(--out-ink)] font-mono text-[11px] uppercase tracking-widest hover:bg-[var(--out-ink)] hover:text-black transition-colors">
+            {isBuy ? 'SIGN & BUY →' : 'SIGN & SELL →'}
           </button>
           <button onClick={handleDiscard}
             className="border border-[var(--out-ink-dim)] px-4 py-2 text-[var(--out-muted)] font-mono text-[11px] uppercase hover:text-[var(--out-ink)] transition-colors">

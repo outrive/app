@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import { conversationsTable, messagesTable, launchesTable, tokensTable, chatCreditsTable, FREE_CHAT_LIMIT, OTR_PER_CREDIT } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { getPublicClient } from "../lib/chains.js";
-import { buildLaunchTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
+import { buildLaunchTx, buildBuyTx, buildSellTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
 import { checkLaunchRateLimit } from "../lib/rateLimit.js";
 import { cacheGet, cacheSet } from "../lib/cache.js";
 import { SYSTEM_PROMPT } from "../lib/agentPrompt.js";
@@ -72,6 +72,32 @@ const tools: Anthropic.Tool[] = [
     description: "Return accurate copy explaining Virtuals' three launch modes: Instant Launch, Fund Raise, and 60 Days Experiment",
     input_schema: { type: "object" as const, properties: {} },
   },
+  {
+    name: "buy_token",
+    description: "Build an unsigned ETH transaction to buy an agent token on the Robinhood Chain bonding curve. User pays ETH (native), receives agent tokens. No ERC-20 approve needed. Fetches real-time price from the bonding curve and shows a Work Order card for the user to confirm before signing. Ask for tokenAddress and ethAmount if not provided.",
+    input_schema: {
+      type: "object" as const,
+      required: ["tokenAddress", "ethAmount"],
+      properties: {
+        tokenAddress: { type: "string", description: "Agent token contract address (0x…)" },
+        ethAmount:    { type: "string", description: "Amount of ETH to spend, as decimal string e.g. '0.05'" },
+        slippage:     { type: "number", description: "Slippage tolerance in percent (default 1, max 50)" },
+      },
+    },
+  },
+  {
+    name: "sell_token",
+    description: "Build an unsigned transaction to sell an agent token for ETH on the Robinhood Chain bonding curve. Checks ERC-20 allowance first — if insufficient, an approve tx is shown before the sell tx. Fetches real-time price. Ask for tokenAddress and tokenAmount if not provided.",
+    input_schema: {
+      type: "object" as const,
+      required: ["tokenAddress", "tokenAmount"],
+      properties: {
+        tokenAddress: { type: "string", description: "Agent token contract address (0x…)" },
+        tokenAmount:  { type: "string", description: "Amount of tokens to sell, as decimal string e.g. '500'" },
+        slippage:     { type: "number", description: "Slippage tolerance in percent (default 1, max 50)" },
+      },
+    },
+  },
 ];
 
 type ToolInput = {
@@ -82,13 +108,17 @@ type ToolInput = {
   anti_sniper_minutes?: number;
   address?: string;
   tab?: "newest" | "trending";
+  tokenAddress?: string;
+  ethAmount?: string;
+  tokenAmount?: string;
+  slippage?: number;
 };
 
 async function executeTool(
   toolName: string,
   toolInput: ToolInput,
   walletAddress: string
-): Promise<{ result: string; txPayload?: unknown; launchResult?: { txHash: `0x${string}`; preview: unknown } }> {
+): Promise<{ result: string; txPayload?: unknown; tradePayload?: unknown; launchResult?: { txHash: `0x${string}`; preview: unknown } }> {
   switch (toolName) {
     case "launch_agent_token": {
       const { name, ticker, description = "", image_ref = "", anti_sniper_minutes } = toolInput;
@@ -222,10 +252,77 @@ async function executeTool(
     case "explain_launch_modes":
       return {
         result: `Virtuals Protocol offers three launch modes:\n\n` +
-          `1. INSTANT LAUNCH — Quickest path. No base fee; you pay only network gas in ETH. Token trades on a bonding curve paired with $VIRTUAL immediately. This is the mode OUTRIVE automates.\n\n` +
-          `2. FUND RAISE — Set a funding target in $VIRTUAL before the token launches publicly. Contributors can back the project before the curve opens. Configure at app.virtuals.io.\n\n` +
-          `3. 60 DAYS EXPERIMENT — Extended incubation period for community building before the token goes live. Configure at app.virtuals.io.\n\nFor Fund Raise and 60 Days Experiment, go to https://app.virtuals.io and use the Launch Token page.`,
+          `1. INSTANT LAUNCH — Quickest path. No base fee; you pay only network gas in ETH. Token trades on a bonding curve paired with ETH on Robinhood Chain. This is the mode OUTRIVE automates.\n\n` +
+          `2. FUND RAISE — Set a funding target before the token launches publicly. Configure at app.virtuals.io.\n\n` +
+          `3. 60 DAYS EXPERIMENT — Extended incubation period. Configure at app.virtuals.io.\n\nFor Fund Raise and 60 Days Experiment, go to https://app.virtuals.io and use the Launch Token page.`,
       };
+
+    case "buy_token": {
+      const { tokenAddress, ethAmount, slippage } = toolInput;
+      if (!tokenAddress || !ethAmount) {
+        return { result: "ERROR: tokenAddress and ethAmount are required. Ask the user for the token address and how much ETH they want to spend." };
+      }
+
+      // Look up token name/ticker from DB
+      const [token] = await db.select().from(tokensTable).where(eq(tokensTable.address, tokenAddress.toLowerCase()));
+      const tokenName   = token?.name   ?? `Token ${tokenAddress.slice(0,8)}…`;
+      const tokenTicker = token?.ticker ?? "TOKEN";
+
+      const result = await buildBuyTx({
+        tokenAddress:   tokenAddress as `0x${string}`,
+        ethAmountEther: ethAmount,
+        slippagePercent: slippage,
+        tokenName,
+        tokenTicker,
+      });
+
+      if ("error" in result) return { result: `ERROR: ${result.error}` };
+
+      return {
+        result: `BUY WORK ORDER READY — Spending ${result.preview.amountIn} to buy ${tokenTicker}. Estimated receive: ${result.preview.amountOutMin}. Price impact: ${result.preview.priceImpact}. Review the Work Order and sign to execute on-chain.`,
+        tradePayload: {
+          needsApprove: result.needsApprove,
+          tradeTx:      result.tradeTx,
+          preview:      result.preview,
+        },
+      };
+    }
+
+    case "sell_token": {
+      const { tokenAddress, tokenAmount, slippage } = toolInput;
+      if (!tokenAddress || !tokenAmount) {
+        return { result: "ERROR: tokenAddress and tokenAmount are required. Ask the user for the token address and how many tokens they want to sell." };
+      }
+      if (!walletAddress || walletAddress === "0x0000000000000000000000000000000000000000") {
+        return { result: "ERROR: Wallet not connected." };
+      }
+
+      const [token] = await db.select().from(tokensTable).where(eq(tokensTable.address, tokenAddress.toLowerCase()));
+      const tokenName   = token?.name   ?? `Token ${tokenAddress.slice(0,8)}…`;
+      const tokenTicker = token?.ticker ?? "TOKEN";
+
+      const result = await buildSellTx({
+        tokenAddress:     tokenAddress as `0x${string}`,
+        tokenAmountWhole: tokenAmount,
+        slippagePercent:  slippage,
+        tokenName,
+        tokenTicker,
+        userAddress: walletAddress as `0x${string}`,
+      });
+
+      if ("error" in result) return { result: `ERROR: ${result.error}` };
+
+      const steps = result.needsApprove ? "2 steps: APPROVE then SELL" : "1 step: SELL";
+      return {
+        result: `SELL WORK ORDER READY — Selling ${result.preview.amountIn}. Estimated receive: ${result.preview.amountOutMin}. Price impact: ${result.preview.priceImpact}. ${steps}. Review the Work Order and sign to execute on-chain.`,
+        tradePayload: {
+          needsApprove: result.needsApprove,
+          approveTx:    result.approveTx,
+          tradeTx:      result.tradeTx,
+          preview:      result.preview,
+        },
+      };
+    }
 
     default:
       return { result: `Unknown tool: ${toolName}` };
@@ -338,6 +435,8 @@ router.post("/chat", async (req: Request, res: Response): Promise<void> => {
             sendEvent({ type: "launch_result", ...result.launchResult });
           } else if (result.txPayload) {
             sendEvent({ type: "tx_payload", ...result.txPayload });
+          } else if (result.tradePayload) {
+            sendEvent({ type: "tx_payload_trade", ...result.tradePayload });
           }
 
           toolResults.push({
