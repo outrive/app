@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { launchesTable, usersTable } from "@workspace/db";
-import { eq, desc, isNull, isNotNull } from "drizzle-orm";
+import { launchesTable, usersTable, tokensTable } from "@workspace/db";
+import { eq, desc, isNull, isNotNull, and, not, like, ne } from "drizzle-orm";
 import { ListLaunchesQueryParams, RecordLaunchBody } from "@workspace/api-zod";
 import { getPublicClient } from "../lib/chains.js";
 import { logger } from "../lib/logger.js";
@@ -70,25 +70,81 @@ backfillTokenAddresses().catch(() => {});
 /* ─────────────────────────────────────────────────────────────────────────────
    ROUTES
 ───────────────────────────────────────────────────────────────────────────── */
+// Map a tokensTable row into a launch-compatible shape so the frontend can render it
+function tokenToLaunch(t: typeof tokensTable.$inferSelect) {
+  return {
+    id:           -(Math.abs(parseInt(t.address.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "1", 16)) || 0),
+    walletAddress: t.creator,
+    tokenAddress:  t.address,
+    name:          t.name,
+    ticker:        t.ticker,
+    imageUri:      t.imageUri ?? null,
+    txHash:        t.txHash ?? "",
+    blockNumber:   t.createdBlock ?? null,
+    network:       t.network,
+    status:        "confirmed" as const,
+    createdAt:     t.createdAt,
+  };
+}
+
 router.get("/launches", async (req, res): Promise<void> => {
   const params = ListLaunchesQueryParams.safeParse(req.query);
   const walletAddress = params.success ? params.data.walletAddress : undefined;
   const limit = params.success ? (params.data.limit ?? 20) : 20;
+  const cap = Math.min(limit, 100);
 
-  const launches = walletAddress
+  // Query launchesTable (frontend-recorded)
+  const launchRows = walletAddress
     ? await db
         .select()
         .from(launchesTable)
         .where(eq(launchesTable.walletAddress, walletAddress.toLowerCase()))
         .orderBy(desc(launchesTable.createdAt))
-        .limit(Math.min(limit, 100))
+        .limit(cap)
     : await db
         .select()
         .from(launchesTable)
         .orderBy(desc(launchesTable.createdAt))
-        .limit(Math.min(limit, 100));
+        .limit(cap);
 
-  res.json(launches);
+  // Also query tokensTable (on-chain indexed) to catch launches that bypassed the frontend
+  const tokenRows = walletAddress
+    ? await db
+        .select()
+        .from(tokensTable)
+        .where(
+          and(
+            eq(tokensTable.creator, walletAddress.toLowerCase()),
+            not(like(tokensTable.address, "app-%")),
+            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
+          )
+        )
+        .orderBy(desc(tokensTable.createdAt))
+        .limit(cap)
+    : await db
+        .select()
+        .from(tokensTable)
+        .where(
+          and(
+            not(like(tokensTable.address, "app-%")),
+            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
+          )
+        )
+        .orderBy(desc(tokensTable.createdAt))
+        .limit(cap);
+
+  // Merge: prefer launchesTable rows (they have richer data); fill gaps from tokensTable
+  const seenAddresses = new Set(launchRows.map(l => l.tokenAddress?.toLowerCase()).filter(Boolean));
+  const merged = [
+    ...launchRows,
+    ...tokenRows
+      .filter(t => !seenAddresses.has(t.address.toLowerCase()))
+      .map(tokenToLaunch),
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, cap);
+
+  res.json(merged);
 });
 
 /* GET /launches/addresses — all token addresses launched via OUTRIVE (backfill-augmented). */
@@ -104,13 +160,28 @@ router.get("/launches/addresses", async (_req, res): Promise<void> => {
 });
 
 /* GET /launches/creators — all unique creator wallets that have ever launched via OUTRIVE.
-   This is the primary filter for the ▲ OUTRIVE tab: match token.creator against these wallets. */
+   This is the primary filter for the ▲ OUTRIVE tab: match token.creator against these wallets.
+   Sources: launchesTable (frontend-recorded) + tokensTable (on-chain indexed). */
 router.get("/launches/creators", async (_req, res): Promise<void> => {
-  const rows = await db
-    .select({ walletAddress: launchesTable.walletAddress })
-    .from(launchesTable)
-    .orderBy(desc(launchesTable.createdAt));
-  const creators = [...new Set(rows.map(r => r.walletAddress.toLowerCase()))];
+  const [launchRows, tokenRows] = await Promise.all([
+    db.select({ walletAddress: launchesTable.walletAddress }).from(launchesTable),
+    db
+      .select({ creator: tokensTable.creator })
+      .from(tokensTable)
+      .where(
+        and(
+          not(like(tokensTable.address, "app-%")),
+          ne(tokensTable.creator, "0x0000000000000000000000000000000000000000"),
+          ne(tokensTable.creator, "")
+        )
+      ),
+  ]);
+  const creators = [
+    ...new Set([
+      ...launchRows.map(r => r.walletAddress.toLowerCase()),
+      ...tokenRows.map(r => r.creator.toLowerCase()),
+    ]),
+  ];
   res.json({ creators });
 });
 

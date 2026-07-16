@@ -68,13 +68,21 @@ async function processPersonaLog(
       ticker = rawSymbol as string;
     } catch { /* use defaults */ }
 
+    // Inherit the real creator from the PROTOTYPE placeholder row (app-{virtualId})
+    const protoRows = await db
+      .select({ creator: tokensTable.creator })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, `app-${virtualId}`))
+      .limit(1);
+    const creator = protoRows[0]?.creator || "0x0000000000000000000000000000000000000000";
+
     await db
       .insert(tokensTable)
       .values({
         address: tokenAddress.toLowerCase(),
         name,
         ticker,
-        creator: "0x0000000000000000000000000000000000000000",
+        creator,
         createdBlock: blockNumber,
         network: chain.id === 4663 ? "mainnet" : "testnet",
         txHash,
@@ -82,9 +90,9 @@ async function processPersonaLog(
       })
       .onConflictDoUpdate({
         target: [tokensTable.address],
-        set: { name, ticker, phase: "ACTIVE" },
+        set: { name, ticker, phase: "ACTIVE", creator },
       });
-    logger.info({ virtualId, tokenAddress, name, ticker }, "Agent graduated from NewPersona event");
+    logger.info({ virtualId, tokenAddress, name, ticker, creator }, "Agent graduated from NewPersona event");
   } catch (err) {
     logger.error({ err, tokenAddress }, "Failed to index graduated agent");
   }
