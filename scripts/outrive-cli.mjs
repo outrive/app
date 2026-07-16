@@ -484,7 +484,7 @@ function cmdHelp() {
   console.log(boxLine(`${C.lime}${C.bold}COMMANDS${C.reset}`));
   console.log(boxLine());
   console.log(boxLine(`  ${C.cyan}auth${C.reset}                     ${C.gray}Authorize via wallet (one-time)${C.reset}`));
-  console.log(boxLine(`  ${C.cyan}status${C.reset}                   ${C.gray}Show dashboard (wallet, API, network)${C.reset}`));
+  console.log(boxLine(`  ${C.cyan}status${C.reset}                   ${C.gray}Wallet, API & network dashboard${C.reset}`));
   console.log(boxLine(`  ${C.cyan}buy${C.reset}  ${C.white}<eth> <address>${C.reset}    ${C.gray}Buy tokens with ETH${C.reset}`));
   console.log(boxLine(`  ${C.cyan}sell${C.reset} ${C.white}<amt> <address>${C.reset}    ${C.gray}Sell tokens for ETH${C.reset}`));
   console.log(boxLine(`  ${C.cyan}chat${C.reset} ${C.white}"<message>"${C.reset}        ${C.gray}Free-form AI agent command${C.reset}`));
