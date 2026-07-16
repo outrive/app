@@ -173,10 +173,23 @@ export function LaunchesPage() {
   // Bulk-fetch the full Robinhood token list from Virtuals API (already server-cached, fast).
   const { data: virtualsTokens } = useQuery<{ tokens: { address: string; image: string | null }[] }>({
     queryKey: ['virtuals-tokens-bulk'],
-    queryFn: () =>
-      fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=100&sort=createdAt:desc'))
-        .then(r => r.ok ? r.json() : { tokens: [] })
-        .catch(() => ({ tokens: [] })),
+    queryFn: async () => {
+      // Fetch two sort orders in parallel so we cover both newest AND highest-mcap tokens
+      const [recents, topMcap] = await Promise.all([
+        fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=200&sort=createdAt:desc'))
+          .then(r => r.ok ? r.json() : { tokens: [] }).catch(() => ({ tokens: [] })),
+        fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=200&sort=mcapInVirtual:desc'))
+          .then(r => r.ok ? r.json() : { tokens: [] }).catch(() => ({ tokens: [] })),
+      ]);
+      // Merge and deduplicate by address
+      const seen = new Set<string>();
+      const merged: { address: string; image: string | null }[] = [];
+      for (const t of [...(recents?.tokens ?? []), ...(topMcap?.tokens ?? [])]) {
+        const key = (t.address ?? '').toLowerCase();
+        if (key && !seen.has(key)) { seen.add(key); merged.push(t); }
+      }
+      return { tokens: merged };
+    },
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });

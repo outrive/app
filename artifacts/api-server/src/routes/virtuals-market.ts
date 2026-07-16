@@ -477,8 +477,7 @@ router.get("/virtuals/tokens/:id/ohlcv", async (req, res): Promise<void> => {
 
 // GET /api/virtuals/token-by-address/:address
 // Looks up a single Virtuals token by its on-chain contract address.
-// Strategy: scan market pages (100 per page, ROBINHOOD chain) until address is found.
-// The Virtuals API does not reliably support filters[tokenAddress][$eqi] for all tokens.
+// Fast path: direct address filter + parallel bulk pages (server-cached responses reused).
 router.get("/virtuals/token-by-address/:address", async (req, res): Promise<void> => {
   const rawAddr = req.params.address.toLowerCase();
   const cacheKey = `virtuals:by-addr:${rawAddr}`;
@@ -486,44 +485,89 @@ router.get("/virtuals/token-by-address/:address", async (req, res): Promise<void
   if (cached) { res.json(cached); return; }
 
   try {
-    // Scan up to 15 pages × 100 tokens = 1500 tokens across both chains.
-    // Alternate sort orders: newest first (covers recent launches), then by mcap.
-    const CHAINS  = ["ROBINHOOD", "BASE"];
-    const SORTS   = ["createdAt:desc", "mcapInVirtual:desc"];
-    const PAGE_SZ = 100;
-    const MAX_PAGES = 8; // per sort×chain combination
+    // ── Fast path 1: direct tokenAddress filter (single API call, <1s if supported) ──
+    try {
+      const p = new URLSearchParams();
+      p.set("pagination[pageSize]", "5");
+      p.set("filters[tokenAddress][$eqi]", req.params.address);
+      const r = await fetch(`${VIRTUALS_BASE}/virtuals?${p}`, {
+        headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (r.ok) {
+        const j = await r.json() as { data: VItem[] };
+        const match = (j.data ?? []).find(item =>
+          (item.tokenAddress ?? "").toLowerCase() === rawAddr ||
+          (item.preToken     ?? "").toLowerCase() === rawAddr
+        );
+        if (match) {
+          const token = normalise(match);
+          cacheSet(cacheKey, token, 300_000);
+          res.json(token); return;
+        }
+      }
+    } catch { /* fall through */ }
 
+    // ── Fast path 2: scan two sort orders in parallel (200 tokens each, server cache reused) ──
+    const PAGE_SZ = 200;
+    const fetchPage = async (sort: string, chain: string) => {
+      const p = new URLSearchParams();
+      p.set("pagination[page]",     "1");
+      p.set("pagination[pageSize]", String(PAGE_SZ));
+      p.set("sort[0]",              sort);
+      p.set("filters[chain][$eq]",  chain);
+      const r = await fetch(`${VIRTUALS_BASE}/virtuals?${p}`, {
+        headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!r.ok) return [] as VItem[];
+      const j = await r.json() as { data: VItem[] };
+      return j.data ?? [] as VItem[];
+    };
+
+    const pages = await Promise.all([
+      fetchPage("createdAt:desc",     "ROBINHOOD"),
+      fetchPage("mcapInVirtual:desc", "ROBINHOOD"),
+    ]);
+
+    for (const items of pages) {
+      const match = items.find(item =>
+        (item.tokenAddress ?? "").toLowerCase() === rawAddr ||
+        (item.preToken     ?? "").toLowerCase() === rawAddr
+      );
+      if (match) {
+        const token = normalise(match);
+        cacheSet(cacheKey, token, 300_000);
+        res.json(token); return;
+      }
+    }
+
+    // ── Slow fallback: page-by-page scan (only if not in first 200 of either sort) ──
+    const CHAINS = ["ROBINHOOD", "BASE"];
+    const SORTS  = ["createdAt:desc", "mcapInVirtual:desc"];
     for (const sort of SORTS) {
       for (const chain of CHAINS) {
-        for (let page = 1; page <= MAX_PAGES; page++) {
+        for (let page = 2; page <= 5; page++) {
           const p = new URLSearchParams();
           p.set("pagination[page]",     String(page));
-          p.set("pagination[pageSize]", String(PAGE_SZ));
+          p.set("pagination[pageSize]", "100");
           p.set("sort[0]",              sort);
           p.set("filters[chain][$eq]",  chain);
-
           const r = await fetch(`${VIRTUALS_BASE}/virtuals?${p}`, {
             headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
             signal: AbortSignal.timeout(10_000),
           });
           if (!r.ok) break;
-
           const j = await r.json() as { data: VItem[]; meta: { pagination: { pageCount: number } } };
-          const items: VItem[] = j.data ?? [];
-
-          const match = items.find(item => {
-            const ta = (item.tokenAddress ?? "").toLowerCase();
-            const pt = (item.preToken    ?? "").toLowerCase();
-            return ta === rawAddr || pt === rawAddr;
-          });
-
+          const match = (j.data ?? []).find(item =>
+            (item.tokenAddress ?? "").toLowerCase() === rawAddr ||
+            (item.preToken     ?? "").toLowerCase() === rawAddr
+          );
           if (match) {
             const token = normalise(match);
-            cacheSet(cacheKey, token, 300_000); // 5 min cache
+            cacheSet(cacheKey, token, 300_000);
             res.json(token); return;
           }
-
-          // No more pages for this sort×chain
           if (page >= (j.meta?.pagination?.pageCount ?? 1)) break;
         }
       }

@@ -24,14 +24,30 @@ export default function TokenDetail() {
   // ── Fast path: token was already loaded by the market list ──────────
   const stateToken: VToken | undefined = (location.state as { token?: VToken } | null)?.token;
 
-  // ── Slow path: fetch from API (direct URL / deep link) ──────────────
+  // ── Slow path: fetch from bulk tokens list (server-cached, fast)
+  //    DO NOT call token-by-address — it does a slow 56-second multi-page scan
   const { data: fetchedToken, isLoading, isError } = useQuery<VToken | null>({
     queryKey: ['vtoken-by-addr', address],
     queryFn: async () => {
       if (!address) return null;
-      const res = await fetch(apiUrl(`/api/virtuals/token-by-address/${address}`));
-      if (!res.ok) return null;
-      return res.json() as Promise<VToken>;
+      const needle = address.toLowerCase();
+
+      // Fetch two sort orders in parallel (covers newest + highest mcap)
+      const [recents, topMcap] = await Promise.all([
+        fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=200&sort=createdAt:desc'))
+          .then(r => r.ok ? r.json() : { tokens: [] })
+          .catch(() => ({ tokens: [] })),
+        fetch(apiUrl('/api/virtuals/tokens?chain=ROBINHOOD&pageSize=200&sort=mcapInVirtual:desc'))
+          .then(r => r.ok ? r.json() : { tokens: [] })
+          .catch(() => ({ tokens: [] })),
+      ]);
+
+      const all: VToken[] = [
+        ...(recents?.tokens ?? []),
+        ...(topMcap?.tokens  ?? []),
+      ];
+
+      return all.find(t => t.address.toLowerCase() === needle) ?? null;
     },
     // Skip network call when we already have the data from router state
     enabled: !!address && !stateToken,
