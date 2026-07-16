@@ -834,8 +834,10 @@ export function ChatConsole() {
   const quickActions = [
     { label: '▲ LAUNCH TOKEN', text: mode === 'cli' ? 'launch MyAgent MYAG' : 'I want to launch an AI agent token' },
     { label: '◈ BALANCE',      text: mode === 'cli' ? 'balance'             : 'what are my ETH and $VIRTUAL balances?' },
-    { label: '▤ MARKET',       text: mode === 'cli' ? 'market newest'       : 'show me the market overview' },
-    { label: '▣ MY LAUNCHES',  text: mode === 'cli' ? 'launches'            : 'show my agent token launches' },
+    { label: '▤ MARKET',       text: mode === 'cli' ? 'market newest'       : 'show me the newest tokens on the market' },
+    { label: '▣ MY LAUNCHES',  text: mode === 'cli' ? 'launches'            : 'show all my launched agent tokens' },
+    { label: '▲ BUY',          text: mode === 'cli' ? 'buy'                 : 'I want to buy a token — show me what\'s available and help me buy' },
+    { label: '▼ SELL',         text: mode === 'cli' ? 'sell'                : 'I want to sell a token from my wallet' },
   ];
 
   const handleQuickAction = useCallback(async (text: string) => {

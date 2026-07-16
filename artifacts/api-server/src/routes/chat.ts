@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@workspace/db";
 import { conversationsTable, messagesTable, launchesTable, tokensTable, chatCreditsTable, FREE_CHAT_LIMIT, OTR_PER_CREDIT } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, not, like, ne } from "drizzle-orm";
 import { getPublicClient } from "../lib/chains.js";
 import { buildLaunchTx, buildBuyTx, buildSellTx, isCalibrated, getVirtualsConfig, validateTicker } from "../lib/virtuals.js";
 import { checkLaunchRateLimit } from "../lib/rateLimit.js";
@@ -200,24 +200,47 @@ async function executeTool(
 
     case "get_market_overview": {
       const { tab = "newest" } = toolInput;
-      const cacheKey = `market:${tab}`;
-      const cached = cacheGet<unknown[]>(cacheKey);
-      if (cached) return { result: JSON.stringify(cached.slice(0, 5)) };
+      const cacheKey = `chat:market:${tab}`;
+      const cached = cacheGet<string>(cacheKey);
+      if (cached) return { result: cached };
 
+      // Primary: fetch live data from Virtuals API via our own cached endpoint
+      try {
+        const port = process.env.PORT ?? "8080";
+        const sort = tab === "trending" ? "volume24h:desc" : "createdAt:desc";
+        const apiRes = await fetch(
+          `http://localhost:${port}/api/virtuals/tokens?sort=${sort}&limit=10`,
+          { signal: AbortSignal.timeout(8_000) }
+        );
+        if (apiRes.ok) {
+          const data = await apiRes.json() as Array<{
+            ticker?: string; name?: string; phase?: string;
+            lastPriceVirtual?: string; curveProgress?: number; address?: string;
+          }>;
+          const list = (Array.isArray(data) ? data : (data as { tokens?: typeof data }).tokens ?? []);
+          if (list.length > 0) {
+            const result = list.slice(0, 8).map((t) =>
+              `${t.ticker ?? "?"} (${t.name ?? "?"}) — ${t.phase ?? "CURVE"} — price: ${t.lastPriceVirtual ? parseFloat(t.lastPriceVirtual).toFixed(6) : "N/A"} $VIRTUAL, curve: ${Math.round(t.curveProgress ?? 0)}%`
+            ).join("\n");
+            cacheSet(cacheKey, result, 20_000);
+            return { result };
+          }
+        }
+      } catch { /* fall through to local DB */ }
+
+      // Fallback: local DB
       const tokens = await db
         .select()
         .from(tokensTable)
         .orderBy(tab === "trending" ? desc(tokensTable.volume24h) : desc(tokensTable.createdAt))
         .limit(10);
 
-      cacheSet(cacheKey, tokens, 20_000);
-      if (tokens.length === 0) return { result: "No agent tokens found on the production floor yet." };
-      return {
-        result: tokens
-          .slice(0, 5)
-          .map((t) => `$${t.ticker} (${t.name}) — ${t.phase} — price: ${t.lastPriceVirtual ?? "N/A"} $VIRTUAL, curve: ${t.curveProgress ?? 0}%`)
-          .join("\n"),
-      };
+      if (tokens.length === 0) return { result: "No agent tokens found on the production floor yet. Be the first to launch one." };
+      const result = tokens.slice(0, 8).map((t) =>
+        `${t.ticker} (${t.name}) — ${t.phase} — price: ${t.lastPriceVirtual ?? "N/A"} $VIRTUAL, curve: ${t.curveProgress ?? 0}%`
+      ).join("\n");
+      cacheSet(cacheKey, result, 20_000);
+      return { result };
     }
 
     case "get_token_info": {
@@ -231,17 +254,46 @@ async function executeTool(
     }
 
     case "get_my_launches": {
-      const launches = await db
-        .select()
-        .from(launchesTable)
-        .where(eq(launchesTable.walletAddress, walletAddress.toLowerCase()))
-        .orderBy(desc(launchesTable.createdAt))
-        .limit(10);
+      const addr = walletAddress.toLowerCase();
 
-      if (launches.length === 0) return { result: "No agent token launches found for your wallet." };
+      // Query both sources in parallel
+      const [launchRows, tokenRows] = await Promise.all([
+        db.select().from(launchesTable)
+          .where(eq(launchesTable.walletAddress, addr))
+          .orderBy(desc(launchesTable.createdAt))
+          .limit(20),
+        db.select().from(tokensTable)
+          .where(
+            and(
+              eq(tokensTable.creator, addr),
+              not(like(tokensTable.address, "app-%")),
+              ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
+            )
+          )
+          .orderBy(desc(tokensTable.createdAt))
+          .limit(20),
+      ]);
+
+      // Merge: prefer launchesTable rows; fill gaps from tokensTable
+      const seenAddresses = new Set(launchRows.map(l => l.tokenAddress?.toLowerCase()).filter(Boolean));
+      const merged = [
+        ...launchRows.map(l => ({
+          ticker: l.ticker, name: l.name, status: l.status,
+          tokenAddress: l.tokenAddress, txHash: l.txHash, createdAt: l.createdAt,
+        })),
+        ...tokenRows
+          .filter(t => !seenAddresses.has(t.address.toLowerCase()))
+          .map(t => ({
+            ticker: t.ticker, name: t.name, status: "confirmed",
+            tokenAddress: t.address, txHash: t.txHash ?? "", createdAt: t.createdAt,
+          })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      if (merged.length === 0) return { result: "No agent token launches found for your wallet. Use the LAUNCH TOKEN button to deploy your first token." };
       return {
-        result: launches
-          .map((l) => `$${l.ticker} (${l.name}) — ${l.status} — tx: ${l.txHash.slice(0, 10)}...`)
+        result: merged
+          .slice(0, 10)
+          .map((l) => `${l.ticker} (${l.name}) — ${l.status}${l.tokenAddress ? ` — contract: ${l.tokenAddress.slice(0, 10)}…` : ""} — tx: ${l.txHash ? l.txHash.slice(0, 10) + "…" : "pending"}`)
           .join("\n"),
       };
     }
