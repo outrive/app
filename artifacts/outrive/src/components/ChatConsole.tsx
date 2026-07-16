@@ -1651,7 +1651,11 @@ function renderTradeWorkOrder(
           ▲ WORK ORDER — {isBuy ? 'BUY TOKEN' : 'SELL TOKEN'}
         </span>
         <span className="sm:ml-auto text-[var(--out-muted)] text-[12px] font-normal uppercase tracking-widest">
-          VIRTUALS PROTOCOL / ROBINHOOD CHAIN
+          {preview.protocol === 'bonding_curve' ? 'VIRTUALS PROTOCOL / ROBINHOOD CHAIN'
+           : preview.protocol === 'uniswap_v3'   ? 'UNISWAP V3 / ROBINHOOD CHAIN'
+           : preview.protocol === 'uniswap_v4'   ? 'UNISWAP V4 / ROBINHOOD CHAIN'
+           : preview.protocol === 'uniswap_v2'   ? 'UNISWAP V2 / ROBINHOOD CHAIN'
+           : 'ROBINHOOD CHAIN'}
         </span>
       </div>
 
@@ -1736,7 +1740,13 @@ function renderTradeWorkOrder(
         /* Sell with approve — 2-step */
         <div className="flex flex-col gap-2">
           <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
-            STEP 1/2 — Approve ${preview.tokenTicker} spend on BondingV5, then STEP 2/2 executes automatically.
+            STEP 1/2 — Approve ${preview.tokenTicker} spend on {
+              preview.protocol === 'bonding_curve' ? 'BondingV5'
+              : preview.protocol === 'uniswap_v3'  ? 'Uniswap V3 Router'
+              : preview.protocol === 'uniswap_v4'  ? 'Universal Router (Uniswap V4)'
+              : preview.protocol === 'uniswap_v2'  ? 'Uniswap V2 Router'
+              : 'the DEX router'
+            }, then STEP 2/2 executes automatically.
           </div>
           <div className="flex gap-3">
             <button onClick={handleApprove}

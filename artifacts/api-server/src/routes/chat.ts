@@ -74,7 +74,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: "buy_token",
-    description: "Build an unsigned ETH transaction to buy an agent token on the Robinhood Chain bonding curve. User pays ETH (native), receives agent tokens. No ERC-20 approve needed. Fetches real-time price from the bonding curve and shows a Work Order card for the user to confirm before signing. Ask for tokenAddress and ethAmount if not provided.",
+    description: "Build an unsigned ETH transaction to buy a token on Robinhood Chain. Auto-detects protocol: tries Virtuals BondingV5 bonding curve first, then Uniswap V3 / V4 / V2. ETH is always the input currency. No ERC-20 approve needed for buys. Fetches real-time price and shows a Work Order card for the user to confirm before signing. Ask for tokenAddress and ethAmount if not provided.",
     input_schema: {
       type: "object" as const,
       required: ["tokenAddress", "ethAmount"],
@@ -87,7 +87,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: "sell_token",
-    description: "Build an unsigned transaction to sell an agent token for ETH on the Robinhood Chain bonding curve. Checks ERC-20 allowance first — if insufficient, an approve tx is shown before the sell tx. Fetches real-time price. Ask for tokenAddress and tokenAmount if not provided.",
+    description: "Build an unsigned transaction to sell a token for ETH on Robinhood Chain. Auto-detects protocol: tries Virtuals BondingV5 bonding curve first, then Uniswap V3 / V4 / V2. Checks ERC-20 allowance first — if insufficient, an approve tx is shown before the sell tx. Fetches real-time price. Ask for tokenAddress and tokenAmount if not provided.",
     input_schema: {
       type: "object" as const,
       required: ["tokenAddress", "tokenAmount"],
@@ -269,11 +269,12 @@ async function executeTool(
       const tokenTicker = token?.ticker ?? "TOKEN";
 
       const result = await buildBuyTx({
-        tokenAddress:   tokenAddress as `0x${string}`,
-        ethAmountEther: ethAmount,
+        tokenAddress:    tokenAddress as `0x${string}`,
+        ethAmountEther:  ethAmount,
         slippagePercent: slippage,
         tokenName,
         tokenTicker,
+        userAddress: walletAddress as `0x${string}`,
       });
 
       if ("error" in result) return { result: `ERROR: ${result.error}` };
