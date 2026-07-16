@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Sheet } from '@/components/Sheet';
+import type { VToken } from './TokenDetailPage';
 
 const BASE_URL = import.meta.env.BASE_URL ?? '/';
 function apiUrl(path: string) { return BASE_URL.replace(/\/$/, '') + path; }
@@ -363,7 +364,36 @@ function LaunchRow({ launch: l, rank, imageMap }: { launch: Launch; rank: number
     ?? (l.tokenAddress ? (imageMap.get(l.tokenAddress.toLowerCase()) ?? null) : null);
 
   const handleRowClick = () => {
-    if (canOpen) navigate(`/token/${l.tokenAddress}`);
+    if (!canOpen) return;
+    // Build a minimal VToken from launch data so TokenDetailPage renders immediately
+    // without any Virtuals API lookup (many OUTRIVE-launched tokens are not in top-200)
+    const token: VToken = {
+      id:             0,
+      name:           l.name,
+      ticker:         l.ticker,
+      address:        l.tokenAddress!,
+      creator:        l.walletAddress,
+      mcapInVirtual:  0,
+      fdvInVirtual:   0,
+      volume24h:      0,
+      priceChange24h: 0,
+      holderCount:    0,
+      liquidityUsd:   0,
+      status:         l.status === 'confirmed' ? 'BONDING' : 'BONDING',
+      curveProgress:  0,
+      chain:          'ROBINHOOD',
+      createdAt:      l.createdAt,
+      launchedAt:     l.createdAt,
+      description:    '',
+      image:          resolvedImg,
+      category:       '',
+      isVerified:     false,
+      mindshare:      null,
+      twitter:        null,
+      telegram:       null,
+      website:        null,
+    };
+    navigate(`/token/${l.tokenAddress}`, { state: { token } });
   };
 
   return (
