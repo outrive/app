@@ -175,7 +175,7 @@ function SetupSection() {
 
       {/* 3 requirements */}
       <div className="font-mono text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>
-        Kamu butuh 3 hal sebelum mulai
+        3 things you need before you start
       </div>
       <div className="grid grid-cols-1 gap-3">
 
@@ -189,9 +189,9 @@ function SetupSection() {
             </span>
           </div>
           <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
-            URL ini dipakai CLI untuk kirim perintah ke OUTRIVE agent. Sudah auto-detect dari domain yang kamu buka sekarang.
+            The CLI uses this URL to send commands to the OUTRIVE agent. Auto-resolved from the production domain.
           </p>
-          <UrlRow label="Paste ini saat CLI tanya API URL" url={apiUrl}
+          <UrlRow label="Paste when CLI asks for API URL" url={apiUrl}
             note="Format: https://domain.com/api-server" />
         </div>
 
@@ -205,9 +205,9 @@ function SetupSection() {
             </span>
           </div>
           <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
-            CLI akan buka halaman auth di URL ini untuk proses tanda tangan wallet.
+            The CLI opens the auth page at this URL for the one-time wallet signature step.
           </p>
-          <UrlRow label="Paste ini saat CLI tanya App URL" url={appUrl}
+          <UrlRow label="Paste when CLI asks for App URL" url={appUrl}
             note="Format: https://domain.com/outrive" />
         </div>
 
@@ -221,8 +221,7 @@ function SetupSection() {
             </span>
           </div>
           <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
-            Pastikan MetaMask / Rabby / wallet kamu sudah ditambah Robinhood Chain.
-            Gunakan data di bawah ini untuk tambah network.
+            Make sure MetaMask or Rabby has Robinhood Chain added. Use the values below to add the network.
           </p>
 
           <div className="flex flex-col" style={{ borderTop: '1px solid var(--out-grid-major)' }}>
@@ -235,8 +234,8 @@ function SetupSection() {
 
           <div className="font-mono text-[9px] leading-relaxed p-3 border"
             style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
-            CATATAN · Saat auth, wallet hanya diminta tanda tangan pesan teks (EIP-191) — bukan transaksi.
-            Tidak ada gas, tidak ada ETH yang keluar. Aman.
+            NOTE · During auth, your wallet only signs a plain text message (EIP-191) — not a transaction.
+            No gas. No ETH leaves your wallet.
           </div>
         </div>
       </div>
