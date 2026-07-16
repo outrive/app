@@ -259,6 +259,7 @@ const TOC = [
   { label: '§8 · Config & Storage',      id: 'cli-s8' },
   { label: '§9 · Security Model',        id: 'cli-s9' },
   { label: '§10 · Full Session Example', id: 'cli-s10' },
+  { label: '§11 · VPS Setup Guide',      id: 'cli-s11' },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -707,6 +708,115 @@ $ node outrive-cli.mjs chat "how much ETH do I have?"
 # ─── Step 5: logout ───────────────────────────────────────────────
 $ node outrive-cli.mjs logout
   ✓ Logged out. Run outrive auth to reconnect.`}</Code>
+          </Section>
+
+          {/* §11 VPS Setup Guide */}
+          <Section id="cli-s11" n="§11" title="VPS Setup Guide">
+            <P>
+              Run the OUTRIVE CLI on any Linux VPS (Ubuntu / Debian / CentOS).
+              Auth happens <Hl>once from your local browser</Hl> — after that the VPS can run commands headlessly.
+            </P>
+
+            <Step n="1" title="SSH into your VPS">
+              <Code label="terminal (local machine)">{`ssh root@YOUR_VPS_IP`}</Code>
+            </Step>
+
+            <Step n="2" title="Install Node.js 20 (if not already installed)">
+              <P>Check first — if you already have Node 18+ you can skip this step.</P>
+              <Code label="check existing version">{`node --version    # must be v18.0.0 or higher`}</Code>
+              <Code label="install via NodeSource (Ubuntu / Debian)">{`curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs`}</Code>
+              <Code label="install via NodeSource (CentOS / RHEL)">{`curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo yum install -y nodejs`}</Code>
+              <Code label="verify">{`node --version    # v20.x.x
+npm --version`}</Code>
+            </Step>
+
+            <Step n="3" title="Download the CLI">
+              <P>Copy <Cmd>outrive-cli.mjs</Cmd> to your VPS. Choose the method that works for you.</P>
+              <Code label="option A — wget">{`wget https://outrive.io/outrive-cli.mjs`}</Code>
+              <Code label="option B — curl">{`curl -O https://outrive.io/outrive-cli.mjs`}</Code>
+              <Code label="option C — scp from your local machine">{`scp outrive-cli.mjs root@YOUR_VPS_IP:~/outrive-cli.mjs`}</Code>
+              <Code label="make executable (optional)">{`chmod +x outrive-cli.mjs`}</Code>
+            </Step>
+
+            <Step n="4" title="Run auth — open the URL on your LOCAL browser">
+              <P>
+                The VPS has no GUI. When auth prints the URL, <Hl>copy it and open it in a browser on your local machine</Hl> (laptop / desktop).
+                Connect MetaMask, sign the message, then come back to the VPS terminal.
+              </P>
+              <Code label="VPS terminal">{`node outrive-cli.mjs auth
+
+→ Enter your OUTRIVE API URL:
+  API URL: https://outrive.io/api-server
+
+→ Enter your OUTRIVE web app URL:
+  App URL: https://outrive.io/outrive
+
+╔══════════════════════════════════════════╗
+║   Open this URL in your LOCAL browser:   ║
+║                                          ║
+║   https://outrive.io/outrive/            ║
+║   cli-auth?session=550e8400-…            ║
+╚══════════════════════════════════════════╝
+
+Waiting for authorization… .....
+✓ Authorization successful!
+
+  Wallet   0x74Ae8C6dE15bfef8798Ea058ef174dE664E6bB45
+  Config   ~/.outrive/config.json`}</Code>
+              <div className="font-mono text-[9px] leading-relaxed p-3 border"
+                style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
+                NOTE · Auth is one-time. Once <code style={{ color: 'var(--out-ink)' }}>~/.outrive/config.json</code> is saved on the VPS,
+                you can run all commands headlessly — no browser needed again.
+              </div>
+            </Step>
+
+            <Step n="5" title="Secure the config file">
+              <Code label="restrict permissions">{`chmod 600 ~/.outrive/config.json`}</Code>
+            </Step>
+
+            <Step n="6" title="Test — run status and a chat command">
+              <Code label="verify connection">{`node outrive-cli.mjs status`}</Code>
+              <Code label="ask the agent">{`node outrive-cli.mjs chat "what is my ETH balance?"`}</Code>
+            </Step>
+
+            <Step n="7" title="(Optional) Run in background with screen or tmux">
+              <P>If you want the CLI session to persist after closing SSH, use <Cmd>screen</Cmd> or <Cmd>tmux</Cmd>.</P>
+              <Code label="using screen">{`screen -S outrive          # start a named session
+node outrive-cli.mjs chat "monitor OTR every 10 minutes"
+
+# detach:  Ctrl+A then D
+# reattach: screen -r outrive`}</Code>
+              <Code label="using tmux">{`tmux new -s outrive        # start a named session
+node outrive-cli.mjs chat "monitor OTR every 10 minutes"
+
+# detach:  Ctrl+B then D
+# reattach: tmux attach -t outrive`}</Code>
+            </Step>
+
+            <Step n="8" title="(Optional) Add CLI to PATH for shorter commands">
+              <Code label="add alias to ~/.bashrc">{`echo 'alias outrive="node ~/outrive-cli.mjs"' >> ~/.bashrc
+source ~/.bashrc`}</Code>
+              <Code label="then you can just type">{`outrive status
+outrive buy 0.05 0xd1c26283... --name OTR --ticker OTR
+outrive chat "what tokens are trending?"`}</Code>
+            </Step>
+
+            <div className="mt-2">
+              <Table
+                headers={['ISSUE', 'FIX']}
+                rows={[
+                  ['node: command not found',         'Node.js not installed — follow Step 2.'],
+                  ['fetch is not a function',         'Node version is below 18. Upgrade to Node 20.'],
+                  ['Auth URL times out',              'Session expires after 5 min. Re-run outrive auth and open the URL immediately.'],
+                  ['Cannot connect to API',           'Check API URL in ~/.outrive/config.json. Must end in /api-server with no trailing slash.'],
+                  ['ECONNREFUSED / network error',    'VPS firewall may block outbound HTTPS. Allow port 443 outbound.'],
+                  ['Config file not found after auth','Run as the same user each time. Root saves to /root/.outrive/, other users to /home/user/.outrive/.'],
+                ]}
+              />
+            </div>
+
           </Section>
 
         </div>
