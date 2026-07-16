@@ -1,5 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Sheet } from '@/components/Sheet';
+
+/* ─── Copy button ─────────────────────────────────────────────────────────── */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }, [text]);
+  return (
+    <button
+      onClick={copy}
+      className="shrink-0 font-mono text-[9px] uppercase tracking-widest px-2 py-1 border transition-colors"
+      style={{
+        borderColor: copied ? 'var(--out-ink)' : 'var(--out-grid-major)',
+        color: copied ? 'var(--out-ink)' : 'var(--out-muted)',
+        background: copied ? '#12200f' : 'transparent',
+      }}
+    >
+      {copied ? '✓ COPIED' : 'COPY'}
+    </button>
+  );
+}
+
+/* ─── URL row with copy ───────────────────────────────────────────────────── */
+function UrlRow({ label, url, note }: { label: string; url: string; note?: string }) {
+  return (
+    <div className="border p-3 flex flex-col gap-2" style={{ borderColor: 'var(--out-grid-major)' }}>
+      <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{label}</div>
+      <div className="flex items-center gap-2 min-w-0">
+        <code
+          className="flex-1 font-mono text-[11px] px-2 py-1 truncate"
+          style={{ background: '#0A0F0A', color: 'var(--out-ink)', border: '1px solid var(--out-grid-major)' }}
+          title={url}
+        >
+          {url}
+        </code>
+        <CopyButton text={url} />
+      </div>
+      {note && <div className="font-mono text-[10px]" style={{ color: 'var(--out-muted)' }}>{note}</div>}
+    </div>
+  );
+}
+
+/* ─── Chain badge ─────────────────────────────────────────────────────────── */
+function ChainRow({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
+      <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{label}</span>
+      <div className="flex items-center gap-2">
+        <code className="font-mono text-[10px]" style={{ color: 'var(--out-ink)' }}>{value}</code>
+        {mono && <CopyButton text={value} />}
+      </div>
+    </div>
+  );
+}
 
 /* ─── Shared primitives (match WhitepaperPage style) ─────────────────────── */
 function Section({ id, n, title, children }: { id: string; n: string; title: string; children: React.ReactNode }) {
@@ -93,8 +150,105 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
   );
 }
 
+/* ─── Setup section — auto-detects live URLs ─────────────────────────────── */
+function SetupSection() {
+  const origin  = window.location.origin;
+  const base    = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
+  const appUrl  = `${origin}${base}`;
+  const apiUrl  = `${origin}/api-server`;
+
+  return (
+    <div id="cli-s0" className="flex flex-col gap-6 scroll-mt-20">
+
+      {/* Section header */}
+      <div className="flex items-baseline gap-3 border-b pb-2" style={{ borderColor: 'var(--out-ink)' }}>
+        <span className="font-mono text-[11px] font-bold" style={{ color: 'var(--out-ink)' }}>§0</span>
+        <h2 className="font-mono text-[13px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
+          Setup &amp; Your URLs
+        </h2>
+        <span className="ml-auto font-mono text-[9px] uppercase tracking-widest px-2 py-0.5 border"
+          style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)', background: '#12200f' }}>
+          ● START HERE
+        </span>
+      </div>
+
+      {/* 3 requirements */}
+      <div className="font-mono text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>
+        Kamu butuh 3 hal sebelum mulai
+      </div>
+      <div className="grid grid-cols-1 gap-3">
+
+        {/* Req 1 — API URL */}
+        <div className="border p-4 flex flex-col gap-3" style={{ borderColor: 'var(--out-ink)' }}>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5"
+              style={{ background: 'var(--out-ink)', color: '#000' }}>01</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
+              API Server URL
+            </span>
+          </div>
+          <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
+            URL ini dipakai CLI untuk kirim perintah ke OUTRIVE agent. Sudah auto-detect dari domain yang kamu buka sekarang.
+          </p>
+          <UrlRow label="Paste ini saat CLI tanya API URL" url={apiUrl}
+            note="Format: https://domain.com/api-server" />
+        </div>
+
+        {/* Req 2 — App URL */}
+        <div className="border p-4 flex flex-col gap-3" style={{ borderColor: 'var(--out-grid-major)' }}>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5"
+              style={{ background: 'var(--out-ink-dim)', color: '#000' }}>02</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
+              App URL
+            </span>
+          </div>
+          <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
+            CLI akan buka halaman auth di URL ini untuk proses tanda tangan wallet.
+          </p>
+          <UrlRow label="Paste ini saat CLI tanya App URL" url={appUrl}
+            note="Format: https://domain.com/outrive" />
+        </div>
+
+        {/* Req 3 — Wallet + Chain */}
+        <div className="border p-4 flex flex-col gap-4" style={{ borderColor: 'var(--out-grid-major)' }}>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5"
+              style={{ background: 'var(--out-ink-dim)', color: '#000' }}>03</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
+              Wallet — Robinhood Chain
+            </span>
+          </div>
+          <p className="font-mono text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
+            Pastikan MetaMask / Rabby / wallet kamu sudah ditambah Robinhood Chain.
+            Gunakan data di bawah ini untuk tambah network.
+          </p>
+
+          <div className="flex flex-col" style={{ borderTop: '1px solid var(--out-grid-major)' }}>
+            <ChainRow label="Network Name"    value="Robinhood Chain" mono={false} />
+            <ChainRow label="RPC URL"         value="https://rpc.mainnet.chain.robinhood.com" />
+            <ChainRow label="Chain ID"        value="4663" />
+            <ChainRow label="Currency"        value="ETH" mono={false} />
+            <ChainRow label="Block Explorer"  value="https://explorer.mainnet.chain.robinhood.com" />
+          </div>
+
+          <div className="font-mono text-[9px] leading-relaxed p-3 border"
+            style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
+            CATATAN · Saat auth, wallet hanya diminta tanda tangan pesan teks (EIP-191) — bukan transaksi.
+            Tidak ada gas, tidak ada ETH yang keluar. Aman.
+          </div>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-b" style={{ borderColor: 'var(--out-grid-major)' }} />
+    </div>
+  );
+}
+
 /* ─── TOC ─────────────────────────────────────────────────────────────────── */
 const TOC = [
+  { label: '§0 · Setup & URLs',          id: 'cli-s0' },
   { label: '§1 · Overview',              id: 'cli-s1' },
   { label: '§2 · Requirements',          id: 'cli-s2' },
   { label: '§3 · Quick Start (3 steps)', id: 'cli-s3' },
@@ -186,6 +340,9 @@ export function CliDocsPage() {
               ))}
             </div>
           </div>
+
+          {/* §0 Setup & URLs */}
+          <SetupSection />
 
           {/* §1 Overview */}
           <Section id="cli-s1" n="§1" title="Overview">
