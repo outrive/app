@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useAccount, useBalance, useReadContracts } from 'wagmi';
 import { parseAbi, formatUnits } from 'viem';
 import {
@@ -19,6 +21,10 @@ import { TickerStrip } from '@/components/MarketTicker';
 import { CalibrationBanner } from '@/components/CalibrationBanner';
 import { useListLaunches, useGetSystemStatus, useGetMarketSummary } from '@workspace/api-client-react';
 import type { Launch } from '@workspace/api-client-react';
+
+/* ── API URL helper ── */
+const _BASE = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
+function apiUrl(path: string) { return _BASE + path; }
 
 type StepState = 'active' | 'locked' | 'done';
 type View = 'agent' | 'market' | 'launches' | 'dashboard' | 'outrive' | 'docs' | 'faq' | 'architecture' | 'about' | 'howto' | 'cli' | 'whitepaper';
@@ -289,6 +295,11 @@ function StatCard({ label, value, sub, warn }: { label: string; value: string | 
 }
 
 function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: string }) {
+  const navigate = useNavigate();
+  const canOpen   = launch.status === 'confirmed'
+    && !!launch.tokenAddress
+    && !launch.tokenAddress.startsWith('0x000');
+
   const statusColor = launch.status === 'confirmed'
     ? 'var(--out-ink)'
     : launch.status === 'failed'
@@ -300,9 +311,11 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
   });
 
   return (
-    <div className="grid font-mono text-[13px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-2"
-      style={{ gridTemplateColumns: '1fr 60px 120px auto' }}>
-
+    <div
+      className="grid font-mono text-[13px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-2 transition-colors hover:bg-[#0d1200]"
+      style={{ gridTemplateColumns: '1fr 60px 120px auto', cursor: canOpen ? 'pointer' : 'default' }}
+      onClick={() => { if (canOpen) navigate(`/token/${launch.tokenAddress}`); }}
+    >
       {/* Name + ticker */}
       <div className="min-w-0">
         <div className="text-[var(--out-text)] font-bold truncate">{launch.name}</div>
@@ -323,8 +336,8 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
           : <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>—</span>}
       </div>
 
-      {/* TX link */}
-      <div className="text-right">
+      {/* TX link — stop propagation so row-click and TX-click don't conflict */}
+      <div className="text-right" onClick={e => e.stopPropagation()}>
         {explorerUrl && launch.txHash ? (
           <a
             href={`${explorerUrl}/tx/${launch.txHash}`}
@@ -360,9 +373,8 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
   const pending   = (launches ?? []).filter(l => l.status === 'pending');
   const failed    = (launches ?? []).filter(l => l.status === 'failed');
 
-  // Read per-token fee amounts from AgentTaxV2 (confirmed projectTaxRecipient for
-  // all Robinhood Chain tokens — proxy 0x6d80b81d…, impl AgentTaxV2 verified on Blockscout).
-  // creatorFee(address) does NOT exist on the factory; fees are tracked here per tokenAddress.
+  // ── AgentTaxV2 fee read (on-chain, per token) ─────────────────────────────
+  // creatorFee(address) does NOT exist on the factory; fees tracked per tokenAddress.
   const confirmedWithTokens = confirmed.filter(
     l => l.tokenAddress && l.tokenAddress.startsWith('0x') && !l.tokenAddress.startsWith('0x000'),
   );
@@ -379,29 +391,70 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
     } as any,
   });
 
-  // Re-read fee balance when the user returns to this tab after claiming
-  // externally on app.virtuals.io — catches the updated on-chain state immediately.
+  // ── $VIRTUAL price in USD (for USDG conversion) ────────────────────────────
+  const { data: virtualPriceUSD, refetch: refetchVirtualPrice } = useQuery<number>({
+    queryKey: ['virtual-price-dash'],
+    queryFn: () =>
+      fetch(apiUrl('/api/virtuals/virtual-price'))
+        .then(r => r.json())
+        .then((d: { usd: number }) => d.usd),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  // ── Token market data (mcapInVirtual → derive token price in USD) ──────────
+  // Standard Virtuals total supply = 1,000,000,000 tokens (1e9).
+  // priceUSD per token = (mcapInVirtual / 1e9) * virtualPriceUSD
+  const tokenMarketQueries = useQueries({
+    queries: confirmedWithTokens.map(l => ({
+      queryKey: ['vtoken-dash', l.tokenAddress],
+      queryFn: () =>
+        fetch(apiUrl(`/api/virtuals/token-by-address/${l.tokenAddress}`))
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+      enabled: !!l.tokenAddress,
+      staleTime: 60_000,
+      refetchInterval: 60_000,
+    })),
+  });
+
+  // ── Visibility-change refresh (user returns after claiming on Virtuals) ─────
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') refetchTaxAmounts();
+      if (document.visibilityState === 'visible') {
+        refetchTaxAmounts();
+        refetchVirtualPrice();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refetchTaxAmounts]);
+  }, [refetchTaxAmounts, refetchVirtualPrice]);
 
-  const feeBalanceDisplay = (() => {
-    if (!walletAddress) return '—';
-    if (confirmedWithTokens.length === 0) return '0.0000';
-    if (!taxAmountResults) return '…';
-    let total = 0n;
-    for (const r of taxAmountResults) {
-      if (r.status === 'success' && r.result) {
-        const [amountCollected] = r.result as [bigint, bigint];
-        total += amountCollected;
-      }
+  // ── USDG fee computation ───────────────────────────────────────────────────
+  // feeUSDG_i = (amountCollected_i / 1e18) × (mcapInVirtual_i / 1e9) × virtualPriceUSD
+  const { feeBalanceDisplay, feeBalanceLoading } = (() => {
+    if (!walletAddress) return { feeBalanceDisplay: '—', feeBalanceLoading: false };
+    if (confirmedWithTokens.length === 0) return { feeBalanceDisplay: '0.00', feeBalanceLoading: false };
+    if (!taxAmountResults || virtualPriceUSD === undefined)
+      return { feeBalanceDisplay: '…', feeBalanceLoading: true };
+
+    let totalUSDG = 0;
+    let hasAnyData = false;
+    for (let i = 0; i < confirmedWithTokens.length; i++) {
+      const tax = taxAmountResults[i];
+      if (tax?.status !== 'success' || !tax.result) continue;
+      const [amountCollected] = tax.result as [bigint, bigint];
+      const collected = parseFloat(formatUnits(amountCollected, 18));
+      if (collected === 0) { hasAnyData = true; continue; }
+      const tokenData = tokenMarketQueries[i]?.data as { mcapInVirtual?: number } | null;
+      if (!tokenData?.mcapInVirtual) continue;
+      // priceUSD per token = mcap_in_virtual / total_supply_in_virtual_units
+      const priceUSD = (tokenData.mcapInVirtual / 1_000_000_000) * virtualPriceUSD;
+      totalUSDG += collected * priceUSD;
+      hasAnyData = true;
     }
-    if (total === 0n) return '0.0000';
-    return `${parseFloat(formatUnits(total, 18)).toFixed(4)}`;
+    if (!hasAnyData) return { feeBalanceDisplay: '…', feeBalanceLoading: true };
+    return { feeBalanceDisplay: totalUSDG.toFixed(2), feeBalanceLoading: false };
   })();
 
   return (
@@ -549,12 +602,17 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <div className="border border-[var(--out-grid-major)] p-4 font-mono col-span-1 sm:col-span-2">
               <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>FEES COLLECTED (PROTOCOL)</div>
-              <div className="text-[28px] font-bold leading-none" style={{ color: (feeBalanceDisplay !== '—' && feeBalanceDisplay !== '…') ? 'var(--out-ink)' : 'var(--out-muted)' }}>
-                {feeBalanceDisplay}
+              <div className="flex items-baseline gap-2">
+                <div className="text-[28px] font-bold leading-none" style={{ color: (feeBalanceDisplay !== '—' && feeBalanceDisplay !== '…') ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+                  {feeBalanceDisplay}
+                </div>
+                {feeBalanceDisplay !== '—' && feeBalanceDisplay !== '…' && (
+                  <div className="text-[14px] font-bold" style={{ color: 'var(--out-muted)' }}>USDG</div>
+                )}
               </div>
               <div className="text-[12px] mt-1" style={{ color: 'var(--out-muted)' }}>
                 {confirmedWithTokens.length > 0
-                  ? `agent token units · read from AgentTaxV2 · ${confirmedWithTokens.length} token${confirmedWithTokens.length !== 1 ? 's' : ''} tracked`
+                  ? `USD value of trading fees · AgentTaxV2 on-chain · ${confirmedWithTokens.length} token${confirmedWithTokens.length !== 1 ? 's' : ''} tracked · updates every 30s`
                   : 'connect wallet and launch a token to see fee data'}
               </div>
               <ClaimFeesButton walletAddress={walletAddress} onRefresh={refetchTaxAmounts} />
