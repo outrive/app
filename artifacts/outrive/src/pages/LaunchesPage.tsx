@@ -10,7 +10,6 @@ interface Launch {
   id: number;
   walletAddress: string;
   tokenAddress: string | null;
-  applicationId: string | null;
   name: string;
   ticker: string;
   imageUri: string | null;

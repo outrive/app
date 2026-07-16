@@ -109,34 +109,16 @@ setInterval(() => reconcilePendingLaunches().catch(() => {}), 30_000);
 /* ─────────────────────────────────────────────────────────────────────────────
    ROUTES
 ───────────────────────────────────────────────────────────────────────────── */
-// Map a tokensTable row into a launch-compatible shape so the frontend can render it
-function tokenToLaunch(t: typeof tokensTable.$inferSelect) {
-  const isAppEntry = t.address.startsWith("app-");
-  const appId      = isAppEntry ? t.address.replace("app-", "") : null;
-  return {
-    id:            isAppEntry ? parseInt(appId ?? "0") : -(Math.abs(parseInt(t.address.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "1", 16)) || 0),
-    walletAddress: t.creator,
-    tokenAddress:  isAppEntry ? null : t.address,   // app-* don't have real addresses yet
-    applicationId: appId,
-    name:          isAppEntry ? `Agent #${appId}` : t.name,
-    ticker:        isAppEntry ? `#${appId}` : t.ticker,
-    imageUri:      t.imageUri ?? null,
-    txHash:        t.txHash ?? "",
-    blockNumber:   t.createdBlock ?? null,
-    network:       t.network,
-    status:        isAppEntry ? ("pending" as const) : ("confirmed" as const),
-    createdAt:     t.createdAt,
-  };
-}
-
 router.get("/launches", async (req, res): Promise<void> => {
   const params = ListLaunchesQueryParams.safeParse(req.query);
   const walletAddress = params.success ? params.data.walletAddress : undefined;
   const limit = params.success ? (params.data.limit ?? 50) : 50;
   const cap = Math.min(limit, 500);
 
-  // Query launchesTable (frontend-recorded)
-  const launchRows = walletAddress
+  // Only return launches recorded via the OUTRIVE chat agent flow (launchesTable).
+  // The tokensTable (factory indexer) is NOT used here — it captures all Robinhood
+  // chain factory events, not just OUTRIVE-originated ones.
+  const rows = walletAddress
     ? await db
         .select()
         .from(launchesTable)
@@ -149,40 +131,7 @@ router.get("/launches", async (req, res): Promise<void> => {
         .orderBy(desc(launchesTable.createdAt))
         .limit(cap);
 
-  // On-chain indexed tokens — include app-* (pending) AND confirmed addresses.
-  // Require a real creator wallet (not zero-addr, not empty) so only indexer-captured
-  // launches with a known deployer are returned.
-  const tokenFilter = and(
-    ne(tokensTable.creator, "0x0000000000000000000000000000000000000000"),
-    ne(tokensTable.creator, "")
-  );
-  const tokenRows = walletAddress
-    ? await db
-        .select()
-        .from(tokensTable)
-        .where(and(eq(tokensTable.creator, walletAddress.toLowerCase()), tokenFilter))
-        .orderBy(desc(tokensTable.createdAt))
-        .limit(cap)
-    : await db
-        .select()
-        .from(tokensTable)
-        .where(tokenFilter)
-        .orderBy(desc(tokensTable.createdAt))
-        .limit(cap);
-
-  // Merge: prefer launchesTable rows; fill gaps from tokensTable
-  const seenAddresses = new Set(launchRows.map(l => l.tokenAddress?.toLowerCase()).filter(Boolean));
-  const merged = [
-    ...launchRows,
-    ...tokenRows
-      .filter(t => !seenAddresses.has(t.address.toLowerCase()))
-      .map(tokenToLaunch),
-  ]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, cap);
-
-  // Return array for backward-compat; callers that want total can check .length
-  res.json(merged);
+  res.json(rows);
 });
 
 /* GET /launches/addresses — all token addresses launched via OUTRIVE (backfill-augmented). */
