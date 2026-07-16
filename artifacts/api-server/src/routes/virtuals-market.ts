@@ -177,13 +177,14 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
     ];
 
     if (creators.length === 0) {
-      cacheSet(cacheKey, [], 10_000);
-      res.json([]);
+      const empty = { tokens: [], meta: { total: 0 } };
+      cacheSet(cacheKey, empty, 10_000);
+      res.json(empty);
       return;
     }
 
     // 2. Fetch all tokens from local DB where creator is an OUTRIVE wallet
-    const tokens = await db
+    const rows = await db
       .select()
       .from(tokensTable)
       .where(
@@ -195,11 +196,12 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
       .orderBy(desc(tokensTable.createdAt))
       .limit(100);
 
-    cacheSet(cacheKey, tokens, 10_000); // 10s cache for near-real-time
-    res.json(tokens);
+    const result = { tokens: rows, meta: { total: rows.length } };
+    cacheSet(cacheKey, result, 10_000); // 10s cache for near-real-time
+    res.json(result);
   } catch (err) {
     logger.warn({ err }, "OUTRIVE tokens fetch failed");
-    res.status(500).json([]);
+    res.status(500).json({ tokens: [], meta: { total: 0 } });
   }
 });
 
