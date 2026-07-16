@@ -146,10 +146,11 @@ async function fetchVirtuals(opts: {
   };
 }
 
-// GET /api/outrive/tokens — all tokens launched via OUTRIVE agent, served from local DB.
-// Merges creators from launchesTable (frontend-recorded) + tokensTable (on-chain indexed).
+// GET /api/outrive/tokens — tokens launched via OUTRIVE agent, with live Virtuals API prices.
+// Collects creator wallets from both DB tables, then queries Virtuals API for live data.
+// Falls back to all Robinhood chain tokens if no OUTRIVE wallets are tracked yet.
 router.get("/outrive/tokens", async (_req, res): Promise<void> => {
-  const cacheKey = "outrive:tokens:v2";
+  const cacheKey = "outrive:tokens:v3";
   const cached = cacheGet<unknown>(cacheKey);
   if (cached) { res.json(cached); return; }
 
@@ -169,39 +170,48 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
         ),
     ]);
 
-    const creators = [
+    const wallets = [
       ...new Set([
         ...launchRows.map(r => r.walletAddress.toLowerCase()),
         ...tokenCreatorRows.map(r => r.creator.toLowerCase()),
       ]),
     ];
 
-    if (creators.length === 0) {
-      const empty = { tokens: [], meta: { total: 0 } };
-      cacheSet(cacheKey, empty, 10_000);
-      res.json(empty);
-      return;
+    // 2. Build Virtuals API query — filter by wallets if known, else all Robinhood tokens
+    const p = new URLSearchParams();
+    p.set("pagination[page]", "1");
+    p.set("pagination[pageSize]", "100");
+    p.set("sort[0]", "createdAt:desc");
+    p.set("filters[chain][$eq]", "ROBINHOOD");
+
+    if (wallets.length > 0) {
+      wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
+      logger.debug({ wallets }, "Fetching OUTRIVE tokens by wallet filter");
+    } else {
+      logger.debug("No OUTRIVE wallets tracked — returning all Robinhood tokens");
     }
 
-    // 2. Fetch all tokens from local DB where creator is an OUTRIVE wallet
-    const rows = await db
-      .select()
-      .from(tokensTable)
-      .where(
-        and(
-          not(like(tokensTable.address, "app-%")),
-          inArray(tokensTable.creator, creators)
-        )
-      )
-      .orderBy(desc(tokensTable.createdAt))
-      .limit(100);
+    const url = `${VIRTUALS_BASE}/virtuals?${p.toString()}`;
+    const apiRes = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
 
-    const result = { tokens: rows, meta: { total: rows.length } };
-    cacheSet(cacheKey, result, 10_000); // 10s cache for near-real-time
+    if (!apiRes.ok) throw new Error(`Virtuals API ${apiRes.status}`);
+
+    const json = await apiRes.json() as {
+      data: VItem[];
+      meta: { pagination: { total: number } };
+    };
+
+    const tokens = (json.data ?? []).map(normalise);
+    const result = { tokens, meta: { total: json.meta?.pagination?.total ?? tokens.length } };
+
+    cacheSet(cacheKey, result, 20_000); // 20s cache for near-real-time
     res.json(result);
   } catch (err) {
     logger.warn({ err }, "OUTRIVE tokens fetch failed");
-    res.status(500).json({ tokens: [], meta: { total: 0 } });
+    res.status(502).json({ tokens: [], meta: { total: 0 }, error: String(err) });
   }
 });
 

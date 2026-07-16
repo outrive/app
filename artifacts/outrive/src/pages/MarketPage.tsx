@@ -123,8 +123,8 @@ function useOutriveTokens() {
   return useQuery<{ tokens: VToken[]; meta: { total: number } }>({
     queryKey: ['outrive-tokens'],
     queryFn: () => fetch(apiUrl('/api/outrive/tokens')).then(r => r.json()),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: REFRESH_MS,   // same 30s cadence as the main list
+    staleTime: 15_000,
   });
 }
 
