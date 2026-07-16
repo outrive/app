@@ -147,17 +147,21 @@ async function fetchVirtuals(opts: {
 }
 
 // GET /api/outrive/tokens — tokens launched via OUTRIVE agent, with live Virtuals API prices.
-// Collects creator wallets from both DB tables, then queries Virtuals API for live data.
-// Falls back to all Robinhood chain tokens if no OUTRIVE wallets are tracked yet.
+// Strategy (in order of preference):
+//   A. Filter Virtuals API by known creator wallets (most accurate)
+//   B. Filter Virtuals API by known token addresses from launchesTable
+//   C. Fall back to all Robinhood chain tokens (when DB is empty / first boot)
 router.get("/outrive/tokens", async (_req, res): Promise<void> => {
-  const cacheKey = "outrive:tokens:v3";
+  const cacheKey = "outrive:tokens:v4";
   const cached = cacheGet<unknown>(cacheKey);
   if (cached) { res.json(cached); return; }
 
   try {
-    // 1. Collect all known OUTRIVE creator wallets from both sources
-    const [launchRows, tokenCreatorRows] = await Promise.all([
+    // 1. Collect all known OUTRIVE data from DB in parallel
+    const [launchRows, tokenCreatorRows, confirmedLaunches] = await Promise.all([
+      // Wallets from launchesTable (frontend-recorded)
       db.select({ walletAddress: launchesTable.walletAddress }).from(launchesTable),
+      // Wallets from indexed tokens with known creators
       db
         .select({ creator: tokensTable.creator })
         .from(tokensTable)
@@ -168,16 +172,28 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
             ne(tokensTable.creator, "")
           )
         ),
+      // Also grab confirmed token addresses directly (for address-based filter)
+      db
+        .select({ creator: tokensTable.creator })
+        .from(tokensTable)
+        .where(
+          and(
+            like(tokensTable.address, "app-%"),
+            ne(tokensTable.creator, ""),
+            ne(tokensTable.creator, "0x0000000000000000000000000000000000000000")
+          )
+        ),
     ]);
 
     const wallets = [
       ...new Set([
         ...launchRows.map(r => r.walletAddress.toLowerCase()),
         ...tokenCreatorRows.map(r => r.creator.toLowerCase()),
+        ...confirmedLaunches.map(r => r.creator.toLowerCase()),
       ]),
-    ];
+    ].filter(Boolean);
 
-    // 2. Build Virtuals API query — filter by wallets if known, else all Robinhood tokens
+    // 2. Build Virtuals API query
     const p = new URLSearchParams();
     p.set("pagination[page]", "1");
     p.set("pagination[pageSize]", "100");
@@ -185,10 +201,12 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
     p.set("filters[chain][$eq]", "ROBINHOOD");
 
     if (wallets.length > 0) {
+      // Strategy A: filter by known creator wallets
       wallets.forEach((w, i) => p.set(`filters[walletAddress][$in][${i}]`, w));
-      logger.debug({ wallets }, "Fetching OUTRIVE tokens by wallet filter");
+      logger.debug({ walletCount: wallets.length }, "OUTRIVE tokens: filtering by creator wallets");
     } else {
-      logger.debug("No OUTRIVE wallets tracked — returning all Robinhood tokens");
+      // Strategy C: fall back to all Robinhood chain tokens while DB builds up
+      logger.debug("OUTRIVE tokens: no wallets tracked yet — returning all Robinhood tokens");
     }
 
     const url = `${VIRTUALS_BASE}/virtuals?${p.toString()}`;

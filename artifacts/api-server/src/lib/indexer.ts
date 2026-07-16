@@ -1,10 +1,10 @@
 import { parseAbiItem, decodeEventLog, type Log } from "viem";
 import { db } from "@workspace/db";
 import { tokensTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, like, ne } from "drizzle-orm";
 import { getVirtualsConfig } from "./virtuals.js";
 import { getPublicClient, getActiveChain } from "./chains.js";
-import { fetchFactoryLogs } from "./blockscout.js";
+import { fetchFactoryLogs, fetchFactoryTransactionSenders, fetchTransactionSender } from "./blockscout.js";
 import { logger } from "./logger.js";
 
 // Real event: NewApplication(uint256 id) — emitted by AgentFactory proxy
@@ -114,8 +114,10 @@ async function pollBlockscoutBackfill(factoryAddress: string): Promise<void> {
           });
           if (decoded.eventName === "NewApplication") {
             const args = decoded.args as { id: bigint };
+            // Fetch real sender from Blockscout (one call per new log entry)
+            const txFrom = await fetchTransactionSender(log.transaction_hash);
             await processApplicationLog(
-              args.id.toString(), log.transaction_hash, log.block_number, ""
+              args.id.toString(), log.transaction_hash, log.block_number, txFrom
             );
           }
         }
@@ -142,6 +144,74 @@ async function pollBlockscoutBackfill(factoryAddress: string): Promise<void> {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   CREATOR BACKFILL
+   Fixes existing app-* rows that have creator = "" by paging through the
+   factory's transaction history on Blockscout and matching txHash → sender.
+   Runs in background at startup, processes up to 20 pages (1000 TXs).
+───────────────────────────────────────────────────────────────────────────── */
+let creatorBackfillRunning = false;
+
+async function backfillCreators(_factoryAddress: string): Promise<void> {
+  if (creatorBackfillRunning) return;
+  creatorBackfillRunning = true;
+  try {
+    // Fetch up to 2000 most recent empty-creator rows (sorted newest first so active users are fixed first)
+    const emptyRows = await db
+      .select({ address: tokensTable.address, txHash: tokensTable.txHash })
+      .from(tokensTable)
+      .where(
+        and(
+          like(tokensTable.address, "app-%"),
+          eq(tokensTable.creator, "")
+        )
+      )
+      .orderBy(tokensTable.createdBlock)  // ascending — process all, oldest first
+      .limit(2000);
+
+    if (emptyRows.length === 0) {
+      logger.debug("Creator backfill: no empty-creator rows to fix");
+      return;
+    }
+
+    const rowsWithHash = emptyRows.filter(r => r.txHash);
+    logger.info({ total: emptyRows.length, withHash: rowsWithHash.length }, "Creator backfill: starting");
+
+    const BATCH = 8;   // concurrent Blockscout calls per batch
+    const DELAY = 150; // ms between batches to avoid rate-limit
+    let updated = 0;
+
+    for (let i = 0; i < rowsWithHash.length; i += BATCH) {
+      const chunk = rowsWithHash.slice(i, i + BATCH);
+      await Promise.all(
+        chunk.map(async (row) => {
+          const creator = await fetchTransactionSender(row.txHash!);
+          if (!creator) return;
+          await db
+            .update(tokensTable)
+            .set({ creator })
+            .where(
+              and(
+                eq(tokensTable.address, row.address),
+                eq(tokensTable.creator, "")  // only overwrite if still empty
+              )
+            );
+          updated++;
+        })
+      );
+      if (i + BATCH < rowsWithHash.length) {
+        await new Promise(r => setTimeout(r, DELAY));
+      }
+    }
+
+    logger.info({ updated, total: rowsWithHash.length }, "Creator backfill: complete");
+  } catch (err) {
+    logger.warn({ err }, "Creator backfill failed");
+  } finally {
+    creatorBackfillRunning = false;
+  }
+}
+
 export function startIndexer(): void {
   if (indexerStarted) return;
   indexerStarted = true;
@@ -156,6 +226,9 @@ export function startIndexer(): void {
   logger.info({ factoryAddress }, "Starting OUTRIVE indexer");
 
   void pollBlockscoutBackfill(factoryAddress);
+
+  // Fix empty-creator rows in background — does not block startup
+  setTimeout(() => void backfillCreators(factoryAddress), 5_000);
 
   try {
     const client = getPublicClient();
@@ -172,10 +245,21 @@ export function startIndexer(): void {
             blockNumber: bigint;
           };
           if (typed.args) {
-            void processApplicationLog(
-              typed.args.id.toString(), typed.transactionHash,
-              Number(typed.blockNumber), ""
-            );
+            // Fetch sender from chain — one getTransaction call per new event
+            void (async () => {
+              let txFrom = "";
+              try {
+                const tx = await client.getTransaction({ hash: typed.transactionHash as `0x${string}` });
+                txFrom = tx.from.toLowerCase();
+              } catch {
+                // Fall back to Blockscout if viem fails
+                txFrom = await fetchTransactionSender(typed.transactionHash);
+              }
+              void processApplicationLog(
+                typed.args.id.toString(), typed.transactionHash,
+                Number(typed.blockNumber), txFrom
+              );
+            })();
           }
         }
       },
