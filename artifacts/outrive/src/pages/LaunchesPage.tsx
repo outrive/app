@@ -76,9 +76,90 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const PAGE_SIZE = 20;
+
+/* ─── pagination controls ────────────────────────────────────────────────── */
+function Paginator({
+  page, totalPages, total, pageSize,
+  onPrev, onNext, onGo,
+}: {
+  page: number; totalPages: number; total: number; pageSize: number;
+  onPrev: () => void; onNext: () => void; onGo: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const from = (page - 1) * pageSize + 1;
+  const to   = Math.min(page * pageSize, total);
+
+  // Build visible page numbers: always show first, last, current ±1, with "…" gaps
+  const pages: (number | '…')[] = [];
+  const add = (n: number) => { if (!pages.includes(n)) pages.push(n); };
+  add(1);
+  if (page - 2 > 2) pages.push('…');
+  for (let p = Math.max(2, page - 1); p <= Math.min(totalPages - 1, page + 1); p++) add(p);
+  if (page + 2 < totalPages - 1) pages.push('…');
+  if (totalPages > 1) add(totalPages);
+
+  const btnBase = 'font-mono text-[11px] border px-2 py-1 min-w-[28px] text-center transition-colors uppercase tracking-widest';
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t"
+      style={{ borderColor: 'var(--out-grid-major)' }}>
+
+      {/* Count label */}
+      <span className="font-mono text-[11px]" style={{ color: 'var(--out-muted)' }}>
+        SHOWING {from}–{to} OF {total}
+      </span>
+
+      {/* Page buttons */}
+      <div className="flex items-center gap-1 flex-wrap">
+        <button
+          onClick={onPrev} disabled={page === 1}
+          className={btnBase}
+          style={{
+            borderColor: page === 1 ? 'var(--out-ink-dim)' : 'var(--out-ink)',
+            color: page === 1 ? 'var(--out-ink-dim)' : 'var(--out-ink)',
+            cursor: page === 1 ? 'default' : 'pointer',
+          }}
+        >◂ PREV</button>
+
+        {pages.map((p, i) =>
+          p === '…'
+            ? <span key={`dots-${i}`} className="font-mono text-[11px] px-1" style={{ color: 'var(--out-muted)' }}>…</span>
+            : <button
+                key={p}
+                onClick={() => onGo(p as number)}
+                className={btnBase}
+                style={{
+                  borderColor: p === page ? 'var(--out-ink)' : 'var(--out-ink-dim)',
+                  color:       p === page ? 'var(--out-bg)'  : 'var(--out-muted)',
+                  background:  p === page ? 'var(--out-ink)' : 'transparent',
+                  cursor: p === page ? 'default' : 'pointer',
+                }}
+              >{p}</button>
+        )}
+
+        <button
+          onClick={onNext} disabled={page === totalPages}
+          className={btnBase}
+          style={{
+            borderColor: page === totalPages ? 'var(--out-ink-dim)' : 'var(--out-ink)',
+            color: page === totalPages ? 'var(--out-ink-dim)' : 'var(--out-ink)',
+            cursor: page === totalPages ? 'default' : 'pointer',
+          }}
+        >NEXT ▸</button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── main page ──────────────────────────────────────────────────────────── */
 export function LaunchesPage() {
   const [search, setSearch] = useState('');
+  const [page, setPage]     = useState(1);
+
+  // Reset to page 1 when search changes
+  React.useEffect(() => { setPage(1); }, [search]);
 
   const { data, isLoading, dataUpdatedAt, refetch } = useQuery<Launch[]>({
     queryKey: ['launches-page'],
@@ -90,7 +171,6 @@ export function LaunchesPage() {
   const launches = Array.isArray(data) ? data : [];
 
   // Bulk-fetch the full Robinhood token list from Virtuals API (already server-cached, fast).
-  // This replaces individual per-token lookups which returned 404 and timed out.
   const { data: virtualsTokens } = useQuery<{ tokens: { address: string; image: string | null }[] }>({
     queryKey: ['virtuals-tokens-bulk'],
     queryFn: () =>
@@ -116,7 +196,12 @@ export function LaunchesPage() {
       )
     : launches;
 
-  const confirmed      = launches.filter(l => l.status === 'confirmed').length;
+  // Pagination
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage    = Math.min(page, totalPages);
+  const pageSlice   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const confirmed       = launches.filter(l => l.status === 'confirmed').length;
   const uniqueDeployers = new Set(launches.map(l => l.walletAddress.toLowerCase())).size;
 
   const syncStr = dataUpdatedAt
@@ -217,16 +302,34 @@ export function LaunchesPage() {
             </div>
           )}
 
-          {/* Rows */}
-          {!isLoading && filtered.length > 0 && (
+          {/* Rows — paginated slice */}
+          {!isLoading && pageSlice.length > 0 && (
             <div className="flex flex-col">
-              {filtered.map((l, i) => (
-                <LaunchRow key={l.id} launch={l} rank={i + 1} imageMap={imageMap} />
+              {pageSlice.map((l, i) => (
+                <LaunchRow
+                  key={l.id}
+                  launch={l}
+                  rank={(safePage - 1) * PAGE_SIZE + i + 1}
+                  imageMap={imageMap}
+                />
               ))}
             </div>
           )}
 
-          <div className="font-mono text-[11px] pt-2 border-t" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)' }}>
+          {/* Pagination */}
+          {!isLoading && filtered.length > 0 && (
+            <Paginator
+              page={safePage}
+              totalPages={totalPages}
+              total={filtered.length}
+              pageSize={PAGE_SIZE}
+              onPrev={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onNext={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onGo={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            />
+          )}
+
+          <div className="font-mono text-[11px] pt-1 border-t" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)' }}>
             · SOURCE: OUTRIVE CHAT AGENT · ROBINHOOD CHAIN · AUTO-REFRESH 30S
           </div>
         </div>
