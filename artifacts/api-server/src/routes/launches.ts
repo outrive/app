@@ -115,55 +115,16 @@ router.get("/launches", async (req, res): Promise<void> => {
   const limit = params.success ? (params.data.limit ?? 50) : 50;
   const cap = Math.min(limit, 500);
 
-  // Primary source: launchesTable (frontend-recorded via chat agent flow)
-  const launchRows = walletAddress
+  // Source: launchesTable — rows inserted by the chat agent flow via POST /launches.
+  // This is the canonical record of tokens launched through the OUTRIVE chat interface.
+  const rows = walletAddress
     ? await db.select().from(launchesTable)
         .where(eq(launchesTable.walletAddress, walletAddress.toLowerCase()))
         .orderBy(desc(launchesTable.createdAt)).limit(cap)
     : await db.select().from(launchesTable)
         .orderBy(desc(launchesTable.createdAt)).limit(cap);
 
-  // Fallback: on-chain indexer (app-* entries with real creator wallets).
-  // These are factory submissions not yet recorded in launchesTable — e.g. when
-  // recordLaunch.mutate() failed silently or the user closed the app mid-flow.
-  const seenTx = new Set(launchRows.map(l => l.txHash?.toLowerCase()).filter(Boolean));
-  const tokenFilter = and(
-    ne(tokensTable.creator, "0x0000000000000000000000000000000000000000"),
-    ne(tokensTable.creator, "")
-  );
-  const tokenRows = walletAddress
-    ? await db.select().from(tokensTable)
-        .where(and(eq(tokensTable.creator, walletAddress.toLowerCase()), tokenFilter))
-        .orderBy(desc(tokensTable.createdAt)).limit(cap)
-    : await db.select().from(tokensTable)
-        .where(tokenFilter)
-        .orderBy(desc(tokensTable.createdAt)).limit(cap);
-
-  const extra = tokenRows
-    .filter(t => !seenTx.has(t.txHash?.toLowerCase() ?? ""))
-    .map(t => {
-      const isApp = t.address.startsWith("app-");
-      const appId = isApp ? t.address.replace("app-", "") : null;
-      return {
-        id:           isApp ? parseInt(appId ?? "0") : -(Math.abs(parseInt(t.address.replace(/[^0-9a-f]/gi,"").slice(0,8)||"1",16))||0),
-        walletAddress: t.creator,
-        tokenAddress:  isApp ? null : t.address,
-        name:          isApp ? `Agent #${appId}` : t.name,
-        ticker:        isApp ? `#${appId}` : t.ticker,
-        imageUri:      t.imageUri ?? null,
-        txHash:        t.txHash ?? "",
-        blockNumber:   t.createdBlock ?? null,
-        network:       t.network,
-        status:        (isApp ? "pending" : "confirmed") as "pending" | "confirmed" | "failed",
-        createdAt:     t.createdAt,
-      };
-    });
-
-  const merged = [...launchRows, ...extra]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, cap);
-
-  res.json(merged);
+  res.json(rows);
 });
 
 /* GET /launches/addresses — all token addresses launched via OUTRIVE (backfill-augmented). */
