@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Sheet } from '@/components/Sheet';
 
 /* ─── Shared primitives (match WhitepaperPage style) ─────────────────────── */
-function Section({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+function Section({ id, n, title, children }: { id: string; n: string; title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div id={id} className="flex flex-col gap-4 scroll-mt-20">
       <div className="flex items-baseline gap-3 border-b pb-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
         <span className="font-mono text-[11px] font-bold" style={{ color: 'var(--out-ink)' }}>{n}</span>
         <h2 className="font-mono text-[13px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{title}</h2>
@@ -95,21 +95,26 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
 
 /* ─── TOC ─────────────────────────────────────────────────────────────────── */
 const TOC = [
-  '§1 · Overview',
-  '§2 · Requirements',
-  '§3 · Quick Start (3 steps)',
-  '§4 · Authentication',
-  '§5 · Command Reference',
-  '§6 · Trade Commands',
-  '§7 · Work Order',
-  '§8 · Config & Storage',
-  '§9 · Security Model',
-  '§10 · Full Session Example',
+  { label: '§1 · Overview',              id: 'cli-s1' },
+  { label: '§2 · Requirements',          id: 'cli-s2' },
+  { label: '§3 · Quick Start (3 steps)', id: 'cli-s3' },
+  { label: '§4 · Authentication',        id: 'cli-s4' },
+  { label: '§5 · Command Reference',     id: 'cli-s5' },
+  { label: '§6 · Trade Commands',        id: 'cli-s6' },
+  { label: '§7 · Work Order',            id: 'cli-s7' },
+  { label: '§8 · Config & Storage',      id: 'cli-s8' },
+  { label: '§9 · Security Model',        id: 'cli-s9' },
+  { label: '§10 · Full Session Example', id: 'cli-s10' },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export function CliDocsPage() {
-  const [activeSection, setActiveSection] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+
+  function scrollTo(id: string) {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 flex gap-6">
@@ -117,14 +122,14 @@ export function CliDocsPage() {
       {/* ── Sidebar TOC ── */}
       <aside className="hidden xl:flex flex-col gap-1 w-52 shrink-0 sticky top-28 self-start font-mono text-[10px]">
         <div className="text-[9px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>CONTENTS</div>
-        {TOC.map((item, i) => (
-          <button key={i} onClick={() => setActiveSection(i)}
+        {TOC.map(({ label, id }) => (
+          <button key={id} onClick={() => scrollTo(id)}
             className="text-left py-1 px-2 transition-colors border-l-2"
             style={{
-              borderLeftColor: activeSection === i ? 'var(--out-ink)' : 'transparent',
-              color: activeSection === i ? 'var(--out-ink)' : 'var(--out-muted)',
+              borderLeftColor: activeSection === id ? 'var(--out-ink)' : 'transparent',
+              color: activeSection === id ? 'var(--out-ink)' : 'var(--out-muted)',
             }}>
-            {item}
+            {label}
           </button>
         ))}
         <div className="mt-4 pt-4 border-t text-[9px] uppercase tracking-widest" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)' }}>
@@ -183,7 +188,7 @@ export function CliDocsPage() {
           </div>
 
           {/* §1 Overview */}
-          <Section n="§1" title="Overview">
+          <Section id="cli-s1" n="§1" title="Overview">
             <P>
               The OUTRIVE CLI is a <Hl>zero-install terminal client</Hl> for the OUTRIVE AI agent.
               It lets you buy tokens, sell tokens, and issue free-form natural-language commands to the same AI agent that
@@ -201,7 +206,7 @@ export function CliDocsPage() {
           </Section>
 
           {/* §2 Requirements */}
-          <Section n="§2" title="Requirements">
+          <Section id="cli-s2" n="§2" title="Requirements">
             <Table
               headers={['REQUIREMENT', 'DETAIL']}
               rows={[
@@ -217,7 +222,7 @@ v20.11.0   ← must be 18.0.0 or higher`}</Code>
           </Section>
 
           {/* §3 Quick Start */}
-          <Section n="§3" title="Quick Start (3 Steps)">
+          <Section id="cli-s3" n="§3" title="Quick Start (3 Steps)">
 
             <Step n="1" title="Download the CLI">
               <P>Copy <Cmd>outrive-cli.mjs</Cmd> to your machine. No additional packages needed.</P>
@@ -262,7 +267,7 @@ Waiting for authorization… .....
           </Section>
 
           {/* §4 Authentication */}
-          <Section n="§4" title="Authentication">
+          <Section id="cli-s4" n="§4" title="Authentication">
             <P>
               OUTRIVE CLI uses a <Hl>wallet-signature auth flow</Hl>. Your private key never leaves the browser —
               only a signed message is transmitted to the API server, which verifies it with viem <Cmd>verifyMessage</Cmd>.
@@ -304,7 +309,7 @@ Timestamp: <ISO-8601 timestamp>`}</Code>
           </Section>
 
           {/* §5 Command Reference */}
-          <Section n="§5" title="Command Reference">
+          <Section id="cli-s5" n="§5" title="Command Reference">
             <Code label="usage">{`node outrive-cli.mjs <command> [arguments] [options]`}</Code>
 
             <Table
@@ -331,7 +336,7 @@ Timestamp: <ISO-8601 timestamp>`}</Code>
           </Section>
 
           {/* §6 Trade Commands */}
-          <Section n="§6" title="Trade Commands — Detailed Examples">
+          <Section id="cli-s6" n="§6" title="Trade Commands — Detailed Examples">
 
             <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>BUY</div>
             <Code label="buy 0.05 ETH of OTR">{`$ node outrive-cli.mjs buy 0.05 0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef \\
@@ -415,7 +420,7 @@ OUTRIVE cli
           </Section>
 
           {/* §7 Work Order */}
-          <Section n="§7" title="Work Order — What You Receive">
+          <Section id="cli-s7" n="§7" title="Work Order — What You Receive">
             <P>
               Every buy/sell command returns a <Hl>Work Order</Hl>: a set of raw, unsigned transaction payloads.
               The CLI never signs or broadcasts anything. You must take these payloads to your wallet.
@@ -452,7 +457,7 @@ OUTRIVE cli
           </Section>
 
           {/* §8 Config & Storage */}
-          <Section n="§8" title="Config & Storage">
+          <Section id="cli-s8" n="§8" title="Config & Storage">
             <P>The CLI stores one file on your machine after <Cmd>auth</Cmd>:</P>
             <Code label="~/.outrive/config.json">{`{
   "apiUrl":        "https://your-api.replit.dev/api-server",
@@ -475,7 +480,7 @@ OUTRIVE cli
           </Section>
 
           {/* §9 Security Model */}
-          <Section n="§9" title="Security Model">
+          <Section id="cli-s9" n="§9" title="Security Model">
             <Table
               headers={['PROPERTY', 'HOW IT IS ENFORCED']}
               rows={[
@@ -491,7 +496,7 @@ OUTRIVE cli
           </Section>
 
           {/* §10 Full Session Example */}
-          <Section n="§10" title="Full Session Example">
+          <Section id="cli-s10" n="§10" title="Full Session Example">
             <Code label="complete VPS session">{`# ─── Step 1: authorize once ───────────────────────────────────────
 $ node outrive-cli.mjs auth
   API URL: https://xxxxxx.replit.dev/api-server
