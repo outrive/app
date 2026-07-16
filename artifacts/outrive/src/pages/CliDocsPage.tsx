@@ -150,12 +150,13 @@ function Step({ n, title, children }: { n: string; title: string; children: Reac
   );
 }
 
-/* ─── Setup section — auto-detects live URLs ─────────────────────────────── */
+/* ─── Setup section — always uses production domain ──────────────────────── */
+const PROD_ORIGIN = 'https://outrive.io';
+
 function SetupSection() {
-  const origin  = window.location.origin;
-  const base    = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
-  const appUrl  = `${origin}${base}`;
-  const apiUrl  = `${origin}/api-server`;
+  // Always show the production domain regardless of which host is currently serving
+  const appUrl = `${PROD_ORIGIN}/outrive`;
+  const apiUrl = `${PROD_ORIGIN}/api-server`;
 
   return (
     <div id="cli-s0" className="flex flex-col gap-6 scroll-mt-20">
