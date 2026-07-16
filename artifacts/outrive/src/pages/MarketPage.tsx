@@ -119,14 +119,6 @@ function useVirtualsSummary() {
     staleTime: 30_000,
   });
 }
-function useOutriveTokens() {
-  return useQuery<{ tokens: VToken[]; meta: { total: number } }>({
-    queryKey: ['outrive-tokens'],
-    queryFn: () => fetch(apiUrl('/api/outrive/tokens')).then(r => r.json()),
-    refetchInterval: REFRESH_MS,   // same 30s cadence as the main list
-    staleTime: 15_000,
-  });
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    AVATAR
@@ -206,8 +198,6 @@ export function MarketPage() {
   const [page, setPage]         = useState(1);
   const [lastSync, setLastSync] = useState(new Date());
   const [countdown, setCountdown] = useState(REFRESH_MS / 1000);
-  const [outriveOnly, setOutriveOnly] = useState(false);
-
   useEffect(() => {
     const t = setTimeout(() => { setDebSearch(search); setPage(1); }, 400);
     return () => clearTimeout(t);
@@ -216,7 +206,6 @@ export function MarketPage() {
   const vp = useVirtualPrice();
   const { data, isLoading, isFetching, refetch } = useVirtualsTokens({ sort, chain, status, search: debSearch, page });
   const { data: summary } = useVirtualsSummary();
-  const { data: outriveData, isLoading: outriveLoading } = useOutriveTokens();
 
   useEffect(() => {
     let c = REFRESH_MS / 1000;
@@ -232,14 +221,9 @@ export function MarketPage() {
     refetch(); setLastSync(new Date()); setCountdown(REFRESH_MS / 1000);
   }, [refetch]);
 
-  // When OUTRIVE filter active: use dedicated public list (all wallets in DB, no page limit)
-  // When normal: use paginated Virtuals API
-  const outriveTokenSet = new Set((outriveData?.tokens ?? []).map(t => t.address.toLowerCase()));
-  const tokens = outriveOnly ? (outriveData?.tokens ?? []) : (data?.tokens ?? []);
-  const meta   = outriveOnly
-    ? { total: outriveData?.meta.total ?? 0, page: 1, pageCount: 1, pageSize: 100 }
-    : data?.meta;
-  const apiErr = outriveOnly ? undefined : data?.error;
+  const tokens  = data?.tokens ?? [];
+  const meta    = data?.meta;
+  const apiErr  = data?.error;
 
   const syncStr = lastSync.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' }) + ' UTC';
 
@@ -307,16 +291,6 @@ export function MarketPage() {
                       style={btnStyle(status === val)}>{label}</button>
                   ))}
                 </div>
-                {/* OUTRIVE-only toggle */}
-                <button
-                  onClick={() => setOutriveOnly(v => !v)}
-                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 uppercase tracking-widest border transition-colors font-mono text-[13px]"
-                  style={outriveOnly
-                    ? { borderColor: 'var(--out-ink)', color: 'var(--out-bg)', background: 'var(--out-ink)' }
-                    : { borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: 'transparent' }}>
-                  ▲ OUTRIVE
-                </button>
-
                 <div className="flex items-center gap-2 font-mono text-[13px] ml-auto shrink-0">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${isFetching ? 'bg-white' : 'bg-[var(--out-ink)] animate-pulse'}`} />
                   <span style={{ color: 'var(--out-ink)' }}>LIVE</span>
@@ -378,7 +352,6 @@ export function MarketPage() {
                   const rank      = (page - 1) * 50 + i + 1;
                   const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                   const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                  const isOutrive = outriveTokenSet.has(t.address?.toLowerCase());
                   const posChg    = t.priceChange24h >= 0;
                   return (
                     <div key={t.id}
@@ -399,7 +372,6 @@ export function MarketPage() {
                           {t.isVerified  && <span className="text-[13px] border px-1" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
                           {isNew         && <span className="text-[13px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
                           {isMine        && <span className="text-[13px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
-                          {isOutrive     && <span className="text-[10px] border px-1" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>OTR</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap font-mono">
                           <span className="text-[12px]" style={{ color: 'var(--out-text)' }}>{vp > 0 ? fmtUsd(t.mcapInVirtual * vp) : `${fmtVirtual(t.mcapInVirtual)} VRTL`}</span>
@@ -444,7 +416,6 @@ export function MarketPage() {
                       const rank      = (page - 1) * 50 + i + 1;
                       const isNew     = Date.now() - new Date(t.launchedAt).getTime() < 10 * 60 * 1000;
                       const isMine    = !!address && t.creator?.toLowerCase() === address.toLowerCase();
-                      const isOutrive = outriveTokenSet.has(t.address?.toLowerCase());
                       const posChg    = t.priceChange24h >= 0;
                       return (
                         <tr key={t.id}
@@ -463,7 +434,6 @@ export function MarketPage() {
                                   {t.isVerified && <span className="text-[11px] px-1 border" style={{ borderColor: '#39d353', color: '#39d353' }}>✓</span>}
                                   {isNew      && <span className="text-[11px] border px-1 animate-pulse" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>NEW</span>}
                                   {isMine     && <span className="text-[11px] border px-1" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>MINE</span>}
-                                  {isOutrive  && <span className="text-[10px] border px-1" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>OTR</span>}
                                 </div>
                                 <span className="text-[12px] truncate max-w-[130px]" style={{ color: 'var(--out-muted)' }}>{t.name}</span>
                               </div>
