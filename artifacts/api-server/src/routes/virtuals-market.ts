@@ -251,7 +251,8 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
       for (const { data, total: t } of batchResults) {
         total += t;
         for (const item of data) {
-          const addr = (item.tokenAddress ?? item.id ?? "").toLowerCase();
+          // item.id is a number — must convert to string before toLowerCase
+          const addr = String(item.tokenAddress ?? item.id ?? "").toLowerCase();
           if (!addr || seen.has(addr)) continue;
           seen.add(addr);
           tokens.push(normalise(item));
@@ -259,6 +260,21 @@ router.get("/outrive/tokens", async (_req, res): Promise<void> => {
       }
       // Sort merged list newest first
       tokens.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+
+      // If wallet filter returned nothing (wallets not matched in Virtuals API yet),
+      // fall back to all Robinhood chain tokens so the tab always shows data
+      if (tokens.length === 0) {
+        logger.info("OUTRIVE tokens: wallet filter returned 0 — falling back to all Robinhood tokens");
+        const fallbackRes = await fetch(`${VIRTUALS_BASE}/virtuals?${buildQuery([]).toString()}`, {
+          headers: { Accept: "application/json", "User-Agent": "OUTRIVE/1.0" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (fallbackRes.ok) {
+          const fallbackJson = await fallbackRes.json() as { data: VItem[]; meta: { pagination: { total: number } } };
+          tokens = (fallbackJson.data ?? []).map(normalise);
+          total = fallbackJson.meta?.pagination?.total ?? tokens.length;
+        }
+      }
     }
 
     const result = { tokens, meta: { total } };
