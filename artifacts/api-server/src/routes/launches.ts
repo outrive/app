@@ -18,11 +18,34 @@ const ZERO_PADDED  = '0x00000000000000000000000000000000000000000000000000000000
 
 let reconcilerRunning = false;
 
+const TX_HASH_RE  = /^0x[0-9a-f]{64}$/i;
+const ONE_DAY_MS  = 24 * 60 * 60 * 1000;
+
 async function reconcilePendingLaunches(): Promise<void> {
   if (reconcilerRunning) return;
   reconcilerRunning = true;
   try {
-    // All pending rows — regardless of whether tokenAddress is set
+    const client = getPublicClient();
+
+    /* ── Pass 1: fix incorrectly-failed rows that already have a tokenAddress ──
+       These were marked failed by a previous buggy reconciler timeout but are
+       actually confirmed on-chain (token address is known).                     */
+    const wronglyFailed = await db
+      .select()
+      .from(launchesTable)
+      .where(and(eq(launchesTable.status, 'failed'), isNotNull(launchesTable.tokenAddress)));
+
+    for (const row of wronglyFailed) {
+      if (!row.tokenAddress) continue;
+      await db
+        .update(launchesTable)
+        .set({ status: 'confirmed' })
+        .where(eq(launchesTable.id, row.id));
+      logger.info({ id: row.id, name: row.name, tokenAddress: row.tokenAddress },
+        "reconciler: corrected wrongly-failed launch → confirmed");
+    }
+
+    /* ── Pass 2: check genuinely pending rows against on-chain receipts ──────── */
     const pending = await db
       .select()
       .from(launchesTable)
@@ -31,26 +54,23 @@ async function reconcilePendingLaunches(): Promise<void> {
     if (pending.length === 0) return;
     logger.info({ count: pending.length }, "reconciler: checking pending launches");
 
-    const client = getPublicClient();
-
-    const THIRTY_MIN = 30 * 60 * 1000;
-    const TX_HASH_RE = /^0x[0-9a-f]{64}$/i;
-
     for (const row of pending) {
       if (!row.txHash) continue;
 
-      // Fast-fail: obviously invalid txHash (test data, malformed, etc.)
+      // Reject obviously malformed txHash immediately (don't touch valid-looking ones)
       if (!TX_HASH_RE.test(row.txHash)) {
         await db.update(launchesTable).set({ status: 'failed' }).where(eq(launchesTable.id, row.id));
-        logger.warn({ id: row.id, txHash: row.txHash }, "reconciler: invalid txHash — marking failed");
+        logger.warn({ id: row.id, txHash: row.txHash }, "reconciler: malformed txHash — marking failed");
         continue;
       }
 
-      // Timeout: if pending for > 30 min with no receipt found, give up
-      const ageMs = Date.now() - new Date(row.createdAt).getTime();
-      if (ageMs > THIRTY_MIN) {
-        await db.update(launchesTable).set({ status: 'failed' }).where(eq(launchesTable.id, row.id));
-        logger.warn({ id: row.id, ageMin: Math.round(ageMs / 60_000) }, "reconciler: launch timed out — marking failed");
+      // If tokenAddress is already known, just mark confirmed — no need to check receipt
+      if (row.tokenAddress) {
+        await db
+          .update(launchesTable)
+          .set({ status: 'confirmed' })
+          .where(eq(launchesTable.id, row.id));
+        logger.info({ id: row.id, tokenAddress: row.tokenAddress }, "reconciler: tokenAddress already set — confirmed");
         continue;
       }
 
@@ -59,42 +79,39 @@ async function reconcilePendingLaunches(): Promise<void> {
           hash: row.txHash as `0x${string}`,
         });
 
-        // TX reverted / failed
         if (receipt.status === 'reverted') {
-          await db
-            .update(launchesTable)
-            .set({ status: 'failed' })
-            .where(eq(launchesTable.id, row.id));
-          logger.info({ id: row.id, txHash: row.txHash }, "reconciler: launch failed (reverted)");
+          await db.update(launchesTable).set({ status: 'failed' }).where(eq(launchesTable.id, row.id));
+          logger.info({ id: row.id }, "reconciler: tx reverted — failed");
           continue;
         }
 
-        // TX succeeded — try to extract token address from mint Transfer(from=0x0) if not already set
-        let tokenAddress = row.tokenAddress ?? null;
-        if (!tokenAddress) {
-          for (const log of receipt.logs) {
-            if (
-              log.topics[0]?.toLowerCase() === TRANSFER_SIG &&
-              log.topics[1]?.toLowerCase() === ZERO_PADDED
-            ) {
-              tokenAddress = log.address.toLowerCase();
-              break;
-            }
+        // Try to extract token address from mint Transfer(from=0x0)
+        let tokenAddress: string | null = null;
+        for (const log of receipt.logs) {
+          if (
+            log.topics[0]?.toLowerCase() === TRANSFER_SIG &&
+            log.topics[1]?.toLowerCase() === ZERO_PADDED
+          ) {
+            tokenAddress = log.address.toLowerCase();
+            break;
           }
         }
 
-        // Mark confirmed regardless of whether we found tokenAddress
         await db
           .update(launchesTable)
-          .set({
-            status: 'confirmed',
-            ...(tokenAddress ? { tokenAddress } : {}),
-          })
+          .set({ status: 'confirmed', ...(tokenAddress ? { tokenAddress } : {}) })
           .where(eq(launchesTable.id, row.id));
         logger.info({ id: row.id, tokenAddress }, "reconciler: launch confirmed");
 
       } catch {
-        // Receipt not found yet — TX still pending on-chain, will retry next interval
+        // Receipt not found yet — TX still in mempool; retry next interval.
+        // Only give up after 24 h with no tokenAddress and no receipt.
+        const ageMs = Date.now() - new Date(row.createdAt).getTime();
+        if (ageMs > ONE_DAY_MS) {
+          await db.update(launchesTable).set({ status: 'failed' }).where(eq(launchesTable.id, row.id));
+          logger.warn({ id: row.id, ageH: Math.round(ageMs / 3_600_000) },
+            "reconciler: no receipt after 24h — marking failed");
+        }
       }
     }
   } finally {
