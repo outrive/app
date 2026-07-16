@@ -294,63 +294,101 @@ function StatCard({ label, value, sub, warn }: { label: string; value: string | 
   );
 }
 
+/* Pill badge — no internal wrapping */
+function StatusPill({ status }: { status: string }) {
+  const cfg =
+    status === 'confirmed' ? { label: 'LIVE',    color: 'var(--out-ink)',    bg: 'rgba(130,200,0,.08)' } :
+    status === 'failed'    ? { label: 'FAILED',  color: 'var(--out-danger)', bg: 'rgba(248,113,113,.06)' } :
+                             { label: 'PENDING', color: 'var(--out-warn)',   bg: 'rgba(250,204,21,.06)' };
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-mono text-[10px] border px-2 py-0.5 uppercase tracking-widest whitespace-nowrap shrink-0"
+      style={{ borderColor: cfg.color, color: cfg.color, background: cfg.bg }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: cfg.color }} />
+      {cfg.label}
+    </span>
+  );
+}
+
 function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: string }) {
   const navigate = useNavigate();
-  const canOpen   = launch.status === 'confirmed'
+  const canOpen  = launch.status === 'confirmed'
     && !!launch.tokenAddress
     && !launch.tokenAddress.startsWith('0x000');
-
-  const statusColor = launch.status === 'confirmed'
-    ? 'var(--out-ink)'
-    : launch.status === 'failed'
-    ? 'var(--out-danger)'
-    : 'var(--out-warn)';
 
   const date = new Date(launch.createdAt).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: '2-digit', timeZone: 'UTC',
   });
 
+  const txLink = explorerUrl && launch.txHash
+    ? `${explorerUrl}/tx/${launch.txHash}` : null;
+
+  const handleClick = () => { if (canOpen) navigate(`/token/${launch.tokenAddress}`); };
+
   return (
-    <div
-      className="grid font-mono text-[13px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-2 transition-colors hover:bg-[#0d1200]"
-      style={{ gridTemplateColumns: '1fr 60px 120px auto', cursor: canOpen ? 'pointer' : 'default' }}
-      onClick={() => { if (canOpen) navigate(`/token/${launch.tokenAddress}`); }}
-    >
-      {/* Name + ticker */}
-      <div className="min-w-0">
-        <div className="text-[var(--out-text)] font-bold truncate">{launch.name}</div>
-        <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>${launch.ticker} · {date}</div>
+    <>
+      {/* ── MOBILE card (< sm) ──────────────────────────────────── */}
+      <div
+        className="sm:hidden flex items-start gap-3 py-3 border-b border-[var(--out-grid-major)] transition-colors hover:bg-[#0d1200]"
+        style={{ cursor: canOpen ? 'pointer' : 'default' }}
+        onClick={handleClick}
+      >
+        {/* left: name + meta */}
+        <div className="flex-1 min-w-0 font-mono">
+          <div className="font-bold text-[14px] truncate" style={{ color: 'var(--out-text)' }}>{launch.name}</div>
+          <div className="text-[12px] mt-0.5" style={{ color: 'var(--out-muted)' }}>${launch.ticker} · {date}</div>
+          {launch.status === 'confirmed' && (
+            <div className="mt-1.5">
+              <CurveBar pct={0} />
+            </div>
+          )}
+        </div>
+        {/* right: pill + TX */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+          <StatusPill status={launch.status} />
+          {txLink ? (
+            <a href={txLink} target="_blank" rel="noreferrer"
+              className="font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-[var(--out-ink)]"
+              style={{ color: 'var(--out-muted)' }}>TX ↗</a>
+          ) : <span className="text-[11px]" style={{ color: 'var(--out-muted)' }}>—</span>}
+        </div>
       </div>
 
-      {/* Status badge */}
-      <div>
-        <span className="text-[11px] border px-1.5 py-0.5 uppercase tracking-widest" style={{ borderColor: statusColor, color: statusColor }}>
-          {launch.status === 'confirmed' ? '✓ LIVE' : launch.status === 'failed' ? '✗ FAIL' : '● PEND'}
-        </span>
-      </div>
+      {/* ── DESKTOP row (≥ sm) ──────────────────────────────────── */}
+      <div
+        className="hidden sm:grid font-mono text-[13px] border-b border-[var(--out-grid-major)] py-2.5 items-center gap-3 transition-colors hover:bg-[#0d1200]"
+        style={{ gridTemplateColumns: '1fr 80px 1fr 52px', cursor: canOpen ? 'pointer' : 'default' }}
+        onClick={handleClick}
+      >
+        {/* Name + ticker */}
+        <div className="min-w-0">
+          <div className="font-bold truncate" style={{ color: 'var(--out-text)' }}>{launch.name}</div>
+          <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>${launch.ticker} · {date}</div>
+        </div>
 
-      {/* Curve — only shows when confirmed */}
-      <div>
-        {launch.status === 'confirmed'
-          ? <CurveBar pct={0} />
-          : <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>—</span>}
-      </div>
+        {/* Status pill — fixed width, no wrap */}
+        <div className="flex items-center">
+          <StatusPill status={launch.status} />
+        </div>
 
-      {/* TX link — stop propagation so row-click and TX-click don't conflict */}
-      <div className="text-right" onClick={e => e.stopPropagation()}>
-        {explorerUrl && launch.txHash ? (
-          <a
-            href={`${explorerUrl}/tx/${launch.txHash}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[12px] underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)]"
-            style={{ color: 'var(--out-muted)' }}
-          >
-            TX ↗
-          </a>
-        ) : <span style={{ color: 'var(--out-muted)' }}>—</span>}
+        {/* Curve bar */}
+        <div className="min-w-0">
+          {launch.status === 'confirmed'
+            ? <CurveBar pct={0} />
+            : <span className="text-[12px]" style={{ color: 'var(--out-muted)' }}>—</span>}
+        </div>
+
+        {/* TX link */}
+        <div className="text-right" onClick={e => e.stopPropagation()}>
+          {txLink ? (
+            <a href={txLink} target="_blank" rel="noreferrer"
+              className="text-[12px] underline decoration-dotted underline-offset-4 hover:text-[var(--out-ink)]"
+              style={{ color: 'var(--out-muted)' }}>TX ↗</a>
+          ) : <span style={{ color: 'var(--out-muted)' }}>—</span>}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -498,43 +536,35 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
             )}
           </div>
 
-          {/* ETH balance */}
+          {/* ETH balance — top border on mobile, left border on sm+ */}
           {walletAddress && (
-            <div className="font-mono border-l border-[var(--out-grid-major)] pl-4 ml-1">
+            <div className="font-mono pt-3 border-t sm:pt-0 sm:border-t-0 sm:border-l border-[var(--out-grid-major)] sm:pl-4 sm:ml-1">
               <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>ETH BALANCE</div>
               <div className="text-[13px] font-bold" style={{ color: 'var(--out-ink)' }}>
-                {ethBalance
-                  ? `${parseFloat(ethBalance.formatted).toFixed(6)} ETH`
-                  : '—'}
+                {ethBalance ? `${parseFloat(ethBalance.formatted).toFixed(6)} ETH` : '—'}
               </div>
-              <div className="text-[12px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
-                gas on Robinhood Chain
-              </div>
+              <div className="text-[12px] mt-0.5" style={{ color: 'var(--out-muted)' }}>gas on Robinhood Chain</div>
             </div>
           )}
 
-          <div className="sm:ml-auto flex gap-2 flex-wrap">
+          {/* Action buttons — full width on mobile, auto right on sm+ */}
+          <div className="sm:ml-auto flex flex-col sm:flex-row gap-2 pt-1 sm:pt-0">
             <button
               onClick={() => refetchLaunches()}
-              className="font-mono text-[12px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
+              className="font-mono text-[12px] border px-3 py-2 sm:py-1.5 uppercase tracking-widest transition-colors text-center"
               style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
-            >
-              ↻ REFRESH
-            </button>
+            >↻ REFRESH</button>
             {walletAddress && (
               <a
                 href={`${explorerUrl}/address/${walletAddress}`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[12px] border px-3 py-1.5 uppercase tracking-widest transition-colors"
+                target="_blank" rel="noreferrer"
+                className="font-mono text-[12px] border px-3 py-2 sm:py-1.5 uppercase tracking-widest transition-colors text-center"
                 style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
-              >
-                VIEW ON BLOCKSCOUT ↗
-              </a>
+              >VIEW ON BLOCKSCOUT ↗</a>
             )}
           </div>
         </div>
@@ -556,10 +586,10 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
             </div>
           </div>
 
-          {/* Table header */}
+          {/* Table header — desktop only, matches LaunchRow desktop grid */}
           {(launches?.length ?? 0) > 0 && (
-            <div className="grid font-mono text-[11px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1 mb-1 gap-2"
-              style={{ gridTemplateColumns: '1fr 60px 120px auto', color: 'var(--out-muted)' }}>
+            <div className="hidden sm:grid font-mono text-[11px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1.5 mb-0.5 gap-3"
+              style={{ gridTemplateColumns: '1fr 80px 1fr 52px', color: 'var(--out-muted)' }}>
               <span>NAME / TICKER</span>
               <span>STATUS</span>
               <span>CURVE</span>
@@ -1484,13 +1514,21 @@ export default function Home() {
             </div>
           </Sheet>
 
-          {/* Step tracker */}
-          <div className="flex items-center gap-1.5 sm:gap-2 font-mono px-1 overflow-x-auto no-scrollbar">
-            <StepBadge label="01 CONNECT" state={step1} />
-            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] min-w-[12px]" />
-            <StepBadge label="02 INSTRUCT" state={step2} />
-            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] min-w-[12px]" />
-            <StepBadge label="03 SIGN & LAUNCH" state={step3} />
+          {/* Step tracker — abbreviated labels on mobile, full on ≥sm */}
+          <div className="flex items-center gap-1 sm:gap-2 font-mono px-1">
+            {/* Step 1 */}
+            <StepBadge label="CONNECT" state={step1} />
+            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] min-w-[8px]" />
+            {/* Step 2 */}
+            <StepBadge label="INSTRUCT" state={step2} />
+            <span className="flex-1 border-b border-dotted border-[var(--out-muted)] min-w-[8px]" />
+            {/* Step 3 — "SIGN" on mobile, "SIGN & LAUNCH" on sm+ */}
+            <span className="sm:hidden">
+              <StepBadge label="SIGN" state={step3} />
+            </span>
+            <span className="hidden sm:inline">
+              <StepBadge label="SIGN & LAUNCH" state={step3} />
+            </span>
           </div>
 
           <ChatConsole />
