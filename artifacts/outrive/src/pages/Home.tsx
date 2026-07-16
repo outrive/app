@@ -1451,6 +1451,40 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [view]);
 
+  // ── Copy CA helper — clipboard API + execCommand fallback ─────────────────
+  const [caCopied, setCaCopied] = React.useState(false);
+  const handleCopyCa = () => {
+    const CA = '0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef';
+    const flash = () => { setCaCopied(true); setTimeout(() => setCaCopied(false), 1800); };
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(CA).then(flash).catch(() => {
+        // fallback if clipboard promise rejects
+        try {
+          const el = document.createElement('textarea');
+          el.value = CA;
+          el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+          document.body.appendChild(el);
+          el.focus(); el.select();
+          document.execCommand('copy');
+          document.body.removeChild(el);
+          flash();
+        } catch {}
+      });
+    } else {
+      // no clipboard API at all — execCommand only
+      try {
+        const el = document.createElement('textarea');
+        el.value = CA;
+        el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+        document.body.appendChild(el);
+        el.focus(); el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        flash();
+      } catch {}
+    }
+  };
+
   const step1: StepState = isConnected ? 'done' : 'active';
   const step2: StepState = !isConnected ? 'locked' : 'active';
   const step3: StepState = !isConnected ? 'locked' : 'locked';
@@ -1505,11 +1539,14 @@ export default function Home() {
                   0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef
                 </span>
                 <button
-                  onClick={() => navigator.clipboard.writeText('0xd1c26283f8cff7ce4e5bcd01203905ab3aba26ef')}
+                  onClick={handleCopyCa}
                   className="shrink-0 text-[10px] border px-1.5 py-0.5 transition-colors hover:border-[var(--out-ink)] hover:text-[var(--out-ink)]"
-                  style={{ borderColor: 'var(--out-muted)', color: 'var(--out-muted)' }}
+                  style={{
+                    borderColor: caCopied ? 'var(--out-ink)' : 'var(--out-muted)',
+                    color:       caCopied ? 'var(--out-ink)' : 'var(--out-muted)',
+                  }}
                   title="Copy contract address"
-                >⎘ COPY</button>
+                >{caCopied ? '✓ COPIED' : '⎘ COPY'}</button>
               </div>
             </div>
           </Sheet>
