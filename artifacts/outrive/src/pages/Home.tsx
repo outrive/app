@@ -200,61 +200,19 @@ const AGENT_TAX_V2_ABI = parseAbi([
   'function getTokenTaxAmounts(address tokenAddress) view returns (uint256 amountCollected, uint256 amountSwapped)',
 ]);
 
-// `ClaimFeesButton` now reflects the confirmed on-chain reality:
-// - `claimCreatorFee(address)` does NOT exist on the factory
-// - Ongoing trade fees (1% per trade) are distributed via the AgentTaxV2 contract,
-//   not directly claimable through the factory by creator wallet address
-// - `withdraw(uint256 id)` exists but requires the application ID and is for
-//   refunding initial stakes on failed/expired applications, not trade fees
-// The button links creators to the official Virtuals app for fee management.
-// `onRefresh` is called to re-read the on-chain balance after the user returns.
-function ClaimFeesButton({ walletAddress, onRefresh }: {
-  walletAddress: string | undefined;
-  onRefresh?: () => void;
-}) {
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefresh = async () => {
-    if (!onRefresh) return;
-    setRefreshing(true);
-    try { await Promise.resolve(onRefresh()); } finally {
-      setTimeout(() => setRefreshing(false), 800);
-    }
-  };
-
+// Fees are automatically distributed in USDG directly to the creator wallet
+// by the Virtuals Protocol on every trade — no manual claim required.
+function FeeInfoBadge({ walletAddress }: { walletAddress: string | undefined }) {
+  if (!walletAddress) return null;
   return (
-    <div className="flex flex-col gap-2 mt-4">
-      <div className="flex gap-2 flex-wrap">
-        <a
-          href="https://app.virtuals.io"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block border px-5 py-2 font-mono text-[13px] uppercase tracking-widest transition-colors text-center"
-          style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--out-ink)'; (e.currentTarget as HTMLElement).style.color = '#050905'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--out-ink)'; }}
-        >
-          MANAGE FEES ON VIRTUALS ↗
-        </a>
-        {onRefresh && (
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="border px-4 py-2 font-mono text-[13px] uppercase tracking-widest transition-colors disabled:opacity-40"
-            style={{ borderColor: 'var(--out-ink-dim)', color: refreshing ? 'var(--out-ink)' : 'var(--out-muted)' }}
-            onMouseEnter={e => { if (!refreshing) { e.currentTarget.style.color = 'var(--out-ink)'; e.currentTarget.style.borderColor = 'var(--out-ink)'; } }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--out-muted)'; e.currentTarget.style.borderColor = 'var(--out-ink-dim)'; }}
-            title="Re-read balance from chain"
-          >
-            {refreshing ? '↻ …' : '↻ REFRESH BALANCE'}
-          </button>
-        )}
-      </div>
-      {walletAddress && (
-        <div className="text-[12px]" style={{ color: 'var(--out-muted)' }}>
-          After claiming on Virtuals, click ↻ REFRESH BALANCE to update the display.
-        </div>
-      )}
+    <div className="mt-4 flex items-start gap-2 border px-3 py-2.5 font-mono text-[12px]"
+      style={{ borderColor: 'var(--out-ink-dim)', background: '#080d08', color: 'var(--out-muted)' }}>
+      <span style={{ color: 'var(--out-ink)', flexShrink: 0 }}>●</span>
+      <span>
+        Fees are <span style={{ color: 'var(--out-ink)' }}>automatically sent in USDG</span>{' '}
+        directly to your creator wallet by Virtuals Protocol on every trade.
+        No claim required.
+      </span>
     </div>
   );
 }
@@ -645,7 +603,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
                   ? `USD value of trading fees · AgentTaxV2 on-chain · ${confirmedWithTokens.length} token${confirmedWithTokens.length !== 1 ? 's' : ''} tracked · updates every 30s`
                   : 'connect wallet and launch a token to see fee data'}
               </div>
-              <ClaimFeesButton walletAddress={walletAddress} onRefresh={refetchTaxAmounts} />
+              <FeeInfoBadge walletAddress={walletAddress} />
             </div>
 
             <div className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-3">
@@ -660,13 +618,9 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
           <div className="border border-[var(--out-grid-major)] p-3 font-mono text-[12px] leading-relaxed" style={{ color: 'var(--out-muted)', background: '#080d08' }}>
             <span style={{ color: 'var(--out-ink)' }}>HOW FEES WORK — </span>
             As creator of an agent token, you earn a 1% fee on every buy and sell trade routed through the Virtuals bonding curve.
-            Fees are tracked by the Virtuals Protocol on-chain and are claimable via{' '}
-            <a href="https://app.virtuals.io" target="_blank" rel="noreferrer"
-              className="underline decoration-dotted" style={{ color: 'var(--out-ink)' }}>
-              app.virtuals.io ↗
-            </a>.
-            Note: the factory contract does not expose a per-creator fee balance view function —
-            fee management is handled directly through the Virtuals app.
+            The Virtuals Protocol automatically distributes your share in{' '}
+            <span style={{ color: 'var(--out-ink)' }}>USDG directly to your creator wallet</span>{' '}
+            on every trade — no manual claim or action required on your part.
           </div>
         </div>
       </Sheet>
@@ -1304,7 +1258,7 @@ function Faq() {
     },
     {
       q: 'WHAT IS THE TRADING FEE?',
-      a: '1% on all buys and sells from day one. As creator, you earn a share of those fees — tracked by the Virtuals Protocol and viewable in your DASHBOARD. Manage fee claims at app.virtuals.io.',
+      a: '1% on all buys and sells from day one. As creator, you earn a share of those fees — automatically sent in USDG directly to your creator wallet by the Virtuals Protocol on every trade. No manual claim needed. Track your earnings in the DASHBOARD.',
     },
     {
       q: 'WHAT IS ANTI-SNIPER PROTECTION?',
