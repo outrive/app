@@ -13,7 +13,7 @@ import {
 
 /* ══════════════════════════════════════════════════════════════════════════
    OUTRIVE PAGE  —  $OTR CREDIT STORE
-   Credit model:  10 free chats per wallet  →  10 $OTR = 1 chat credit
+   Credit model:  10 free chats per wallet  →  50 $OTR = 1 chat credit
    Contract:      OTRCreditPool on Robinhood Chain (4663)
 ══════════════════════════════════════════════════════════════════════════ */
 
@@ -22,9 +22,9 @@ function apiUrl(path: string) { return _BASE + path; }
 
 /* ── Tier definitions ── */
 const TIERS = [
-  { id: 0, label: 'STARTER',  otr: 100n * 10n ** 18n,  otrDisplay: '100',  chats: 10  },
-  { id: 1, label: 'BUILDER',  otr: 450n * 10n ** 18n,  otrDisplay: '450',  chats: 50  },
-  { id: 2, label: 'OPERATOR', otr: 1600n * 10n ** 18n, otrDisplay: '1600', chats: 200 },
+  { id: 0, label: 'STARTER',  otr: 500n * 10n ** 18n,  otrDisplay: '500',  chats: 10  },
+  { id: 1, label: 'BUILDER',  otr: 2000n * 10n ** 18n, otrDisplay: '2,000', chats: 50  },
+  { id: 2, label: 'OPERATOR', otr: 5000n * 10n ** 18n, otrDisplay: '5,000', chats: 200 },
 ] as const;
 
 type TierId = 0 | 1 | 2;
@@ -139,7 +139,7 @@ function TierCard({
 }) {
   const isFirst  = tier.id === 0;
   const isMiddle = tier.id === 1;
-  const pricePerChat = (tier.id === 0 ? 10 : tier.id === 1 ? 9 : 8);
+  const pricePerChat = (tier.id === 0 ? 50 : tier.id === 1 ? 40 : 25);
 
   return (
     <div
@@ -189,7 +189,7 @@ function CustomTierInput({
   return (
     <div className="p-5 border-t font-mono" style={{ borderColor: 'var(--out-grid-major)' }}>
       <div className="text-[9px] uppercase tracking-widest mb-3" style={{ color: 'var(--out-muted)' }}>
-        CUSTOM AMOUNT — minimum 5 chats · 10 $OTR per chat
+        CUSTOM AMOUNT — minimum 5 chats · 50 $OTR per chat
       </div>
       <div className="flex items-center gap-3">
         <input
@@ -203,7 +203,7 @@ function CustomTierInput({
         />
         <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>chats</span>
         <span className="text-[10px] font-bold" style={{ color: 'var(--out-ink)' }}>
-          = {chatCount * 10} $OTR
+          = {chatCount * 50} $OTR
         </span>
       </div>
     </div>
@@ -225,7 +225,7 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
 
   // ── Current tier OTR amount ──
   const currentOtr: bigint = selectedTier === 'custom'
-    ? BigInt(customChats) * 10n * 10n ** 18n
+    ? BigInt(customChats) * 50n * 10n ** 18n
     : TIERS[selectedTier].otr;
 
   const currentChats: number = selectedTier === 'custom'
@@ -474,7 +474,7 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
             )}
             {selectedTier !== 'custom' && (
               <div className="px-5 pb-4 text-[10px]" style={{ color: 'var(--out-muted)' }}>
-                10 $OTR per chat · min 5 chats
+                50 $OTR per chat · min 5 chats
               </div>
             )}
           </div>
@@ -638,11 +638,11 @@ function TokenInfoPanel() {
   const fields = [
     { label: 'CONTRACT',     val: OTR_TOKEN_ADDRESS },
     { label: 'CHAIN',        val: 'ROBINHOOD CHAIN (4663)' },
-    { label: 'UTILITY',      val: 'AI CHAT CREDITS — 10 $OTR = 1 CHAT' },
+    { label: 'UTILITY',      val: 'AI CHAT CREDITS — 50 $OTR = 1 CHAT' },
     { label: 'FREE TIER',    val: '10 FREE CHATS PER WALLET — NO $OTR NEEDED' },
-    { label: 'STARTER',      val: '100 OTR → 10 CHATS (10 OTR/CHAT)' },
-    { label: 'BUILDER',      val: '450 OTR → 50 CHATS (9 OTR/CHAT · 10% SAVE)' },
-    { label: 'OPERATOR',     val: '1600 OTR → 200 CHATS (8 OTR/CHAT · 20% SAVE)' },
+    { label: 'STARTER',      val: '500 OTR → 10 CHATS (50 OTR/CHAT)' },
+    { label: 'BUILDER',      val: '2,000 OTR → 50 CHATS (40 OTR/CHAT · 20% SAVE)' },
+    { label: 'OPERATOR',     val: '5,000 OTR → 200 CHATS (25 OTR/CHAT · 50% SAVE)' },
   ];
 
   return (
@@ -723,7 +723,7 @@ export function OutrivePage() {
           </div>
           <div className="text-[9px] font-mono text-right leading-relaxed" style={{ color: 'var(--out-muted)' }}>
             <span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>10 FREE CHATS</span> per wallet · no sign-up<br />
-            <span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>10 $OTR</span> = 1 additional chat credit
+            <span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>50 $OTR</span> = 1 additional chat credit
           </div>
         </div>
 
