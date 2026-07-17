@@ -74,12 +74,16 @@ function logoProxyUrl(address: string) {
 }
 
 /* ─── Token Logo ─────────────────────────────────────────────────────────── */
-function TokenLogo({ address, symbol, size = 28 }: { address?: string; symbol: string; size?: number }) {
+// Parqet is a public financial logo CDN — no proxy needed, browser requests work fine.
+function parqetUrl(symbol: string) {
+  return `https://assets.parqet.com/logos/symbol/${symbol}?format=png`;
+}
+
+function TokenLogo({ symbol, size = 28 }: { address?: string; symbol: string; size?: number }) {
   const [failed, setFailed] = useState(false);
   const letters = symbol.replace(/[^A-Z0-9]/g, '').slice(0, 2);
 
-  /* fallback — no address or image failed to load */
-  if (!address || failed) {
+  if (failed) {
     return (
       <span
         className="flex items-center justify-center rounded-full font-bold font-mono shrink-0"
@@ -98,7 +102,7 @@ function TokenLogo({ address, symbol, size = 28 }: { address?: string; symbol: s
 
   return (
     <img
-      src={logoProxyUrl(address)}
+      src={parqetUrl(symbol)}
       alt={symbol}
       width={size}
       height={size}
@@ -106,9 +110,11 @@ function TokenLogo({ address, symbol, size = 28 }: { address?: string; symbol: s
       style={{
         width: size, height: size, minWidth: size,
         borderRadius: '50%',
-        objectFit: 'cover',
-        background: '#111',
+        objectFit: 'contain',
+        background: '#fff',
+        padding: Math.round(size * 0.08),
         display: 'block',
+        boxSizing: 'border-box',
       }}
     />
   );
