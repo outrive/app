@@ -109,7 +109,7 @@ const TV_LOGO: Record<string, string> = {
   SNDK:  `${TV_BASE}/western-digital--big.svg`,   // SanDisk acquired by WD
   SPY:   `${TV_BASE}/state-street--big.svg`,       // SPDR = State Street
   QQQ:   `${TV_BASE}/invesco--big.svg`,            // Invesco QQQ
-  SPCX:  'https://assets.parqet.com/logos/symbol/SPCX?format=png', // TV doesn't have SPCX
+  SPCX:  '/spacex-logo.jpg', // local asset — parqet CDN blocks browsers
 };
 
 /* ─── Token Logo ─────────────────────────────────────────────────────────── */
