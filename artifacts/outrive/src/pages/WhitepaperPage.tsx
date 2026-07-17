@@ -174,7 +174,7 @@ export function WhitepaperPage() {
           {/* §1 Executive Summary */}
           <Section id="wp-s1" n="§1" title="Executive Summary">
             <P>
-              OUTRIVE is a <Highlight>chat-first launchpad and autonomous trading platform</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard. Alongside agent token launching, OUTRIVE operates a <Highlight>Real-World Asset (RWA) trading interface</Highlight> — a live terminal for 15 tokenized equities and ETFs (NVDA, AAPL, GOOGL, TSLA, META, MSFT, AMZN, AMD, PLTR, MU, ORCL, SNDK, SPCX, SPY, QQQ) issued as ERC-20 tokens on Robinhood Chain, with live price feeds, OHLCV data, TradingView-grade charts, and on-chain swap execution via Uniswap V3.
+              OUTRIVE is a <Highlight>chat-first launchpad and autonomous trading platform</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard. Alongside agent token launching, OUTRIVE operates a <Highlight>Real-World Asset (RWA) trading interface</Highlight> — a live terminal for 15 tokenized equities and ETFs (NVDA, AAPL, GOOGL, TSLA, META, MSFT, AMZN, AMD, PLTR, MU, ORCL, SNDK, SPCX, SPY, QQQ) issued as ERC-20 tokens on Robinhood Chain, with live price feeds, OHLCV data, TradingView-grade charts, and on-chain swap execution via RobinhoodRouter (Protocol V2).
             </P>
             <div className="border-l-2 pl-4 py-2 italic" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
               Design doctrine: the LLM decides <em>what</em> to do; deterministic code decides <em>how</em>; the user's wallet decides <em>whether</em>.
@@ -865,10 +865,10 @@ Example (illustrative):
                 { term: 'RWA (Real-World Asset)', def: 'A tokenized representation of a traditional financial asset — equity, ETF, or commodity — issued as an ERC-20 on Robinhood Chain.' },
                 { term: 'OHLCV', def: 'Open, High, Low, Close, Volume — the standard daily candlestick data set sourced from institutional market feeds (§16).' },
                 { term: 'Blockscout Oracle', def: 'The on-chain price oracle embedded in Blockscout explorer; OUTRIVE reads exchange_rate from /api/v2/tokens to get live USD prices for RWA tokens (§16).' },
-                { term: 'SwapRouter (Uniswap V3)', def: 'The Uniswap V3 swap contract deployed on Robinhood Chain; OUTRIVE routes RWA buy/sell orders through exactInputSingle (§16, §17).' },
+                { term: 'RobinhoodRouter', def: 'Fee-taking meta-router at 0xEa4F57DbC… on Robinhood Chain; the only correct on-chain swap path for RWA tokenized equities & ETFs. Routes internally via Uniswap V2 single-hop (WETH↔token). Exposes buy(SwapParams) and sell(SwapParams) (§16, §17).' },
                 { term: 'Autonomous Agent', def: 'An on-chain economic actor deployed via Virtuals Protocol that executes market analysis, order construction, and swap execution without human intervention (§17).' },
                 { term: 'Market Agent', def: 'Autonomous agent type that monitors live RWA price feeds and detects momentum signals, volume anomalies, and trend reversals (§17).' },
-                { term: 'Execution Agent', def: 'Autonomous agent type that routes constructed orders through Uniswap V3 on Robinhood Chain with optimal slippage and deadline parameters (§17).' },
+                { term: 'Execution Agent', def: 'Autonomous agent type that routes constructed orders through RobinhoodRouter (Protocol V2) on Robinhood Chain — the only valid swap path for RWA tokens (§17).' },
               ].map(g => (
                 <div key={g.term} className="border p-3" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--out-ink)' }}>{g.term}</div>
@@ -941,28 +941,38 @@ LOGO LAYER — TradingView SVG CDN
               ]}
             />
 
-            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION (IN PROGRESS)</div>
-            <Code>{`Route: exactInputSingle via Uniswap V3 SwapRouter on Robinhood Chain
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION</div>
+            <Code>{`Router: RobinhoodRouter — 0xEa4F57DbC875889EbC435722cbFAa4A16B19B452
+         (verified source on Robinhood Chain Blockscout)
+         Fee-taking meta-router; routes internally via Uniswap V2.
+         RWA tokens have NO Uniswap V3/V4 pools — this is the only
+         correct on-chain path for tokenized equities & ETFs.
 
-ISwapRouter.ExactInputSingleParams({
-  tokenIn:          WETH address (Robinhood Chain)
-  tokenOut:         RWA ERC-20 address (from token registry)
-  fee:              3000  (0.3% pool tier)
-  recipient:        user wallet address
-  deadline:         block.timestamp + 300
-  amountIn:         ETH amount in wei
-  amountOutMinimum: slippage-adjusted minimum
-  sqrtPriceLimitX96: 0
-})
+SwapParams struct:
+  protocol:     0          // Protocol.V2 — direct WETH↔token single-hop
+  token:        <RWA ERC-20 address>
+  fee:          0          // ignored for V2 path
+  amountIn:     0          // BUY: ignored (router uses msg.value)
+  minAmountOut: 0          // v1: no slippage floor
+  recipient:    <user wallet address>
+  extra:        0x         // empty = WETH↔token single-hop via _v2Path
 
-SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
-  Requires prior ERC-20 approval for SwapRouter as spender`}</Code>
+BUY path  (ETH → RWA token):
+  RobinhoodRouter.buy(SwapParams)
+  tx.value = ETH amount in wei  |  gas limit: 400,000
+  Router skims feeBps from ETH, then swaps remainder for RWA token
+  → wallet_watchAsset called post-confirm so token appears in MetaMask
+
+SELL path (RWA token → ETH):
+  Step 1: ERC-20 approve(RobinhoodRouter, MAX_UINT256) on token contract
+  Step 2: RobinhoodRouter.sell(SwapParams)
+  amountIn = token shares in wei  |  gas limit: 400,000`}</Code>
           </Section>
 
           {/* §17 Autonomous Agent Trading */}
           <Section id="wp-s17" n="§17" title="Autonomous Agent Trading System">
             <P>
-              The Autonomous Agent Trading system is OUTRIVE's most advanced capability — a layer of specialized on-chain agents, deployed via Virtuals Protocol on Robinhood Chain, that can analyze market conditions, construct trade orders, and execute swaps without manual user intervention. Each agent is an independent on-chain economic actor with its own wallet, logic, and verifiable trade history. Agents are deterministic by design: they never hallucinate parameters, and every swap routes through the same Uniswap V3 SwapRouter used in the manual trade flow.
+              The Autonomous Agent Trading system is OUTRIVE's most advanced capability — a layer of specialized on-chain agents, deployed via Virtuals Protocol on Robinhood Chain, that can analyze market conditions, construct trade orders, and execute swaps without manual user intervention. Each agent is an independent on-chain economic actor with its own wallet, logic, and verifiable trade history. Agents are deterministic by design: they never hallucinate parameters, and every swap routes through the same RobinhoodRouter used in the manual trade flow.
             </P>
 
             <div className="text-[10px] uppercase tracking-widest mt-2 mb-1" style={{ color: 'var(--out-muted)' }}>AGENT TYPES</div>
@@ -971,7 +981,7 @@ SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
               rows={[
                 ['Market Agent',       'Monitors live RWA price feeds; detects momentum signals, volume anomalies, and trend reversals', 'Blockscout oracle, OHLCV feed, 52W H/L'],
                 ['Portfolio Agent',    'Manages open RWA positions; enforces stop-losses, profit-taking thresholds, and periodic rebalancing', 'rwa_trades table, live quotes, user-defined policy'],
-                ['Execution Agent',    'Routes constructed orders through Uniswap V3 with optimal fee tier and slippage parameters', 'SwapRouter, pool liquidity, gas oracle'],
+                ['Execution Agent',    'Routes constructed orders through RobinhoodRouter (Protocol V2) — the verified on-chain path for all RWA token swaps', 'RobinhoodRouter, token registry, gas oracle'],
                 ['Intelligence Agent', 'Synthesizes macro signals and on-chain flow data into actionable trade theses; feeds Market Agent', 'OHLCV, market breadth, agent token sentiment'],
               ]}
             />
@@ -999,9 +1009,9 @@ SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
         ├─► EXECUTION AGENT
         │     Resolves ERC-20 address from token registry
         │     Fetches live ETH/USD price → computes amountIn (wei)
-        │     Constructs exactInputSingle params
+        │     Constructs SwapParams struct (protocol=V2, extra=0x)
         │     Simulates via eth_call → check revert
-        │     Submits signed transaction → Uniswap V3 SwapRouter
+        │     Submits signed transaction → RobinhoodRouter.buy() / .sell()
         │
         └─► TRADE RECORDING
               POST /api/rwa/trades → rwa_trades table
@@ -1015,7 +1025,7 @@ SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
                 'Agents never bypass the TX Engine simulation step. A simulated revert cancels the trade and logs the reason — no gas is wasted.',
                 'Position sizing is bounded by the deterministic policy engine. No single agent trade may exceed the user-configured maximum allocation per asset.',
                 'Agent-executed trades are tagged source="agent" in rwa_trades, distinguishing them from manual trades (source="manual") in the Dashboard.',
-                'The Execution Agent uses the same Uniswap V3 SwapRouter and fee tier logic as the manual trade flow — identical calldata construction, identical slippage guards.',
+                'The Execution Agent uses the same RobinhoodRouter (Protocol V2) as the manual trade flow — identical SwapParams construction, identical gas limits.',
                 'All agent wallets are non-custodial — OUTRIVE never holds agent keys. Agents deployed via Virtuals Protocol hold their own keys under the Virtuals custody model.',
                 'Intelligence Agent outputs are advisory signals only. The Portfolio Agent applies deterministic policy rules before any execution proceeds — the LLM cannot unilaterally trigger a swap.',
               ].map((rule, i) => (
@@ -1027,7 +1037,7 @@ SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
             </div>
 
             <div className="border-l-2 pl-4 py-2 mt-2 italic" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
-              Design doctrine: agents decide <em>what</em> to trade; the policy engine decides <em>whether</em>; the SwapRouter executes <em>how</em>. No human in the loop — but no LLM without a deterministic guard either.
+              Design doctrine: agents decide <em>what</em> to trade; the policy engine decides <em>whether</em>; RobinhoodRouter executes <em>how</em>. No human in the loop — but no LLM without a deterministic guard either.
             </div>
           </Section>
 

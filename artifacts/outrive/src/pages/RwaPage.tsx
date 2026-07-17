@@ -526,7 +526,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             <span className="text-[11px] uppercase tracking-widest" style={{ color: '#e09020' }}>
               {step === 'approving' ? 'AWAITING SIGNATURE…' : 'CONFIRMING APPROVAL…'}
             </span>
-            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for SwapRouter</span>
+            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for RobinhoodRouter</span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"

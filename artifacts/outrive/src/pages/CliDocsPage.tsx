@@ -477,7 +477,7 @@ Timestamp: <ISO-8601 timestamp>`}</Code>
               rows={[
                 [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>auth</span>,     '—',                                  'Authorize via wallet signature. Required once. Prompts for API URL and App URL, then prints a browser link to complete auth.'],
                 [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>status</span>,   '—',                                  'Show full ASCII dashboard: wallet, API URL, factory address, network status, and quick-command reference.'],
-                [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>buy</span>,      '<eth_amount> <token_address>',        'Buy a token using ETH. The AI agent detects the correct liquidity route (bonding curve or Uniswap) automatically.'],
+                [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>buy</span>,      '<eth_amount> <token_address>',        'Buy a token using ETH. The AI agent detects the correct liquidity route (bonding curve or RobinhoodRouter) automatically.'],
                 [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>sell</span>,     '<token_amount> <token_address>',      'Sell tokens for ETH. Approval transaction is included if allowance is insufficient.'],
                 [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>chat</span>,     '"<message>"',                        'Send a free-form message to the OUTRIVE AI agent. Supports market queries, balance checks, and launch instructions.'],
                 [<span style={{ color: 'var(--out-ink)', fontWeight: 700 }}>logout</span>,   '—',                                  'Clear stored credentials from ~/.outrive/config.json. Re-run outrive auth to reconnect.'],
@@ -609,7 +609,8 @@ OUTRIVE cli
               headers={['PROTOCOL', 'TRIGGER', 'ROUTER / CONTRACT']}
               rows={[
                 ['Virtuals Bonding Curve ($VIRTUAL)', 'BondingV5.tokenInfo → trading=true, tradingOnUniswap=false', '0x7180727d66… (ETH Router)'],
-                ['Uniswap V3', 'Pool found at factory; used when token is graduated', 'Uniswap V3 SwapRouter'],
+                ['RobinhoodRouter · Protocol V2', 'RWA tokenized equities & ETFs (NVDA, AAPL, TSLA, etc.) — no AMM pools exist for these tokens; only valid on-chain path', '0xEa4F57DbC… (RobinhoodRouter)'],
+                ['Uniswap V3', 'Pool found at factory; used when agent token is graduated', 'Uniswap V3 SwapRouter'],
                 ['Uniswap V4', 'V4 pool found', 'Uniswap V4 UniversalRouter'],
                 ['Uniswap V2', 'Fallback if V3/V4 not found', 'Uniswap V2 Router02'],
               ]}
@@ -875,25 +876,29 @@ $ node outrive-cli.mjs chat "what RWA positions do I have open?"`}</Code>
               ]}
             />
 
-            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION (COMING IN v1.1)</div>
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION (LIVE IN v1)</div>
             <P>
-              Manual buy/sell execution routes through <Hl>Uniswap V3 SwapRouter</Hl> deployed on Robinhood Chain.
-              The Work Order pattern applies — unsigned transaction returned, user signs in their own wallet.
+              Manual buy/sell execution routes through <Hl>RobinhoodRouter</Hl> (0xEa4F57DbC…) on Robinhood Chain.
+              RWA tokens have no Uniswap V3/V4 pools — RobinhoodRouter is the only valid on-chain path.
+              The swap is non-custodial: the unsigned transaction is presented in the Work Order, and the user signs it in their own wallet.
             </P>
-            <Code label="swap flow (v1.1)">{`BUY NVDA with 0.05 ETH
-  → exactInputSingle(tokenIn=WETH, tokenOut=NVDA_ADDRESS, amountIn=0.05e18)
-  → SwapRouter on Robinhood Chain (chainId 4663)
-  → Work Order returned → sign in wallet → broadcast
+            <Code label="swap flow (v1 — live)">{`BUY NVDA with 0.05 ETH
+  → RobinhoodRouter.buy({ protocol: V2, token: NVDA_ADDRESS,
+      amountIn: 0, minAmountOut: 0, recipient: wallet, extra: '0x' })
+  → tx.value = 0.05e18 wei  |  gas: 400,000
+  → Router skims feeBps from ETH, swaps remainder for NVDA via V2
+  → wallet_watchAsset called post-confirm (token appears in MetaMask)
 
 SELL NVDA (100 shares)
-  → Step 1: approve SwapRouter to spend NVDA tokens (if allowance insufficient)
-  → Step 2: exactInputSingle(tokenIn=NVDA_ADDRESS, tokenOut=WETH, amountIn=shares)
+  → Step 1: approve(RobinhoodRouter, MAX_UINT256) on NVDA contract
+  → Step 2: RobinhoodRouter.sell({ protocol: V2, token: NVDA_ADDRESS,
+      amountIn: shares_wei, minAmountOut: 0, recipient: wallet, extra: '0x' })
   → Two-step Work Order → sign both txs in order`}</Code>
 
             <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>AUTONOMOUS AGENT TRADING (COMING IN v1.2)</div>
             <P>
               Autonomous agents deployed via <Hl>Virtuals Protocol</Hl> on Robinhood Chain will execute RWA trades
-              independently — analyzing live price feeds, constructing orders, and routing swaps through Uniswap V3
+              independently — analyzing live price feeds, constructing orders, and routing swaps through RobinhoodRouter
               without user intervention. Every agent trade is tagged <code style={{ color: 'var(--out-ink)' }}>source="agent"</code> in
               trade history and visible in the Dashboard portfolio view.
             </P>
@@ -902,7 +907,7 @@ SELL NVDA (100 shares)
               rows={[
                 ['Market Agent',       'Monitors live RWA prices; detects momentum signals and volume anomalies'],
                 ['Portfolio Agent',    'Manages positions; enforces stop-losses and rebalancing policy'],
-                ['Execution Agent',    'Routes orders through Uniswap V3 with optimal slippage and deadline params'],
+                ['Execution Agent',    'Routes orders through RobinhoodRouter (Protocol V2) — the verified swap path for all RWA tokens on Robinhood Chain'],
                 ['Intelligence Agent', 'Synthesizes macro signals into trade theses; feeds the Market Agent'],
               ]}
             />
