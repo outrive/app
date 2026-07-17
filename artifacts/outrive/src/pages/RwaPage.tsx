@@ -487,12 +487,6 @@ export function RwaPage() {
           </div>
 
           {/* Powered-by footnote */}
-          <div
-            className="shrink-0 px-3 py-2 border-t text-[8.5px]"
-            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}
-          >
-            90+ tokens · Robinscan.io
-          </div>
         </div>
 
         {/* ── CENTER: chart + token header ──────────────────────────────── */}
