@@ -5,6 +5,9 @@ import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+/* ── In-memory logo proxy cache (1h TTL) ─────────────────────────────────── */
+const _logoCache = new Map<string, { buf: Buffer; ct: string; exp: number }>();
+
 /* ── Static registry — verified Robinhood Chain (4663) ERC-20 contracts ────
    Addresses from Blockscout · Logos from cdn.robinhood.com
    ──────────────────────────────────────────────────────────────────────── */
@@ -193,6 +196,37 @@ async function fetchPricesOnly(): Promise<typeof _quoteCache> {
   });
   return { quotes, updatedAt: new Date().toISOString() };
 }
+
+/* ── GET /rwa/logo/:address  (proxy — cdn.robinhood.com blocks browsers) ─── */
+router.get("/rwa/logo/:address", async (req: Request, res: Response) => {
+  const raw = (req.params.address ?? '').toLowerCase().replace(/^0x/, '').replace(/[^0-9a-f]/g, '');
+  if (raw.length !== 40) { res.status(400).end(); return; }
+
+  const hit = _logoCache.get(raw);
+  if (hit && Date.now() < hit.exp) {
+    res.setHeader('Content-Type', hit.ct);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(hit.buf);
+    return;
+  }
+
+  const cdnUrl = `https://cdn.robinhood.com/ncw_assets/logos/0x${raw}.png`;
+  try {
+    const r = await fetch(cdnUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!r.ok) { res.status(404).end(); return; }
+    const buf = Buffer.from(await r.arrayBuffer());
+    const ct  = r.headers.get('content-type') || 'image/png';
+    _logoCache.set(raw, { buf, ct, exp: Date.now() + 3_600_000 });
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(buf);
+  } catch {
+    res.status(502).end();
+  }
+});
 
 /* ── GET /rwa/quotes ──────────────────────────────────────────────────────── */
 router.get("/rwa/quotes", async (req: Request, res: Response) => {

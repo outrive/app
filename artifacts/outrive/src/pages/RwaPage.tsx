@@ -67,12 +67,19 @@ const CATALOGUE: Quote[] = [
   { symbol:'QQQ',   name:'Invesco QQQ ETF',           address:'0xD5f3879160bc7c32ebb4dC785F8a4F505888de68', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
 ];
 
-/* ─── Token Logo ─────────────────────────────────────────────────────────── */
-function TokenLogo({ url, symbol, size = 28 }: { url: string; symbol: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  const letters = symbol.replace(/[^A-Z]/g, '').slice(0, 2);
+/* ─── Logo URL via server-side proxy (cdn.robinhood.com blocks browsers) ─── */
+function logoProxyUrl(address: string) {
+  const hex = address.replace(/^0x/i, '').toLowerCase();
+  return api(`/api/rwa/logo/${hex}`);
+}
 
-  if (!url || failed) {
+/* ─── Token Logo ─────────────────────────────────────────────────────────── */
+function TokenLogo({ address, symbol, size = 28 }: { address?: string; symbol: string; size?: number }) {
+  const [failed, setFailed] = useState(false);
+  const letters = symbol.replace(/[^A-Z0-9]/g, '').slice(0, 2);
+
+  /* fallback — no address or image failed to load */
+  if (!address || failed) {
     return (
       <span
         className="flex items-center justify-center rounded-full font-bold font-mono shrink-0"
@@ -88,9 +95,10 @@ function TokenLogo({ url, symbol, size = 28 }: { url: string; symbol: string; si
       </span>
     );
   }
+
   return (
     <img
-      src={url}
+      src={logoProxyUrl(address)}
       alt={symbol}
       width={size}
       height={size}
@@ -145,7 +153,7 @@ function MarketRow({ q, active, onClick }: { q: Quote; active: boolean; onClick:
         borderRight: 'none',
       }}
     >
-      <TokenLogo url={q.logoUrl} symbol={q.symbol} size={26} />
+      <TokenLogo address={q.address} symbol={q.symbol} size={26} />
 
       <div className="flex-1 min-w-0 font-mono">
         <div className="text-[11.5px] font-bold leading-tight" style={{ color: active ? 'var(--out-ink)' : 'var(--out-text)' }}>
@@ -477,7 +485,7 @@ export function RwaPage() {
             className="flex items-center gap-3 px-4 shrink-0 border-b"
             style={{ height: 64, borderColor: 'var(--out-ink-dim)', background: '#080d08' }}
           >
-            <TokenLogo url={selected.logoUrl} symbol={selected.symbol} size={36} />
+            <TokenLogo address={selected.address} symbol={selected.symbol} size={36} />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
