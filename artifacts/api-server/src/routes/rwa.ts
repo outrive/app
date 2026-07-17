@@ -30,9 +30,14 @@ export const RWA_TOKENS: Record<string, {
   AMZN:  { address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', name: 'Amazon.com Inc.',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x12f190a9f9d7d37a250758b26824b97ce941bf54.png', tvSymbol: 'NASDAQ:AMZN'  },
   MU:    { address: '0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD', name: 'Micron Technology',       logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xff080c8ce2e5feadaca0da81314ae59d232d4afd.png', tvSymbol: 'NASDAQ:MU'    },
   ORCL:  { address: '0xb0992820E760d836549ba69BC7598b4af75dEE03', name: 'Oracle Corp.',             logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xb0992820e760d836549ba69bc7598b4af75dee03.png', tvSymbol: 'NYSE:ORCL'    },
-  SNDK:  { address: '0xB90A19fF0Af67f7779afF50A882A9CfF42446400', name: 'SanDisk Corp.',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xb90a19ff0af67f7779aff50a882a9cff42446400.png', tvSymbol: 'NASDAQ:WDC'   },
   SPY:   { address: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', name: 'SPDR S&P 500 ETF',       logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png', tvSymbol: 'AMEX:SPY'    },
   QQQ:   { address: '0xD5f3879160bc7c32ebb4dC785F8a4F505888de68', name: 'Invesco QQQ ETF',         logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png', tvSymbol: 'NASDAQ:QQQ'  },
+  COIN:  { address: '0x6330D8C3178a418788dF01a47479c0ce7CCF450b', name: 'Coinbase Global',         logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x6330d8c3178a418788df01a47479c0ce7ccf450b.png', tvSymbol: 'NASDAQ:COIN' },
+  CRWV:  { address: '0x5f10A1C971B69e47e059e1dC91901B59b3fB49C3', name: 'CoreWeave Inc.',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x5f10a1c971b69e47e059e1dc91901b59b3fb49c3.png', tvSymbol: 'NASDAQ:CRWV' },
+  INTC:  { address: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', name: 'Intel Corp.',             logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xc72b96e0e48ecd4dc75e1e45396e26300bc39681.png', tvSymbol: 'NASDAQ:INTC' },
+  BE:    { address: '0x822CC93fFD030293E9842c30BBD678F530701867', name: 'Bloom Energy',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x822cc93ffd030293e9842c30bbd678f530701867.png', tvSymbol: 'NYSE:BE'     },
+  USAR:  { address: '0xd917B029C761D264c6A312BBbcDA868658eF86a6', name: 'USA Rare Earth',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd917b029c761d264c6a312bbbcda868658ef86a6.png', tvSymbol: 'NASDAQ:USAR' },
+  USO:   { address: '0xa30FA36Db767ad9eD3f7a60fC79526fB4d56D344', name: 'United States Oil Fund',  logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xa30fa36db767ad9ed3f7a60fc79526fb4d56d344.png', tvSymbol: 'AMEX:USO'    },
 };
 
 export const WETH_ADDRESS = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as `0x${string}`;
@@ -56,7 +61,7 @@ let _prices: Record<string, number> = {};
 let _pricesExp = 0;
 
 // OHLCV (changePct, open, high, low, vol, 52w) — expensive YF sequential fetch, 5-min TTL
-type OhlcvData = { change: number; changePct: number; open: number; high: number; low: number; volume: number; fiftyTwoHigh: number; fiftyTwoLow: number };
+type OhlcvData = { change: number; changePct: number; open: number; high: number; low: number; volume: number; fiftyTwoHigh: number; fiftyTwoLow: number; yfPrice: number };
 let _ohlcv: Record<string, OhlcvData | null> = {};
 let _ohlcvExp = 0;
 let _ohlcvInflight: Promise<void> | null = null;
@@ -144,6 +149,7 @@ async function fetchChangePct(symbol: string): Promise<{ change: number; changeP
 
     return {
       change: +change.toFixed(4), changePct: +changePct.toFixed(4),
+      yfPrice: +(+price).toFixed(4),
       open:         +((opens.findLast(v => v != null))  ?? meta.regularMarketOpen        ?? 0),
       high:         +((highs.findLast(v => v != null))  ?? meta.regularMarketDayHigh     ?? 0),
       low:          +((lows.findLast(v => v != null))   ?? meta.regularMarketDayLow      ?? 0),
@@ -159,7 +165,7 @@ async function fetchChangePct(symbol: string): Promise<{ change: number; changeP
 
 /* ── Map RWA symbol → Yahoo Finance ticker (where they differ) ────────────── */
 const YF_SYMBOL: Record<string, string> = {
-  SNDK: 'WDC',  // SanDisk acquired by Western Digital; WDC trades on NASDAQ
+  SPCX: 'SPCX', GOOGL: 'GOOG', USAR: 'USAR', CRWV: 'CRWV', BE: 'BE',
 };
 
 /* ── Refresh Blockscout prices (fast, 60s TTL) ───────────────────────────── */
@@ -168,13 +174,13 @@ async function refreshPrices(): Promise<void> {
   if (Object.keys(p).length) { _prices = p; _pricesExp = Date.now() + 60_000; }
 }
 
-/* ── Refresh Yahoo Finance OHLCV (sequential 400ms gaps, 5-min TTL) ──────── */
+/* ── Refresh Yahoo Finance OHLCV (sequential 500ms gaps, 5-min TTL) ──────── */
 async function refreshOhlcv(): Promise<void> {
   const data: typeof _ohlcv = {};
   for (let i = 0; i < SYMBOLS.length; i++) {
     const sym = SYMBOLS[i];
     data[sym] = await fetchChangePct(YF_SYMBOL[sym] ?? sym);
-    if (i < SYMBOLS.length - 1) await sleep(800); // 800ms gap — avoids Yahoo Finance 429
+    if (i < SYMBOLS.length - 1) await sleep(500); // 500ms gap — avoids Yahoo Finance 429
   }
   // Only commit if we got at least one valid result
   if (Object.values(data).some(v => v !== null)) {
@@ -198,7 +204,7 @@ function buildQuoteList(): QuoteResult[] {
       name:         info.name,
       address:      info.address,
       logoUrl:      info.logoUrl,
-      price:        _prices[sym]     ?? 0,
+      price:        _prices[sym]     || cd?.yfPrice || 0,   // Blockscout oracle → YF fallback
       change:       cd?.change       ?? 0,
       changePct:    cd?.changePct    ?? 0,
       open:         cd?.open         ?? 0,
@@ -211,6 +217,267 @@ function buildQuoteList(): QuoteResult[] {
     };
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FlapPortal on-chain trading — settlement pools + live quotes (chain 4663)
+   Reverse-engineered from live txs, verified via eth_call simulation.
+   Buy : ETH →(auto-wrap)→ WETH →(V3 pool)→ USDG →(settlement pool)→ Stock
+   Sell: Stock →(settlement pool)→ USDG →(V3 pool)→ WETH →(type-4 unwrap)→ ETH
+   Settlement pools are PER-STOCK. Signature words [9]/[10], referrer and
+   feeSplit params are optional (proven via simulation of both directions).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const RPC_URL     = 'https://rpc.mainnet.chain.robinhood.com';
+const BS_BASE     = 'https://robinhoodchain.blockscout.com/api/v2';
+const FLAP_PORTAL = '0xc94135b63772b91d79d0a2daab2a8801f32359bd';
+const _USDG_HEX   = '5fc5360d0400a0fd4f2af552add042d716f1d168';
+const _WETH_HEX   = '0bd7d308f8e1639fab988df18a8011f41eacad73';
+const _WUSDG_V3   = '52e65b17fb6e5ba00ed806f37afcd2daa50271ca'; // WETH/USDG V3 pool (fee=100)
+const _ETH_SENT   = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'; // native-ETH sentinel
+const _FLAP_HEX   = 'c94135b63772b91d79d0a2daab2a8801f32359bd';
+const SWAP_SEL    = '0x77963966'; // FlapPortal.swap()
+const PERMIT_SEL  = '0x8fb4309b'; // swap-with-permit variant (same route layout)
+const WETH_FROM   = '0x0bd7d308f8e1639fab988df18a8011f41eacad73'; // WETH contract holds native ETH → usable as eth_call `from`
+
+/* eth_call state-override slots (ERC-7201 'openzeppelin.storage.ERC20').
+   Identical for EVERY factory stock token — keyed only by holder(WETH)+spender(FlapPortal):
+     balances[WETH_FROM]              → OVR_BAL_SLOT
+     allowance[WETH_FROM][FlapPortal] → OVR_ALW_SLOT                          */
+const OVR_BAL_SLOT = '0x6d94746bfae4bd07d20f78e449e45ee605807f5f3ded1e22683dec972daba9ab';
+const OVR_ALW_SLOT = '0x2dca2eb46b66a676451d33725479d05b6fceca5480681e2e0e31a32c161e4e42';
+
+/* Settlement pools mined from successful FlapPortal swaps (stock → pool, lowercase) */
+const FLAP_POOL_SEED: Record<string, string> = {
+  '0xaf3d76f1834a1d425780943c99ea8a608f8a93f9': '0x957bb4b86ccc706d44983fb889ed63c6f9bdc662', // AAPL
+  '0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec': '0x682fd352329026885366d6649d61cb4ee505e7a4', // NVDA
+  '0x86923f96303d656e4aa86d9d42d1e57ad2023fdc': '0xaf7e236fd675a4de1a393516105db8afb53dc1eb', // AMD
+  '0x117cc2133c37b721f49de2a7a74833232b3b4c0c': '0x434dc3ed0aed78385b34041e7836c867c6790844', // SPY
+  '0x12f190a9f9d7d37a250758b26824b97ce941bf54': '0x3785715b43ed03da120f4ae7b23bb1274d5e02dd', // AMZN
+  '0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3': '0x7da0e2609e8dcf31055a8710465516056cf96e64', // GOOGL
+  '0x322f0929c4625ed5bad873c95208d54e1c003b2d': '0x08b29f180ae8873897b3b8c2e0ea041172236e63', // TSLA
+  '0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea': '0x10ff8720e7b2731399838ff3fe3b73e1d143aa74', // SPCX
+  '0x5f10a1c971b69e47e059e1dc91901b59b3fb49c3': '0x67c574d4d5025e93822fc434002d1d36e603d77c', // CRWV
+  '0x6330d8c3178a418788df01a47479c0ce7ccf450b': '0x33918df3a039312217524491f60e9e69000c30c9', // COIN
+  '0x822cc93ffd030293e9842c30bbd678f530701867': '0xc6a42da6f853decf545e15a8b93ad135f067a66b', // BE
+  '0x894e1ec2d74ffe5aef8dc8a9e84686accb964f2a': '0x4bf0949f64739f4e493415bcdaa595dee6aa9840', // PLTR
+  '0xa30fa36db767ad9ed3f7a60fc79526fb4d56d344': '0xaa3625dd1d51e3c5d6ee3576da526982b1ebaa3c', // USO
+  '0xb0992820e760d836549ba69bc7598b4af75dee03': '0xfde9fd3207b26c3607a6ed30b27615c186131698', // ORCL
+  '0xc0d6457c16cc70d6790dd43521c899c87ce02f35': '0xb535f7d16c28cc86769be67fa13cdf929c9b5b6d', // META
+  '0xc72b96e0e48ecd4dc75e1e45396e26300bc39681': '0xb1742edac0794f792f84e7beb6ab7004e2c26bda', // INTC
+  '0xd5f3879160bc7c32ebb4dc785f8a4f505888de68': '0xaf86c97bce104b1836b9972d20ec7c014d32f47d', // QQQ
+  '0xd917b029c761d264c6a312bbbcda868658ef86a6': '0x4fa3b64df2756fc6d9d9efef713d9451002e3d58', // USAR
+  '0xe93237c50d904957cf27e7b1133b510c669c2e74': '0xee3045339447359e6c021ed63537305debdbd610', // MSFT
+  '0xff080c8ce2e5feadaca0da81314ae59d232d4afd': '0xa84a59b1bc44e4f99e7ab84cf68d998f7d5a74e9', // MU
+};
+
+const _poolCache = new Map<string, string>();   // runtime-mined pools
+const _poolMiss  = new Map<string, number>();   // negative cache (retry-after ts)
+
+/* ── ABI-encoding helpers (dependency-free hex) ──────────────────────────── */
+const hexAddr = (s: string) => '000000000000000000000000' + s.replace(/^0x/i, '').toLowerCase().padStart(40, '0');
+const hexU    = (n: bigint | number) => BigInt(n).toString(16).padStart(64, '0');
+const HZ      = '0'.repeat(64);
+
+/* Buy: swap(ETH→stock), 2 routes: V3 WETH→USDG, settlement USDG→stock */
+function buildFlapBuyCalldata(stock: string, pool: string, ethWei: bigint, minOut: bigint, recipient: string, deadline: number): string {
+  const cb   = '2203d44a' + hexU(0) + hexU(0) + hexU(minOut) + hexAddr(_FLAP_HEX) + hexU(deadline) + '0'.repeat(56);
+  const head = hexAddr(_ETH_SENT) + hexAddr(stock) + hexU(ethWei) + hexU(minOut) + hexAddr(recipient) + hexU(deadline)
+             + HZ + HZ + HZ + HZ + HZ + hexU(0x180);
+  const rh   = hexU(2) + hexU(0x40) + hexU(0x1a0);
+  const r0   = hexU(2) + hexAddr(_WUSDG_V3) + hexAddr(_WETH_HEX) + hexAddr(_USDG_HEX) + hexU(ethWei) + HZ + HZ + hexU(0x120) + HZ + hexU(32) + hexU(100);
+  const r1   = HZ + hexAddr(pool) + hexAddr(_USDG_HEX) + hexAddr(stock) + HZ + HZ + hexU(minOut) + hexU(0x120) + hexU(36) + hexU(164) + cb;
+  return SWAP_SEL + head + rh + r0 + r1;
+}
+
+/* Sell: swap(stock→ETH), 3 routes: settlement stock→USDG, V3 USDG→WETH, type-4 unwrap */
+function buildFlapSellCalldata(stock: string, pool: string, amountWei: bigint, minEthOut: bigint, recipient: string, deadline: number): string {
+  const cb   = '2203d44a' + hexU(1) + hexU(amountWei) + hexU(1) + hexAddr(_FLAP_HEX) + hexU(deadline) + '0'.repeat(56);
+  const head = hexAddr(stock) + hexAddr(_ETH_SENT) + hexU(amountWei) + hexU(minEthOut) + hexAddr(recipient) + hexU(deadline)
+             + HZ + HZ + HZ + HZ + HZ + hexU(0x180);
+  const rh   = hexU(3) + hexU(0x60) + hexU(0x260) + hexU(0x3c0);
+  const r0   = HZ + hexAddr(pool) + hexAddr(stock) + hexAddr(_USDG_HEX) + hexU(amountWei) + HZ + hexU(1) + hexU(0x120) + hexU(36) + hexU(164) + cb;
+  const r1   = hexU(2) + hexAddr(_WUSDG_V3) + hexAddr(_USDG_HEX) + hexAddr(_WETH_HEX) + HZ + HZ + hexU(minEthOut) + hexU(0x120) + HZ + hexU(32) + hexU(100);
+  const r2   = hexU(4) + hexAddr(_WETH_HEX) + hexAddr(_WETH_HEX) + hexAddr(_ETH_SENT) + HZ + HZ + hexU(1) + hexU(0x120) + HZ + hexU(0);
+  return SWAP_SEL + head + rh + r0 + r1 + r2;
+}
+
+/* ── JSON-RPC ────────────────────────────────────────────────────────────── */
+async function rpcCall(method: string, params: unknown[]): Promise<any> {
+  const r = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error(`RPC HTTP ${r.status}`);
+  return r.json();
+}
+
+function decodeRevert(err: any): string {
+  const data: unknown = err?.data;
+  if (typeof data === 'string' && data.startsWith('0x08c379a0')) {
+    try {
+      const reason = Buffer.from(data.slice(10 + 128), 'hex').toString('utf8').replace(/\0+/g, '').trim();
+      if (reason) return `reverted: ${reason}`;
+    } catch { /* fall through */ }
+  }
+  if (typeof data === 'string' && data.length >= 10) return `reverted: ${data.slice(0, 10)}`;
+  return err?.message ?? 'execution reverted';
+}
+
+/* ── Pool discovery: seed → cache → mine Blockscout FlapPortal txs ───────── */
+function parseSettleRoutes(raw: string): Array<{ stock: string; pool: string }> {
+  const out: Array<{ stock: string; pool: string }> = [];
+  try {
+    if (!raw || raw.length < 74) return out;
+    const sel  = raw.slice(0, 10);
+    const body = raw.slice(10);
+    const W = (i: number) => body.slice(i * 64, i * 64 + 64);
+    const N = (i: number) => { const h = W(i); return h.length === 64 ? Number(BigInt('0x' + h)) : NaN; };
+    const A = (i: number) => '0x' + W(i).slice(24).toLowerCase();
+    let head: number;
+    if (sel === SWAP_SEL) head = 12;
+    else if (sel === PERMIT_SEL) head = N(12) / 32;
+    else return out;
+    const cnt = N(head);
+    if (!Number.isFinite(cnt) || cnt < 1 || cnt > 5) return out;
+    for (let i = 0; i < cnt; i++) {
+      const off = N(head + 1 + i);
+      if (!Number.isFinite(off)) continue;
+      const s = head + 1 + off / 32;
+      if (N(s) !== 0) continue;                        // settlement routes only (type 0)
+      const pool = A(s + 1), tin = A(s + 2), tout = A(s + 3);
+      const stock = tin.slice(2) === _USDG_HEX ? tout : tin;
+      const sl = stock.slice(2);
+      if (sl === _USDG_HEX || sl === _WETH_HEX || sl === _ETH_SENT || sl.length !== 40) continue;
+      out.push({ stock, pool });
+    }
+  } catch { /* malformed input — skip */ }
+  return out;
+}
+
+async function mineFlapPool(token: string): Promise<string | null> {
+  let url = `${BS_BASE}/addresses/${FLAP_PORTAL}/transactions?filter=to`;
+  for (let page = 0; page < 8; page++) {
+    const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15_000) });
+    if (!r.ok) break;
+    const d: any = await r.json();
+    for (const t of d.items ?? []) {
+      if (t?.status !== 'ok') continue;
+      for (const { stock, pool } of parseSettleRoutes(t.raw_input ?? '')) {
+        if (!_poolCache.has(stock)) _poolCache.set(stock, pool);
+      }
+    }
+    if (_poolCache.has(token)) return _poolCache.get(token)!;
+    const npp = d.next_page_params;
+    if (!npp) break;
+    const qs = new URLSearchParams({ filter: 'to' });
+    for (const [k, v] of Object.entries(npp)) if (v != null) qs.set(k, String(v));
+    url = `${BS_BASE}/addresses/${FLAP_PORTAL}/transactions?${qs}`;
+  }
+  return _poolCache.get(token) ?? null;
+}
+
+async function getFlapPool(tokenRaw: string): Promise<string | null> {
+  const token = tokenRaw.toLowerCase();
+  const seeded = FLAP_POOL_SEED[token];
+  if (seeded) return seeded;
+  const cached = _poolCache.get(token);
+  if (cached) return cached;
+  const missUntil = _poolMiss.get(token);
+  if (missUntil && Date.now() < missUntil) return null;
+  try {
+    const mined = await mineFlapPool(token);
+    if (mined) return mined;
+  } catch (e: any) {
+    console.warn('[rwa] pool mining failed:', e?.message);
+  }
+  _poolMiss.set(token, Date.now() + 180_000); // don't rescan for 3 min
+  return null;
+}
+
+/* ── Live quotes via eth_call (reference amounts, linear-scaled client-side) ── */
+const REF_BUY_ETH     = 10n ** 16n; // 0.01 ETH
+const REF_SELL_SHARES = 10n ** 16n; // 0.01 share
+
+type BuyQuote  = { token: string; pool: string; ethIn: string; amountOut: string; updatedAt: string };
+type SellQuote = { token: string; pool: string; amountIn: string; ethOut: string; exact: boolean; updatedAt: string };
+const _buyQuoteCache  = new Map<string, { body: BuyQuote;  exp: number }>();
+const _sellQuoteCache = new Map<string, { body: SellQuote; exp: number }>();
+
+async function fetchBuyQuote(token: string): Promise<BuyQuote | { error: string; status: number }> {
+  const hit = _buyQuoteCache.get(token);
+  if (hit && Date.now() < hit.exp) return hit.body;
+  const pool = await getFlapPool(token);
+  if (!pool) return { error: 'No settlement pool found for token', status: 404 };
+  const deadline = Math.floor(Date.now() / 1000) + 300; // portal enforces a near-term deadline cap
+  const data = buildFlapBuyCalldata(token, pool, REF_BUY_ETH, 1n, WETH_FROM, deadline);
+  try {
+    const r = await rpcCall('eth_call', [{ from: WETH_FROM, to: FLAP_PORTAL, data, value: '0x' + REF_BUY_ETH.toString(16) }, 'latest']);
+    if (r?.result && r.result !== '0x') {
+      const amountOut = BigInt(String(r.result).slice(0, 66)).toString();
+      const body: BuyQuote = { token, pool, ethIn: REF_BUY_ETH.toString(), amountOut, updatedAt: new Date().toISOString() };
+      _buyQuoteCache.set(token, { body, exp: Date.now() + 5_000 });
+      return body;
+    }
+    return { error: `Buy quote failed — ${decodeRevert(r?.error)}`, status: 502 };
+  } catch (e: any) {
+    return { error: `RPC unavailable: ${e?.message}`, status: 502 };
+  }
+}
+
+/* ── GET /rwa/flap-pool/:address ─────────────────────────────────────────── */
+router.get('/rwa/flap-pool/:address', async (req: Request, res: Response) => {
+  const address = String(req.params.address ?? '');
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) { res.status(400).json({ error: 'Invalid token address' }); return; }
+  const pool = await getFlapPool(address);
+  if (!pool) { res.status(404).json({ error: 'No settlement pool found — token may not be tradeable via FlapPortal yet' }); return; }
+  res.json({ token: address.toLowerCase(), pool });
+});
+
+/* ── GET /rwa/flap-quote?token=0x… — live on-chain buy rate (0.01 ETH ref) ── */
+router.get('/rwa/flap-quote', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(token)) { res.status(400).json({ error: 'token query param must be a 0x address' }); return; }
+  const q = await fetchBuyQuote(token);
+  if ('error' in q) { res.status(q.status).json({ error: q.error }); return; }
+  res.json(q);
+});
+
+/* ── GET /rwa/flap-sell-quote?token=0x… — live sell rate (0.01 share ref) ──
+   Exact simulation: eth_call with state-override granting WETH_FROM a token
+   balance + FlapPortal allowance. Falls back to inverse buy rate.          ── */
+router.get('/rwa/flap-sell-quote', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(token)) { res.status(400).json({ error: 'token query param must be a 0x address' }); return; }
+  const hit = _sellQuoteCache.get(token);
+  if (hit && Date.now() < hit.exp) { res.json(hit.body); return; }
+  const pool = await getFlapPool(token);
+  if (!pool) { res.status(404).json({ error: 'No settlement pool found — token may not be tradeable via FlapPortal yet' }); return; }
+
+  const deadline = Math.floor(Date.now() / 1000) + 300;
+  const data = buildFlapSellCalldata(token, pool, REF_SELL_SHARES, 1n, WETH_FROM, deadline);
+  const overrides = { [token]: { stateDiff: { [OVR_BAL_SLOT]: '0x' + hexU(REF_SELL_SHARES), [OVR_ALW_SLOT]: '0x' + 'f'.repeat(64) } } };
+  try {
+    const r = await rpcCall('eth_call', [{ from: WETH_FROM, to: FLAP_PORTAL, data, value: '0x0' }, 'latest', overrides]);
+    if (r?.result && r.result !== '0x') {
+      const ethOut = BigInt(String(r.result).slice(0, 66)).toString();
+      const body: SellQuote = { token, pool, amountIn: REF_SELL_SHARES.toString(), ethOut, exact: true, updatedAt: new Date().toISOString() };
+      _sellQuoteCache.set(token, { body, exp: Date.now() + 5_000 });
+      res.json(body); return;
+    }
+    console.warn('[rwa] sell sim reverted:', decodeRevert(r?.error), '— falling back to inverse buy rate');
+  } catch (e: any) {
+    console.warn('[rwa] sell sim RPC error:', e?.message, '— falling back to inverse buy rate');
+  }
+
+  // Fallback: invert the buy rate (settlement pools trade both directions at oracle price)
+  const bq = await fetchBuyQuote(token);
+  if ('error' in bq) { res.status(bq.status).json({ error: bq.error }); return; }
+  const ethOut = (REF_SELL_SHARES * BigInt(bq.ethIn)) / BigInt(bq.amountOut);
+  const body: SellQuote = { token, pool, amountIn: REF_SELL_SHARES.toString(), ethOut: ethOut.toString(), exact: false, updatedAt: new Date().toISOString() };
+  _sellQuoteCache.set(token, { body, exp: Date.now() + 5_000 });
+  res.json(body);
+});
 
 /* ── GET /rwa/logo/:address  (proxy — cdn.robinhood.com blocks browsers) ─── */
 router.get("/rwa/logo/:address", async (req: Request, res: Response) => {
@@ -337,6 +604,47 @@ router.patch("/rwa/trades/:id", async (req: Request, res: Response) => {
     .returning();
 
   res.json({ trade: updated });
+});
+
+/* ── GET /rwa/flap-prices — real-time on-chain prices via eth_call for ALL tokens ── */
+/* Returns {symbol, address, priceUsd} for every token with a known pool.             */
+const _flapPriceCache = new Map<string, { price: number; ts: number }>();
+const FLAP_PRICE_TTL  = 6_000; // 6s
+
+router.get('/rwa/flap-prices', async (_req: Request, res: Response) => {
+  const ethUsd = await fetchEthPrice();
+  if (ethUsd <= 0) { res.status(502).json({ error: 'ETH price unavailable' }); return; }
+  const now = Date.now();
+  const results: Array<{ symbol: string; address: string; priceUsd: number; live: boolean }> = [];
+
+  // Parallel eth_calls for all tokens with known pools
+  const deadline = Math.floor(now / 1000) + 300;
+  await Promise.all(Object.entries(RWA_TOKENS).map(async ([sym, info]) => {
+    const token = info.address.toLowerCase();
+    const cached = _flapPriceCache.get(token);
+    if (cached && now - cached.ts < FLAP_PRICE_TTL) {
+      results.push({ symbol: sym, address: info.address, priceUsd: cached.price, live: true });
+      return;
+    }
+    const pool = await getFlapPool(token);
+    if (!pool) return; // no pool = not tradeable via FlapPortal
+    const calldata = buildFlapBuyCalldata(token, pool, REF_BUY_ETH, 1n, WETH_FROM, deadline);
+    try {
+      const r = await rpcCall('eth_call', [{ from: WETH_FROM, to: FLAP_PORTAL, data: calldata, value: '0x' + REF_BUY_ETH.toString(16) }, 'latest']);
+      if (r?.result && r.result !== '0x') {
+        const amountOut = BigInt(String(r.result).slice(0, 66));
+        if (amountOut > 0n) {
+          // price = (refEth / amountOut) * ethUsd
+          const priceUsd = (Number(REF_BUY_ETH) / Number(amountOut)) * ethUsd;
+          _flapPriceCache.set(token, { price: priceUsd, ts: now });
+          results.push({ symbol: sym, address: info.address, priceUsd: +priceUsd.toFixed(4), live: true });
+        }
+      }
+    } catch { /* skip this token */ }
+  }));
+
+  results.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  res.json({ prices: results, ethUsd, updatedAt: new Date().toISOString() });
 });
 
 /* ── Pre-warm prices only on module load (Blockscout, fast, no rate-limit) ── */

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   useAccount, useSendTransaction, useWaitForTransactionReceipt,
@@ -9,10 +9,10 @@ import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDow
 
 /* ─── On-chain swap constants ────────────────────────────────────────────── */
 // FlapPortal — Robinhood Chain's real RWA swap contract.
-// Reverse-engineered from successful tx 0xffa2db1c09d8b1787df75c2f9da469a69b3653ac2eb059fe397b7c585aafe2ec
-// Route: ETH → WETH → USDG (via V3 pool) → Stock token (via settlement pool)
-// RobinhoodRouter (0xEa4F57DbC875889EbC435722cbFAa4A16B19B452) has flapPortal=address(0),
-// so we bypass it and call FlapPortal directly.
+// Reverse-engineered from live txs + verified via eth_call simulation.
+// Buy : ETH →(auto-wrap)→ WETH →(V3)→ USDG →(per-stock settlement pool)→ Stock
+// Sell: Stock →(settlement pool)→ USDG →(V3)→ WETH →(type-4 unwrap)→ ETH
+// Settlement pools are PER-STOCK (fetched from /api/rwa/flap-pool/:address).
 const FLAP_PORTAL  = '0xC94135b63772b91D79d0A2DaAb2a8801f32359bD' as `0x${string}`;
 const RH_CHAIN_ID  = 4663;
 const TRADE_GAS    = 500_000n;
@@ -21,9 +21,9 @@ const TRADE_GAS    = 500_000n;
 const _WETH     = '0bd7d308f8e1639fab988df18a8011f41eacad73'; // Wrapped ETH on RH Chain
 const _USDG     = '5fc5360d0400a0fd4f2af552add042d716f1d168'; // USDG stablecoin (Robinhood)
 const _WUSDG_V3 = '52e65b17fb6e5ba00ed806f37afcd2daa50271ca'; // WETH/USDG Uniswap V3 pool (fee=100)
-const _SETTLE   = '957bb4b86ccc706d44983fb889ed63c6f9bdc662'; // Universal stock settlement pool
+const _EEE      = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'; // native-ETH sentinel
 const _FLAP_HEX = 'c94135b63772b91d79d0a2daab2a8801f32359bd'; // FlapPortal (embedded in callback)
-const _BUY_SEL  = '77963966'; // FlapPortal.swap() selector
+const _BUY_SEL  = '77963966'; // FlapPortal.swap() selector (buys AND sells)
 
 // Allowance target: FlapPortal (for sell direction)
 const RH_ROUTER = FLAP_PORTAL; // approve FlapPortal, not old router
@@ -44,6 +44,7 @@ function buildFlapBuyData(
   minAmountOut: bigint, // min stock tokens out (wei, 18 dec)
   recipient: string,    // user wallet with 0x
   deadline: number,     // unix timestamp seconds
+  settlePool: string,   // per-stock settlement pool with 0x
 ): `0x${string}` {
   const a = (s: string) => '000000000000000000000000' + s.replace(/^0x/i,'').toLowerCase().padStart(40,'0');
   const u = (n: bigint | number) => BigInt(n).toString(16).padStart(64,'0');
@@ -65,7 +66,7 @@ function buildFlapBuyData(
 
   // Fixed params (words 0-11)
   const fixedParams = [
-    a('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'), // [0] tokenIn = ETH sentinel
+    a(_EEE),                                       // [0] tokenIn = ETH sentinel
     '000000000000000000000000' + tok,              // [1] tokenOut = stock
     u(amountIn),                                   // [2] amountIn
     u(minAmountOut),                               // [3] minAmountOut
@@ -106,7 +107,7 @@ function buildFlapBuyData(
   // 9 fixed slots + length(1 word) + callback data(6 words=192 bytes)
   const route1 = [
     z,                                 // [0] type = 0 (native settlement)
-    a(_SETTLE),                        // [1] pool = settlement contract
+    a(settlePool),                     // [1] pool = per-stock settlement contract
     a(_USDG),                          // [2] tokenIn = USDG
     '000000000000000000000000' + tok,  // [3] tokenOut = stock
     z,                                 // [4] amountIn = 0 (not pre-specified)
@@ -120,6 +121,61 @@ function buildFlapBuyData(
 
   const data = fixedParams + routesHead + route0 + route1;
   return `0x${_BUY_SEL}${data}` as `0x${string}`;
+}
+
+/* ─── FlapPortal SELL calldata builder ───────────────────────────────────── */
+// Same swap() selector, 3 routes (decoded from live sell tx, verified via
+// state-override eth_call simulation — signature words NOT required):
+//   route0: Stock→USDG via settlement pool (callback = [1, amountIn, 1, portal, deadline])
+//   route1: USDG→WETH via V3 pool (fee 100), carries the ETH minOut check
+//   route2: type-4 WETH unwrap → native ETH to recipient
+function buildFlapSellData(
+  tokenIn: string,      // stock address with 0x
+  amountIn: bigint,     // stock tokens in (wei, 18 dec)
+  minEthOut: bigint,    // min native ETH out (wei)
+  recipient: string,    // user wallet with 0x
+  deadline: number,     // unix timestamp seconds
+  settlePool: string,   // per-stock settlement pool with 0x
+): `0x${string}` {
+  const a = (s: string) => '000000000000000000000000' + s.replace(/^0x/i,'').toLowerCase().padStart(40,'0');
+  const u = (n: bigint | number) => BigInt(n).toString(16).padStart(64,'0');
+  const z = '0'.repeat(64);
+
+  // Settlement callback (164 B): selector + [1, amountIn, 1, portal, deadline]
+  const cbPadded =
+    '2203d44a' + u(1n) + u(amountIn) + u(1n) + a(_FLAP_HEX) + u(deadline) + '0'.repeat(56);
+
+  const fixedParams = [
+    a(tokenIn),        // [0] tokenIn = stock
+    a(_EEE),           // [1] tokenOut = native ETH sentinel
+    u(amountIn),       // [2] amountIn (stock wei)
+    u(minEthOut),      // [3] minAmountOut (ETH wei)
+    a(recipient),      // [4] recipient
+    u(deadline),       // [5] deadline
+    z, z, z,           // [6] referrer=0 · [7] feeIn=0 · [8] feeOut=0
+    z, z,              // [9][10] signature words = 0 (optional, proven)
+    u(0x180n),         // [11] routesOffset = 384
+  ].join('');
+
+  const routesHead = [u(3n), u(0x60n), u(0x260n), u(0x3c0n)].join('');
+
+  // Route 0: Stock→USDG via settlement pool (16 words)
+  const route0 = [
+    z, a(settlePool), a(tokenIn), a(_USDG),
+    u(amountIn), z, u(1n), u(0x120n), u(36n), u(164n), cbPadded,
+  ].join('');
+  // Route 1: USDG→WETH via V3 (11 words) — enforces the ETH minOut
+  const route1 = [
+    u(2n), a(_WUSDG_V3), a(_USDG), a(_WETH),
+    z, z, u(minEthOut), u(0x120n), z, u(32n), u(100n),
+  ].join('');
+  // Route 2: WETH → native ETH unwrap (10 words, type 4, pool = WETH contract)
+  const route2 = [
+    u(4n), a(_WETH), a(_WETH), a(_EEE),
+    z, z, u(1n), u(0x120n), z, u(0n),
+  ].join('');
+
+  return `0x${_BUY_SEL}${fixedParams + routesHead + route0 + route1 + route2}` as `0x${string}`;
 }
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
@@ -181,9 +237,14 @@ const CATALOGUE: Quote[] = [
   { symbol:'AMZN',  name:'Amazon.com Inc.',          address:'0x12f190a9F9d7D37a250758b26824B97CE941bF54', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0x12f190a9f9d7d37a250758b26824b97ce941bf54.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
   { symbol:'MU',    name:'Micron Technology',        address:'0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xff080c8ce2e5feadaca0da81314ae59d232d4afd.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
   { symbol:'ORCL',  name:'Oracle Corp.',             address:'0xb0992820E760d836549ba69BC7598b4af75dEE03', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xb0992820e760d836549ba69bc7598b4af75dee03.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
-  { symbol:'SNDK',  name:'SanDisk Corp.',            address:'0xB90A19fF0Af67f7779afF50A882A9CfF42446400', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xb90a19ff0af67f7779aff50a882a9cff42446400.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
   { symbol:'SPY',   name:'SPDR S&P 500 ETF',         address:'0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
   { symbol:'QQQ',   name:'Invesco QQQ ETF',           address:'0xD5f3879160bc7c32ebb4dC785F8a4F505888de68', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'COIN',  name:'Coinbase Global',            address:'0x6330D8C3178a418788dF01a47479c0ce7CCF450b', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0x6330d8c3178a418788df01a47479c0ce7ccf450b.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'CRWV',  name:'CoreWeave Inc.',             address:'0x5f10A1C971B69e47e059e1dC91901B59b3fB49C3', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0x5f10a1c971b69e47e059e1dc91901b59b3fb49c3.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'INTC',  name:'Intel Corp.',                address:'0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xc72b96e0e48ecd4dc75e1e45396e26300bc39681.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'BE',    name:'Bloom Energy',               address:'0x822CC93fFD030293E9842c30BBD678F530701867', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0x822cc93ffd030293e9842c30bbd678f530701867.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'USAR',  name:'USA Rare Earth',             address:'0xd917B029C761D264c6A312BBbcDA868658eF86a6', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xd917b029c761d264c6a312bbbcda868658ef86a6.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
+  { symbol:'USO',   name:'United States Oil Fund',     address:'0xa30FA36Db767ad9eD3f7a60fC79526fB4d56D344', logoUrl:'https://cdn.robinhood.com/ncw_assets/logos/0xa30fa36db767ad9ed3f7a60fc79526fb4d56d344.png',  price:0,change:0,changePct:0,volume:0,open:0,high:0,low:0,fiftyTwoHigh:0,fiftyTwoLow:0,currency:'USD' },
 ];
 
 /* ─── Logo URL via server-side proxy (cdn.robinhood.com blocks browsers) ─── */
@@ -201,10 +262,15 @@ const TV_LOGO: Record<string, string> = {
   AMZN:  `${TV_BASE}/amazon--big.svg`,
   MU:    `${TV_BASE}/micron-technology--big.svg`,
   ORCL:  `${TV_BASE}/oracle--big.svg`,
-  SNDK:  `${TV_BASE}/western-digital--big.svg`,   // SanDisk acquired by WD
   SPY:   `${TV_BASE}/state-street--big.svg`,       // SPDR = State Street
   QQQ:   `${TV_BASE}/invesco--big.svg`,            // Invesco QQQ
   SPCX:  '/spacex-logo.jpg', // local asset — parqet CDN blocks browsers
+  COIN:  `${TV_BASE}/coinbase--big.svg`,
+  CRWV:  `${TV_BASE}/coreweave--big.svg`,
+  INTC:  `${TV_BASE}/intel--big.svg`,
+  BE:    `${TV_BASE}/bloom-energy--big.svg`,
+  USAR:  `${TV_BASE}/usa-rare-earth--big.svg`,
+  USO:   `${TV_BASE}/united-states-commodity-funds--big.svg`,
 };
 
 /* ─── Token Logo ─────────────────────────────────────────────────────────── */
@@ -351,6 +417,59 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const explorerUrl = tokenAddr && !tokenAddr.startsWith('0x000000000000')
     ? `https://robinhoodchain.blockscout.com/token/${tokenAddr}` : null;
 
+  /* ── Per-stock settlement pool (required for FlapPortal routing) ── */
+  const { data: poolData, isError: poolError } = useQuery<{ pool: string }>({
+    queryKey: ['flap-pool', tokenAddr],
+    queryFn: async () => {
+      const r = await fetch(api(`/api/rwa/flap-pool/${tokenAddr}`));
+      if (!r.ok) throw new Error('pool not found');
+      return r.json();
+    },
+    enabled: !!tokenAddr,
+    staleTime: Infinity,
+    retry: 1,
+  });
+  const settlePool = poolData?.pool;
+
+  /* ── Live on-chain rates (reference-amount eth_call quotes, 6s poll) ── */
+  const { data: buyRate } = useQuery<{ ethIn: string; amountOut: string }>({
+    queryKey: ['flap-quote', tokenAddr],
+    queryFn: async () => {
+      const r = await fetch(api(`/api/rwa/flap-quote?token=${tokenAddr.toLowerCase()}`));
+      if (!r.ok) throw new Error('quote failed');
+      return r.json();
+    },
+    enabled: !!settlePool && side === 'buy',
+    refetchInterval: 6_000,
+    staleTime: 4_000,
+  });
+  const { data: sellRate } = useQuery<{ amountIn: string; ethOut: string; exact: boolean }>({
+    queryKey: ['flap-sell-quote', tokenAddr],
+    queryFn: async () => {
+      const r = await fetch(api(`/api/rwa/flap-sell-quote?token=${tokenAddr.toLowerCase()}`));
+      if (!r.ok) throw new Error('quote failed');
+      return r.json();
+    },
+    enabled: !!settlePool && side === 'sell',
+    refetchInterval: 6_000,
+    staleTime: 4_000,
+  });
+
+  /* Live amounts, linear-scaled from the reference rate:
+     buy  → exact ETH to pay so `sharesWei` arrive; sell → exact ETH received */
+  const buyEthWei = (buyRate && sharesWei > 0n && BigInt(buyRate.amountOut) > 0n)
+    ? (sharesWei * BigInt(buyRate.ethIn)) / BigInt(buyRate.amountOut)
+    : 0n;
+  const sellEthWei = (sellRate && sharesWei > 0n && BigInt(sellRate.amountIn) > 0n)
+    ? (sharesWei * BigInt(sellRate.ethOut)) / BigInt(sellRate.amountIn)
+    : 0n;
+  const liveEthWei = side === 'buy' ? buyEthWei : sellEthWei;
+  const liveEthNum = liveEthWei > 0n ? parseFloat(formatUnits(liveEthWei, 18)) : 0;
+  const dispEth    = liveEthNum > 0 ? liveEthNum : ethCost;  // UI: live quote → YF estimate
+  const onchainPx  = buyRate && BigInt(buyRate.amountOut) > 0n
+    ? (Number(BigInt(buyRate.ethIn)) / Number(BigInt(buyRate.amountOut))) * ethUsd
+    : 0;
+
   /* ── Wagmi: send + wait ──
      IMPORTANT: hashes must be in state (not refs) so useWaitForTransactionReceipt
      re-renders when the hash becomes available after sendTransaction resolves. */
@@ -436,7 +555,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
         body: JSON.stringify({
           walletAddress: wallet, symbol: q.symbol, side,
           shares: shares.toFixed(8), priceUsd: q.price.toFixed(4),
-          ethAmount: ethCost.toFixed(8), totalUsd: totalUsd.toFixed(4),
+          ethAmount: (liveEthNum > 0 ? liveEthNum : ethCost).toFixed(8), totalUsd: totalUsd.toFixed(4),
           txHash: txH ?? null,
           status: 'confirmed', source: 'manual', network: 'robinhood-chain',
         }),
@@ -461,23 +580,40 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   /* ── Swap via FlapPortal directly ── */
   async function execSwap() {
     if (!(await ensureChain())) return;
+    if (!settlePool) {
+      setErr(`No settlement pool found for ${q.symbol} — this token cannot be traded on FlapPortal yet.`);
+      setStep('error'); return;
+    }
     setStep('swapping');
+    const dl = Math.floor(Date.now() / 1000) + 1800; // 30 min deadline (portal caps far-future deadlines)
 
     if (side === 'buy') {
-      // FlapPortal.swap() — route: ETH → WETH → USDG (V3) → Stock (settlement)
-      // minAmountOut: 10% slippage tolerance on expected shares
-      const minOut = sharesWei * 90n / 100n;
-      const dl     = Math.floor(Date.now() / 1000) + 1800; // 30 min deadline
-      const data   = buildFlapBuyData(tokenAddr, ethWei, minOut, wallet as string, dl);
-      sendTransaction({ to: FLAP_PORTAL, value: ethWei, data, gas: TRADE_GAS }, {
+      // Pay the live-quoted ETH amount (linear-scaled eth_call rate); fallback = YF estimate
+      const payWei = buyEthWei > 0n ? buyEthWei : ethWei;
+      if (payWei <= 0n) { setErr('Live quote not ready — wait a second and retry.'); setStep('error'); return; }
+      if (ethBal && payWei > ethBal.value) {
+        setErr(`Insufficient ETH — need ${formatUnits(payWei, 18).slice(0, 10)} ETH plus gas.`);
+        setStep('error'); return;
+      }
+      const minOut = sharesWei * 98n / 100n; // max 2% slippage, enforced on-chain
+      const data   = buildFlapBuyData(tokenAddr, payWei, minOut, wallet as string, dl, settlePool);
+      sendTransaction({ to: FLAP_PORTAL, value: payWei, data, gas: TRADE_GAS }, {
         onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
         onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
       });
     } else {
-      // Sell: FlapPortal likely has a different selector (not yet decoded).
-      // Fall back with a clear error until sell calldata is reverse-engineered.
-      setErr('Sell via FlapPortal not yet available — sell calldata not decoded. Use the Robinhood app to sell, then buy again here.');
-      setStep('error');
+      // Sell: stock → USDG (settlement) → WETH (V3) → native ETH (unwrap)
+      if (tokenBal && sharesWei > tokenBal.value) {
+        setErr(`Insufficient ${q.symbol} — you hold ${formatUnits(tokenBal.value, 18).slice(0, 10)}.`);
+        setStep('error'); return;
+      }
+      if (sellEthWei <= 0n) { setErr('Live sell quote not ready — wait a second and retry.'); setStep('error'); return; }
+      const minEthOut = sellEthWei * 98n / 100n; // max 2% slippage, enforced on-chain
+      const data = buildFlapSellData(tokenAddr, sharesWei, minEthOut, wallet as string, dl, settlePool);
+      sendTransaction({ to: FLAP_PORTAL, value: 0n, data, gas: TRADE_GAS }, {
+        onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
+        onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
+      });
     }
   }
 
@@ -492,7 +628,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const buyColor  = '#7ecb3b';
   const sellColor = '#e05050';
   const sideColor = side === 'buy' ? buyColor : sellColor;
-  const canPreview = !!(wallet && shares > 0 && q.price > 0);
+  const canPreview = !!(wallet && shares > 0 && q.price > 0 && !poolError);
   const isSpinning = step === 'approving' || step === 'pending_approve' || step === 'swapping' || step === 'pending_swap';
 
   function reset() {
@@ -523,9 +659,10 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             {[
               { k: 'ACTION',    v: `${isSell2 ? 'SELL' : 'BUY'} ${q.symbol}` },
               { k: 'SHARES',    v: `${shares.toFixed(6)} ${q.symbol}` },
-              { k: isSell2 ? 'RECEIVE' : 'PAY', v: isSell2 ? `≈ ${eth(ethCost)} WETH` : eth(ethCost) },
+              { k: isSell2 ? 'RECEIVE' : 'PAY', v: `${isSell2 ? '≈ ' : ''}${eth(dispEth)}` },
+              { k: 'QUOTE',     v: liveEthNum > 0 ? 'LIVE ON-CHAIN' : 'ESTIMATE' },
               { k: 'USD VALUE', v: usd(totalUsd) },
-              { k: 'ROUTER',    v: 'RobinhoodRouter · Protocol FLAP' },
+              { k: 'ROUTER',    v: 'FlapPortal · per-stock settlement' },
               { k: 'CHAIN',     v: 'Robinhood Chain 4663' },
             ].map(({ k, v }) => (
               <div key={k} className="flex justify-between items-start gap-2">
@@ -536,7 +673,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             <div className="border-t pt-2 space-y-1" style={{ borderColor: 'var(--out-ink-dim)' }}>
               <div className="flex justify-between text-[9px]">
                 <span style={{ color: 'var(--out-muted)' }}>SLIPPAGE</span>
-                <span style={{ color: '#e09020' }}>unlimited (v1)</span>
+                <span style={{ color: '#7ecb3b' }}>max 2% (on-chain enforced)</span>
               </div>
               <div className="flex justify-between text-[9px]">
                 <span style={{ color: 'var(--out-muted)' }}>GAS LIMIT</span>
@@ -555,7 +692,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
           <div className="flex items-start gap-2 text-[9px] border px-2 py-1.5"
             style={{ borderColor: '#e0902040', background: '#0d0a05', color: '#e09020' }}>
             <AlertTriangle size={10} className="shrink-0 mt-[1px]" />
-            <span>No slippage protection in v1. Trade may fill at any price. Only trade amounts you can afford to lose on slippage.</span>
+            <span>Settles at the live on-chain oracle rate. minAmountOut enforces max 2% slippage — a worse fill reverts the whole swap.</span>
           </div>
 
           {/* OHLCV mini */}
@@ -637,7 +774,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
             </span>
             <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
-              FlapPortal.swap() · ETH→WETH→USDG→{q.symbol} · Robinhood Chain
+              FlapPortal.swap() · {side === 'buy' ? `ETH→USDG→${q.symbol}` : `${q.symbol}→USDG→ETH`} · Robinhood Chain
             </span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
@@ -736,9 +873,17 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               <span className="font-bold" style={{ color: 'var(--out-text)' }}>{usd(totalUsd)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span style={{ color: 'var(--out-muted)' }}>{side === 'buy' ? 'ETH COST' : 'ETH RECEIVE'}</span>
-              <span className="font-bold" style={{ color: 'var(--out-ink)' }}>{eth(ethCost)}</span>
+              <span style={{ color: 'var(--out-muted)' }}>
+                {side === 'buy' ? 'ETH COST' : 'ETH RECEIVE'}{liveEthNum > 0 ? ' · LIVE' : ' · EST'}
+              </span>
+              <span className="font-bold" style={{ color: liveEthNum > 0 ? '#7ecb3b' : 'var(--out-ink)' }}>{eth(dispEth)}</span>
             </div>
+            {onchainPx > 0 && side === 'buy' && (
+              <div className="flex justify-between items-center">
+                <span style={{ color: 'var(--out-muted)' }}>ONCHAIN PX</span>
+                <span style={{ color: 'var(--out-muted)' }}>{usd(onchainPx)}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
               <span style={{ color: 'var(--out-muted)' }}>ETH PRICE</span>
               <span style={{ color: 'var(--out-muted)' }}>{usd(ethUsd, 0)}</span>
@@ -762,6 +907,15 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               {tokenAddr.slice(0, 8)}…{tokenAddr.slice(-6)}
               <ExternalLink size={9} />
             </a>
+          </div>
+        )}
+
+        {/* Pool missing — trading disabled */}
+        {poolError && (
+          <div className="flex items-start gap-2 text-[9px] border px-2 py-1.5"
+            style={{ borderColor: '#e0505040', background: '#0d0505', color: '#e05050' }}>
+            <AlertTriangle size={10} className="shrink-0 mt-[1px]" />
+            <span>No FlapPortal settlement pool found for {q.symbol} — trading disabled.</span>
           </div>
         )}
 
@@ -806,7 +960,7 @@ export function RwaPage() {
   const [selected, setSelected] = useState<Quote>(CATALOGUE[0]);
   const lastSym = useRef(CATALOGUE[0].symbol);
 
-  /* ── quotes */
+  /* ── YF + Blockscout quotes (60s, OHLCV data) */
   const { data, isLoading, refetch, dataUpdatedAt } = useQuery<{ quotes: Quote[]; updatedAt: string }>({
     queryKey: ['rwa-quotes'],
     queryFn:  () => fetch(api('/api/rwa/quotes')).then(r => r.json()),
@@ -815,24 +969,41 @@ export function RwaPage() {
     retry: 2,
   });
 
-  /* ── eth price */
+  /* ── Real-time on-chain prices via FlapPortal eth_call (6s poll) */
+  const { data: flapPrices } = useQuery<{ prices: Array<{ symbol: string; priceUsd: number }>; ethUsd: number }>({
+    queryKey: ['flap-prices'],
+    queryFn:  () => fetch(api('/api/rwa/flap-prices')).then(r => r.json()),
+    refetchInterval: 6_000,
+    staleTime: 4_000,
+    retry: 1,
+  });
+
+  /* ── eth price (fallback when flap-prices unavailable) */
   const { data: ethData } = useQuery<{ usd: number }>({
     queryKey: ['eth-price'],
     queryFn:  () => fetch(api('/api/rwa/eth-price')).then(r => r.json()),
     refetchInterval: 300_000,
     staleTime: 180_000,
   });
-  const ethUsd = ethData?.usd ?? 1828;
+  const ethUsd = flapPrices?.ethUsd ?? ethData?.usd ?? 1828;
 
-  const quotes = data?.quotes?.length ? data.quotes : CATALOGUE;
+  /* Merge: start from YF/Blockscout base, overlay real-time on-chain prices */
+  const flapPriceMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of flapPrices?.prices ?? []) if (p.priceUsd > 0) m[p.symbol] = p.priceUsd;
+    return m;
+  }, [flapPrices]);
+
+  const quotes: Quote[] = useMemo(() => {
+    const base = data?.quotes?.length ? data.quotes : CATALOGUE;
+    return base.map(q => flapPriceMap[q.symbol] ? { ...q, price: flapPriceMap[q.symbol] } : q);
+  }, [data, flapPriceMap]);
 
   /* keep selected in sync with live data */
   useEffect(() => {
-    if (data?.quotes) {
-      const live = data.quotes.find(q => q.symbol === lastSym.current);
-      if (live) setSelected(live);
-    }
-  }, [dataUpdatedAt]);
+    const live = quotes.find(q => q.symbol === lastSym.current);
+    if (live) setSelected(live);
+  }, [dataUpdatedAt, flapPrices]);
 
   function pick(q: Quote) {
     const live = data?.quotes?.find(l => l.symbol === q.symbol) ?? q;
