@@ -400,18 +400,19 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const { address: wallet, chain } = useAccount();
   const { switchChainAsync }        = useSwitchChain();
 
-  const [side, setSide]   = useState<'buy' | 'sell'>('buy');
-  const [qty, setQty]     = useState('');
-  const [step, setStep]   = useState<TxStep>('form');
-  const [errMsg, setErr]  = useState('');
-  const [tradeId, setTid] = useState<number | null>(null);
+  const [side, setSide]       = useState<'buy' | 'sell'>('buy');
+  const [qty, setQty]         = useState('');
+  const [inputMode, setMode]  = useState<'shares' | 'eth' | 'usd'>('shares');
+  const [step, setStep]       = useState<TxStep>('form');
+  const [errMsg, setErr]      = useState('');
+  const [tradeId, setTid]     = useState<number | null>(null);
 
-  /* Computed amounts */
-  const shares   = parseFloat(qty) || 0;
-  const totalUsd = shares * (q.price || 0);
-  const ethCost  = ethUsd > 0 ? totalUsd / ethUsd : 0;
-  const sharesWei = shares > 0 ? parseUnits(shares.toFixed(8), 18) : 0n;
-  const ethWei    = ethCost > 0 ? parseUnits(ethCost.toFixed(8), 18) : 0n;
+  /* ── Derived amounts (3 input modes) ──────────────────────────────────────
+     shares mode : qty = share count  → ETH cost from live rate
+     eth mode    : qty = ETH amount   → shares from live rate (buy only)
+     usd mode    : qty = USD amount   → shares from on-chain price
+     ──────────────────────────────────────────────────────────────────────── */
+  const qtyNum = parseFloat(qty) || 0;
 
   const tokenAddr = (q.address ?? '') as `0x${string}`;
   const explorerUrl = tokenAddr && !tokenAddr.startsWith('0x000000000000')
@@ -455,8 +456,44 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     staleTime: 4_000,
   });
 
-  /* Live amounts, linear-scaled from the reference rate:
-     buy  → exact ETH to pay so `sharesWei` arrive; sell → exact ETH received */
+  /* ── On-chain price per share from live reference quotes ── */
+  const onchainPxBuy  = buyRate  && BigInt(buyRate.amountOut)  > 0n
+    ? (Number(BigInt(buyRate.ethIn))   / Number(BigInt(buyRate.amountOut)))  * ethUsd : 0;
+  const onchainPxSell = sellRate && BigInt(sellRate.amountIn)  > 0n
+    ? (Number(BigInt(sellRate.ethOut)) / Number(BigInt(sellRate.amountIn)))  * ethUsd : 0;
+  const onchainPx = side === 'buy' ? onchainPxBuy : onchainPxSell;
+
+  /* ── Derive share count from active input mode ──────────────────────────
+     shares: qty = share count  (default)
+     eth:    qty = ETH to spend (buy) or ETH to receive (sell)
+     usd:    qty = USD amount   → shares = usd / onchainPrice             */
+  let shares: number;
+  if (inputMode === 'eth') {
+    if (side === 'buy') {
+      const sharesPerEth = buyRate && BigInt(buyRate.ethIn) > 0n
+        ? Number(BigInt(buyRate.amountOut)) / Number(BigInt(buyRate.ethIn)) : 0;
+      shares = qtyNum > 0 && sharesPerEth > 0 ? qtyNum * sharesPerEth : 0;
+    } else {
+      // sell: qty = ETH to receive → how many shares to sell
+      const ethPerShare = sellRate && BigInt(sellRate.amountIn) > 0n
+        ? Number(BigInt(sellRate.ethOut)) / Number(BigInt(sellRate.amountIn)) : 0;
+      shares = qtyNum > 0 && ethPerShare > 0 ? qtyNum / ethPerShare : 0;
+    }
+  } else if (inputMode === 'usd') {
+    const px = side === 'buy' ? onchainPxBuy : onchainPxSell;
+    shares = qtyNum > 0 && px > 0 ? qtyNum / px : 0;
+  } else {
+    shares = qtyNum;
+  }
+
+  /* Use live on-chain price for USD total — not the stale Blockscout/YF price */
+  const effectivePx = onchainPx > 0 ? onchainPx : (q.price || 0);
+  const totalUsd    = shares * effectivePx;
+  const ethCost     = ethUsd > 0 ? totalUsd / ethUsd : 0;
+  const sharesWei   = shares > 0 ? parseUnits(shares.toFixed(8), 18) : 0n;
+  const ethWei      = ethCost > 0 ? parseUnits(ethCost.toFixed(8), 18) : 0n;
+
+  /* Live ETH amounts, linear-scaled from reference quote rate */
   const buyEthWei = (buyRate && sharesWei > 0n && BigInt(buyRate.amountOut) > 0n)
     ? (sharesWei * BigInt(buyRate.ethIn)) / BigInt(buyRate.amountOut)
     : 0n;
@@ -465,10 +502,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     : 0n;
   const liveEthWei = side === 'buy' ? buyEthWei : sellEthWei;
   const liveEthNum = liveEthWei > 0n ? parseFloat(formatUnits(liveEthWei, 18)) : 0;
-  const dispEth    = liveEthNum > 0 ? liveEthNum : ethCost;  // UI: live quote → YF estimate
-  const onchainPx  = buyRate && BigInt(buyRate.amountOut) > 0n
-    ? (Number(BigInt(buyRate.ethIn)) / Number(BigInt(buyRate.amountOut))) * ethUsd
-    : 0;
+  const dispEth    = liveEthNum > 0 ? liveEthNum : ethCost;
 
   /* ── Wagmi: send + wait ──
      IMPORTANT: hashes must be in state (not refs) so useWaitForTransactionReceipt
@@ -700,12 +734,12 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
           <div className="flex items-start gap-2 text-[9px] border px-2 py-1.5"
             style={{ borderColor: '#e0902040', background: '#0d0a05', color: '#e09020' }}>
             <AlertTriangle size={10} className="shrink-0 mt-[1px]" />
-            <span>Settles at the live on-chain oracle rate. minAmountOut enforces max 2% slippage — a worse fill reverts the whole swap.</span>
+            <span>Settles at the live on-chain oracle rate. minAmountOut enforces max 3% slippage — a worse fill reverts the whole swap.</span>
           </div>
 
           {/* OHLCV mini */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3" style={{ borderColor: 'var(--out-ink-dim)' }}>
-            <Stat label="PRICE" value={usd(q.price)} />
+            <Stat label="PRICE" value={usd(effectivePx || q.price)} />
             <Stat label="OPEN"  value={q.open  ? usd(q.open) : '—'} />
             <Stat label="HIGH"  value={q.high  ? usd(q.high) : '—'} />
             <Stat label="LOW"   value={q.low   ? usd(q.low)  : '—'} />
@@ -841,12 +875,17 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             <button
               onClick={() => {
                 if (side === 'buy' && ethBalNum !== null) {
-                  const reserve = 0.001;
-                  setQty(ethBalNum > reserve
-                    ? ((ethBalNum - reserve) * ethUsd / (q.price || 1)).toFixed(6)
-                    : '0');
+                  const maxEth = Math.max(ethBalNum - 0.001, 0);
+                  if (inputMode === 'eth')       setQty(maxEth.toFixed(6));
+                  else if (inputMode === 'usd')  setQty((maxEth * ethUsd).toFixed(2));
+                  else {
+                    const spe = buyRate && BigInt(buyRate.ethIn) > 0n
+                      ? Number(BigInt(buyRate.amountOut)) / Number(BigInt(buyRate.ethIn)) : 0;
+                    setQty(spe > 0 ? (maxEth * spe).toFixed(6) : (maxEth * ethUsd / (effectivePx || 1)).toFixed(6));
+                  }
                 } else if (side === 'sell' && tokenBalNum !== null) {
-                  setQty(tokenBalNum.toFixed(6));
+                  if (inputMode === 'usd') setQty((tokenBalNum * (effectivePx || 0)).toFixed(2));
+                  else                     setQty(tokenBalNum.toFixed(6));
                 }
               }}
               className="font-bold underline underline-offset-2 transition-opacity hover:opacity-70"
@@ -858,23 +897,50 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
           </div>
         )}
 
-        {/* Quantity */}
+        {/* Quantity — 3 input modes: SHARES / ETH / USD */}
         <div>
-          <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--out-muted)' }}>
-            Shares ({q.symbol})
-          </label>
-          <input
-            type="number" min="0" step="0.001" placeholder="0.000000" value={qty}
-            onChange={e => { setQty(e.target.value); setErr(''); }}
-            className="w-full bg-transparent border px-3 py-2 text-[13px] font-mono outline-none transition-colors"
-            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-text)' }}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--out-ink)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--out-ink-dim)')}
-          />
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+              {inputMode === 'eth' ? (side === 'buy' ? 'ETH TO SPEND' : 'ETH TO RECEIVE')
+               : inputMode === 'usd' ? 'USD AMOUNT'
+               : `SHARES (${q.symbol})`}
+            </label>
+            <div className="flex text-[9px] gap-0.5">
+              {(['shares','eth','usd'] as const).map(m => (
+                <button key={m}
+                  onClick={() => { setMode(m); setQty(''); }}
+                  className="px-1.5 py-0.5 border transition-colors"
+                  style={{
+                    borderColor: inputMode === m ? 'var(--out-ink)' : 'var(--out-ink-dim)',
+                    color:       inputMode === m ? 'var(--out-text)' : 'var(--out-muted)',
+                    background:  inputMode === m ? '#0e1a08' : 'transparent',
+                  }}>
+                  {m.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="relative">
+            <input
+              type="number" min="0" step={inputMode === 'usd' ? '1' : '0.001'}
+              placeholder="0.000000" value={qty}
+              onChange={e => { setQty(e.target.value); setErr(''); }}
+              className="w-full bg-transparent border px-3 py-2 text-[13px] font-mono outline-none transition-colors"
+              style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-text)' }}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--out-ink)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--out-ink-dim)')}
+            />
+            {inputMode !== 'shares' && shares > 0 && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none"
+                style={{ color: 'var(--out-muted)' }}>
+                ≈{shares.toFixed(4)} sh
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Cost estimates */}
-        {shares > 0 && q.price > 0 && (
+        {shares > 0 && (
           <div className="border p-3 text-[11px] space-y-2" style={{ borderColor: 'var(--out-grid-major)', background: '#08100a' }}>
             <div className="flex justify-between items-center">
               <span style={{ color: 'var(--out-muted)' }}>USD TOTAL</span>
@@ -886,10 +952,10 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               </span>
               <span className="font-bold" style={{ color: liveEthNum > 0 ? '#7ecb3b' : 'var(--out-ink)' }}>{eth(dispEth)}</span>
             </div>
-            {onchainPx > 0 && side === 'buy' && (
+            {onchainPx > 0 && (
               <div className="flex justify-between items-center">
                 <span style={{ color: 'var(--out-muted)' }}>ONCHAIN PX</span>
-                <span style={{ color: 'var(--out-muted)' }}>{usd(onchainPx)}</span>
+                <span style={{ color: '#7ecb3b' }}>{usd(onchainPx)}</span>
               </div>
             )}
             <div className="flex justify-between items-center border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
@@ -1014,7 +1080,8 @@ export function RwaPage() {
   }, [dataUpdatedAt, flapPrices]);
 
   function pick(q: Quote) {
-    const live = data?.quotes?.find(l => l.symbol === q.symbol) ?? q;
+    // Use the flap-overlaid `quotes` array so on-chain prices are applied immediately
+    const live = quotes.find(l => l.symbol === q.symbol) ?? q;
     lastSym.current = live.symbol;
     setSelected(live);
   }

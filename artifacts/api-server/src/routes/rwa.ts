@@ -606,50 +606,72 @@ router.patch("/rwa/trades/:id", async (req: Request, res: Response) => {
   res.json({ trade: updated });
 });
 
-/* ── GET /rwa/flap-prices — real-time on-chain prices via eth_call for ALL tokens ── */
-/* Returns {symbol, address, priceUsd} for every token with a known pool.             */
+/* ── FlapPortal on-chain price cache — populated by background sequential refresh ── */
+/* Parallel eth_calls caused RPC 429 rate limits → garbage prices.                   */
+/* Fix: sequential calls with 150ms gaps, refresh every 30s in background.           */
 const _flapPriceCache = new Map<string, { price: number; ts: number }>();
-const FLAP_PRICE_TTL  = 6_000; // 6s
+let   _flapRefreshing = false;
+let   _flapLastRun    = 0;
 
+async function refreshFlapPrices(): Promise<void> {
+  if (_flapRefreshing) return;
+  _flapRefreshing = true;
+  try {
+    const ethUsd = await fetchEthPrice();
+    if (ethUsd <= 0) return;
+    const deadline = Math.floor(Date.now() / 1000) + 300;
+    for (const [, info] of Object.entries(RWA_TOKENS)) {
+      const token = info.address.toLowerCase();
+      const pool  = await getFlapPool(token);
+      if (!pool) continue;
+      const calldata = buildFlapBuyCalldata(token, pool, REF_BUY_ETH, 1n, WETH_FROM, deadline);
+      try {
+        const r = await rpcCall('eth_call', [{
+          from: WETH_FROM, to: FLAP_PORTAL, data: calldata,
+          value: '0x' + REF_BUY_ETH.toString(16),
+        }, 'latest']);
+        if (r?.result && r.result !== '0x') {
+          const amountOut = BigInt(String(r.result).slice(0, 66));
+          if (amountOut > 0n) {
+            const priceUsd = (Number(REF_BUY_ETH) / Number(amountOut)) * ethUsd;
+            // Sanity: reject prices that are clearly wrong (> $50k or < $0.01)
+            if (priceUsd >= 0.01 && priceUsd <= 50_000) {
+              _flapPriceCache.set(token, { price: +priceUsd.toFixed(4), ts: Date.now() });
+            }
+          }
+        }
+      } catch { /* skip this token */ }
+      await sleep(150); // 150ms gap — prevents RPC rate limiting
+    }
+    _flapLastRun = Date.now();
+    console.info(`[rwa] flap-prices refreshed — ${_flapPriceCache.size} tokens`);
+  } finally {
+    _flapRefreshing = false;
+  }
+}
+
+// Refresh every 30s in background; UI polls /rwa/flap-prices every 6s and gets cached values
+setInterval(() => refreshFlapPrices().catch(() => {}), 30_000);
+
+/* ── GET /rwa/flap-prices — returns latest cached on-chain prices immediately ── */
 router.get('/rwa/flap-prices', async (_req: Request, res: Response) => {
   const ethUsd = await fetchEthPrice();
-  if (ethUsd <= 0) { res.status(502).json({ error: 'ETH price unavailable' }); return; }
-  const now = Date.now();
-  const results: Array<{ symbol: string; address: string; priceUsd: number; live: boolean }> = [];
-
-  // Parallel eth_calls for all tokens with known pools
-  const deadline = Math.floor(now / 1000) + 300;
-  await Promise.all(Object.entries(RWA_TOKENS).map(async ([sym, info]) => {
-    const token = info.address.toLowerCase();
-    const cached = _flapPriceCache.get(token);
-    if (cached && now - cached.ts < FLAP_PRICE_TTL) {
-      results.push({ symbol: sym, address: info.address, priceUsd: cached.price, live: true });
-      return;
-    }
-    const pool = await getFlapPool(token);
-    if (!pool) return; // no pool = not tradeable via FlapPortal
-    const calldata = buildFlapBuyCalldata(token, pool, REF_BUY_ETH, 1n, WETH_FROM, deadline);
-    try {
-      const r = await rpcCall('eth_call', [{ from: WETH_FROM, to: FLAP_PORTAL, data: calldata, value: '0x' + REF_BUY_ETH.toString(16) }, 'latest']);
-      if (r?.result && r.result !== '0x') {
-        const amountOut = BigInt(String(r.result).slice(0, 66));
-        if (amountOut > 0n) {
-          // price = (refEth / amountOut) * ethUsd
-          const priceUsd = (Number(REF_BUY_ETH) / Number(amountOut)) * ethUsd;
-          _flapPriceCache.set(token, { price: priceUsd, ts: now });
-          results.push({ symbol: sym, address: info.address, priceUsd: +priceUsd.toFixed(4), live: true });
-        }
-      }
-    } catch { /* skip this token */ }
-  }));
-
+  // Kick off a refresh if stale and not already running (non-blocking)
+  if (!_flapRefreshing && Date.now() - _flapLastRun > 25_000) {
+    refreshFlapPrices().catch(() => {});
+  }
+  const results = Object.entries(RWA_TOKENS)
+    .map(([sym, info]) => {
+      const hit = _flapPriceCache.get(info.address.toLowerCase());
+      return hit ? { symbol: sym, address: info.address, priceUsd: hit.price, live: true } : null;
+    })
+    .filter((x): x is { symbol: string; address: string; priceUsd: number; live: boolean } => x !== null);
   results.sort((a, b) => a.symbol.localeCompare(b.symbol));
-  res.json({ prices: results, ethUsd, updatedAt: new Date().toISOString() });
+  res.json({ prices: results, ethUsd: ethUsd || 1828, updatedAt: new Date().toISOString() });
 });
 
-/* ── Pre-warm prices only on module load (Blockscout, fast, no rate-limit) ── */
-/* ── OHLCV is triggered lazily on first /rwa/quotes request ─────────────── */
-/* ── (Avoid YF warmup on every dev restart — the IP gets rate-limited)    ── */
-refreshPrices().catch(() => {});
+/* ── Pre-warm on module load ─────────────────────────────────────────────── */
+refreshPrices().catch(() => {});           // Blockscout prices (fast, no rate-limit)
+setTimeout(() => refreshFlapPrices().catch(() => {}), 2_000); // FlapPortal prices after 2s
 
 export default router;
