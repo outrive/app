@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   TrendingUp, TrendingDown, ChevronRight, Settings2,
-  RefreshCw, AlertTriangle, CheckCircle2,
+  RefreshCw, CheckCircle2,
 } from 'lucide-react';
 
 /* ── RWA token catalogue (Robinhood Chain ERC-20 stock tokens) ──────────── */
@@ -174,17 +174,6 @@ function ManualTradePanel({ token }: { token: RwaToken }) {
         )}
       </div>
 
-      {/* Routing info */}
-      <div className="mx-4 mt-4 border px-3 py-2.5 text-[11px] flex items-start gap-2"
-        style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
-        <AlertTriangle size={12} style={{ color: 'var(--out-warn)', flexShrink: 0, marginTop: 1 }} />
-        <span>
-          Trades route via <span style={{ color: 'var(--out-text)' }}>0x RFQ protocol</span> on Robinhood Chain.
-          RWA tokens require{' '}
-          <span style={{ color: 'var(--out-text)' }}>KYC verification</span> through Robinhood.
-          Integration in progress — connect your wallet to verify eligibility.
-        </span>
-      </div>
 
       {/* Action button */}
       <div className="px-4 pt-4 pb-4">
