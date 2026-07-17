@@ -771,21 +771,43 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
     queryKey: ['rwa-trades', walletAddress],
     queryFn: () => fetch(apiUrl(`/api/rwa/trades?wallet=${walletAddress}`)).then(r => r.json()),
     enabled: !!walletAddress,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    refetchInterval: 15_000,
+    staleTime: 8_000,
   });
+
+  // Live on-chain prices for P&L
+  const { data: flapPrices } = useQuery<{ prices: Array<{ symbol: string; priceUsd: number }> }>({
+    queryKey: ['flap-prices-dashboard'],
+    queryFn: () => fetch(apiUrl('/api/rwa/flap-prices')).then(r => r.json()),
+    refetchInterval: 10_000,
+    staleTime: 6_000,
+  });
+  const flapMap = React.useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of flapPrices?.prices ?? []) if (p.priceUsd > 0) m[p.symbol] = p.priceUsd;
+    return m;
+  }, [flapPrices]);
 
   const trades = data?.trades ?? [];
 
-  // Compute portfolio summary
+  // Compute portfolio summary — track avgCost separately from net shares
   const { totalBought, totalSold, positions } = React.useMemo(() => {
     let totalBought = 0, totalSold = 0;
-    const pos: Record<string, { shares: number; cost: number; name: string }> = {};
+    const pos: Record<string, { shares: number; buyShares: number; buyUsd: number; name: string }> = {};
     for (const t of trades) {
       const shares = parseFloat(t.shares) || 0;
       const usd    = parseFloat(t.totalUsd) || 0;
-      if (t.side === 'buy')  { totalBought += usd; pos[t.symbol] = pos[t.symbol] ?? { shares: 0, cost: 0, name: t.name }; pos[t.symbol].shares += shares; pos[t.symbol].cost += usd; }
-      if (t.side === 'sell') { totalSold   += usd; if (pos[t.symbol]) pos[t.symbol].shares -= shares; }
+      if (t.side === 'buy') {
+        totalBought += usd;
+        pos[t.symbol] = pos[t.symbol] ?? { shares: 0, buyShares: 0, buyUsd: 0, name: t.name };
+        pos[t.symbol].shares    += shares;
+        pos[t.symbol].buyShares += shares;
+        pos[t.symbol].buyUsd   += usd;
+      }
+      if (t.side === 'sell') {
+        totalSold += usd;
+        if (pos[t.symbol]) pos[t.symbol].shares -= shares;
+      }
     }
     return { totalBought, totalSold, positions: Object.entries(pos).filter(([, v]) => v.shares > 0.0001) };
   }, [trades]);
@@ -825,20 +847,47 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
         <div className="mb-5">
           <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>OPEN POSITIONS</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {positions.map(([sym, pos]) => (
-              <div key={sym} className="border border-[var(--out-grid-major)] p-3 font-mono flex items-center gap-2.5">
-                <RwaTokenLogo symbol={sym} />
-                <div>
-                  <div className="text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>{sym}</div>
-                  <div className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
-                    {pos.shares.toFixed(4)} shares
+            {positions.map(([sym, pos]) => {
+              const avgCost    = pos.buyShares > 0 ? pos.buyUsd / pos.buyShares : 0;
+              const currentPx  = flapMap[sym] || 0;
+              const costBasis  = avgCost * pos.shares;
+              const curValue   = currentPx * pos.shares;
+              const pnl        = currentPx > 0 ? curValue - costBasis : 0;
+              const pnlPct     = costBasis > 0 && currentPx > 0 ? (pnl / costBasis) * 100 : 0;
+              const hasPnl     = currentPx > 0;
+              const pnlUp      = pnl >= 0;
+              return (
+                <div key={sym} className="border border-[var(--out-grid-major)] p-3 font-mono flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <RwaTokenLogo symbol={sym} />
+                    <div>
+                      <div className="text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>{sym}</div>
+                      <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{pos.shares.toFixed(4)} sh</div>
+                    </div>
                   </div>
-                  <div className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
-                    ${pos.cost.toFixed(2)} cost
+                  <div className="border-t pt-1.5" style={{ borderColor: 'var(--out-ink-dim)' }}>
+                    <div className="flex justify-between text-[9px]">
+                      <span style={{ color: 'var(--out-muted)' }}>AVG COST</span>
+                      <span style={{ color: 'var(--out-muted)' }}>${avgCost.toFixed(2)}</span>
+                    </div>
+                    {hasPnl && (
+                      <>
+                        <div className="flex justify-between text-[9px] mt-0.5">
+                          <span style={{ color: 'var(--out-muted)' }}>CURRENT</span>
+                          <span style={{ color: 'var(--out-text)' }}>${currentPx.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] font-bold mt-1">
+                          <span style={{ color: 'var(--out-muted)' }}>P&amp;L</span>
+                          <span style={{ color: pnlUp ? '#7ecb3b' : '#e05050' }}>
+                            {pnlUp ? '+' : ''}{pnl.toFixed(2)} ({pnlUp ? '+' : ''}{pnlPct.toFixed(1)}%)
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

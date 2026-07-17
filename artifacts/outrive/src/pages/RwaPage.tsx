@@ -1028,9 +1028,105 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   );
 }
 
+/* ─── Trade type ─────────────────────────────────────────────────────────── */
+type RwaTrade = {
+  id: number; symbol: string; name: string; side: string;
+  shares: string; priceUsd: string; totalUsd: string; ethAmount: string;
+  status: string; source: string; createdAt: string; txHash?: string | null;
+};
+
+/* ─── Stock trade history panel ──────────────────────────────────────────── */
+function StockHistory({ symbol, wallet }: { symbol: string; wallet?: string }) {
+  const { data, isLoading } = useQuery<{ trades: RwaTrade[] }>({
+    queryKey: ['rwa-trades-terminal', wallet],
+    queryFn: () => fetch(api(`/api/rwa/trades?wallet=${wallet}`)).then(r => r.json()),
+    enabled: !!wallet,
+    refetchInterval: 15_000,
+    staleTime: 8_000,
+  });
+
+  const trades = (data?.trades ?? []).filter(t => t.symbol === symbol).slice(0, 20);
+
+  return (
+    <div className="border-t flex flex-col" style={{ borderColor: 'var(--out-ink-dim)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b shrink-0"
+        style={{ borderColor: 'var(--out-ink-dim)', background: '#060b06' }}>
+        <span className="text-[8.5px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+          HISTORY · {symbol}
+        </span>
+        {trades.length > 0 && (
+          <span className="text-[8.5px]" style={{ color: 'var(--out-muted)' }}>
+            {trades.length} trades
+          </span>
+        )}
+      </div>
+
+      {/* Body */}
+      {!wallet ? (
+        <div className="px-3 py-4 text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
+          Connect wallet
+        </div>
+      ) : isLoading ? (
+        <div className="px-3 py-4 text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
+          Loading…
+        </div>
+      ) : trades.length === 0 ? (
+        <div className="px-3 py-4 text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
+          No {symbol} trades yet
+        </div>
+      ) : (
+        <div className="overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: 'none' }}>
+          {trades.map(t => {
+            const isBuy   = t.side === 'buy';
+            const date    = new Date(t.createdAt);
+            const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              + ' ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            const totalN  = parseFloat(t.totalUsd) || 0;
+            const sharesN = parseFloat(t.shares) || 0;
+            return (
+              <div key={t.id}
+                className="px-3 py-2 border-b font-mono"
+                style={{ borderColor: 'var(--out-ink-dim)', background: isBuy ? '#06100640' : '#10060640' }}>
+                {/* Row 1: side + shares + total */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold" style={{ color: isBuy ? '#7ecb3b' : '#e05050' }}>
+                    {isBuy ? '▲ BUY' : '▼ SELL'}
+                  </span>
+                  <span className="text-[10px]" style={{ color: 'var(--out-text)' }}>
+                    {sharesN < 0.001 ? sharesN.toFixed(6) : sharesN.toFixed(4)} sh
+                  </span>
+                  <span className="text-[10px] font-bold" style={{ color: 'var(--out-ink)' }}>
+                    ${totalN.toFixed(2)}
+                  </span>
+                </div>
+                {/* Row 2: price + date + tx */}
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+                    @${parseFloat(t.priceUsd).toFixed(2)}
+                  </span>
+                  <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{timeStr}</span>
+                  {t.txHash && (
+                    <a href={`https://robinhoodchain.blockscout.com/tx/${t.txHash}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-[8px] transition-opacity hover:opacity-80"
+                      style={{ color: 'var(--out-muted)' }}>
+                      ↗ tx
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main page ──────────────────────────────────────────────────────────── */
 export function RwaPage() {
-  const { address: _wallet } = useAccount();
+  const { address: wallet } = useAccount();
   const [selected, setSelected] = useState<Quote>(CATALOGUE[0]);
   const lastSym = useRef(CATALOGUE[0].symbol);
 
@@ -1254,8 +1350,9 @@ export function RwaPage() {
             </span>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ scrollbarWidth: 'none' }}>
             <OrderPanel q={selected} ethUsd={ethUsd} />
+            <StockHistory symbol={selected.symbol} wallet={wallet} />
           </div>
         </div>
       </div>

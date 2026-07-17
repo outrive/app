@@ -650,14 +650,14 @@ async function refreshFlapPrices(): Promise<void> {
   }
 }
 
-// Refresh every 30s in background; UI polls /rwa/flap-prices every 6s and gets cached values
-setInterval(() => refreshFlapPrices().catch(() => {}), 30_000);
+// Refresh every 10s in background; UI polls /rwa/flap-prices every 6s and gets cached values
+setInterval(() => refreshFlapPrices().catch(() => {}), 10_000);
 
 /* ── GET /rwa/flap-prices — returns latest cached on-chain prices immediately ── */
 router.get('/rwa/flap-prices', async (_req: Request, res: Response) => {
   const ethUsd = await fetchEthPrice();
   // Kick off a refresh if stale and not already running (non-blocking)
-  if (!_flapRefreshing && Date.now() - _flapLastRun > 25_000) {
+  if (!_flapRefreshing && Date.now() - _flapLastRun > 8_000) {
     refreshFlapPrices().catch(() => {});
   }
   const results = Object.entries(RWA_TOKENS)
