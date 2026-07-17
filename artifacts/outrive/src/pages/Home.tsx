@@ -1116,6 +1116,41 @@ function HowTo() {
     },
   ];
 
+  const rwaSteps = [
+    {
+      n: '01', title: 'CONNECT YOUR WALLET',
+      body: 'Click CONNECT in the top-right corner. Make sure you are on Robinhood Chain (chainId 4663). You need a small amount of ETH for gas — trades cost roughly 418,000 gas units per transaction.',
+    },
+    {
+      n: '02', title: 'OPEN RWA TRADE',
+      body: 'Click the RWA TRADE tab in the left sidebar. The terminal loads a live list of 20 US stocks — NVDA, AAPL, TSLA, META, GOOGL, MSFT, AMZN and more — with real-time on-chain prices pulled from FlapPortal.',
+    },
+    {
+      n: '03', title: 'SELECT A STOCK',
+      body: 'Click any stock in the left panel. The order panel on the right loads the live on-chain buy and sell price, your current holdings, and a TradingView chart for that ticker. All prices are fetched directly from FlapPortal — not from a stale oracle.',
+    },
+    {
+      n: '04', title: 'CHOOSE INPUT MODE',
+      body: 'Toggle between SHARES, ETH, or USD input mode. SHARES: type how many fractional shares you want. ETH: type how much ETH to spend. USD: type a dollar amount — the app converts it to shares automatically using the live on-chain price.',
+    },
+    {
+      n: '05', title: 'REVIEW THE ORDER',
+      body: 'The panel shows: on-chain price, total cost in ETH and USD, and estimated output. A 3% slippage buffer is applied automatically. The ONCHAIN PX row shows the exact FlapPortal execution price — what you see is what you get.',
+    },
+    {
+      n: '06', title: 'APPROVE (SELL ONLY — ONE TIME)',
+      body: 'First-time sellers must approve FlapPortal to spend the RWA token. This is a standard ERC-20 approval — max allowance, one transaction, never needed again for that token. The UI shows "APPROVAL required (step 1)" when needed.',
+    },
+    {
+      n: '07', title: 'SIGN THE TRANSACTION',
+      body: 'Click BUY or SELL. Your wallet shows the transaction details. Approve it — the trade broadcasts directly to Robinhood Chain via FlapPortal. No intermediary holds your funds at any point.',
+    },
+    {
+      n: '08', title: 'TRACK YOUR POSITION',
+      body: 'After confirmation, your RWA holdings appear in the DASHBOARD tab under RWA PORTFOLIO. Every trade is recorded on-chain and viewable on robinhoodchain.blockscout.com. You are the on-chain owner of record.',
+    },
+  ];
+
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 flex flex-col gap-6">
       <Sheet dwgNo="OUT-HOW-01" figCaption="FIG. 05 — STEP-BY-STEP LAUNCH GUIDE">
@@ -1125,6 +1160,25 @@ function HowTo() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {steps.map((s) => (
+              <div key={s.n} className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--out-ink)] text-[20px] font-bold leading-none">{s.n}</span>
+                  <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
+                </div>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sheet>
+
+      <Sheet dwgNo="OUT-HOW-02" figCaption="FIG. 06 — RWA TRADE GUIDE">
+        <div className="py-4 flex flex-col gap-3 font-mono">
+          <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>
+            RWA TRADE GUIDE — STEPS 01–08
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {rwaSteps.map((s) => (
               <div key={s.n} className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[var(--out-ink)] text-[20px] font-bold leading-none">{s.n}</span>
