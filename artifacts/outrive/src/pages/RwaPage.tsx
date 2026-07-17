@@ -68,22 +68,33 @@ const CATALOGUE: Quote[] = [
 ];
 
 /* ─── Logo URL via server-side proxy (cdn.robinhood.com blocks browsers) ─── */
-function logoProxyUrl(address: string) {
-  const hex = address.replace(/^0x/i, '').toLowerCase();
-  return api(`/api/rwa/logo/${hex}`);
-}
+/* ─── TradingView SVG logo map — same source as the chart header icons ────── */
+const TV_BASE = 'https://s3-symbol-logo.tradingview.com';
+const TV_LOGO: Record<string, string> = {
+  NVDA:  `${TV_BASE}/nvidia--big.svg`,
+  AAPL:  `${TV_BASE}/apple--big.svg`,
+  GOOGL: `${TV_BASE}/alphabet--big.svg`,
+  TSLA:  `${TV_BASE}/tesla--big.svg`,
+  PLTR:  `${TV_BASE}/palantir--big.svg`,
+  AMD:   `${TV_BASE}/advanced-micro-devices--big.svg`,
+  META:  `${TV_BASE}/meta-platforms--big.svg`,
+  MSFT:  `${TV_BASE}/microsoft--big.svg`,
+  AMZN:  `${TV_BASE}/amazon--big.svg`,
+  MU:    `${TV_BASE}/micron-technology--big.svg`,
+  ORCL:  `${TV_BASE}/oracle--big.svg`,
+  SNDK:  `${TV_BASE}/western-digital--big.svg`,   // SanDisk acquired by WD
+  SPY:   `${TV_BASE}/state-street--big.svg`,       // SPDR = State Street
+  QQQ:   `${TV_BASE}/invesco--big.svg`,            // Invesco QQQ
+  SPCX:  'https://assets.parqet.com/logos/symbol/SPCX?format=png', // TV doesn't have SPCX
+};
 
 /* ─── Token Logo ─────────────────────────────────────────────────────────── */
-// Parqet is a public financial logo CDN — no proxy needed, browser requests work fine.
-function parqetUrl(symbol: string) {
-  return `https://assets.parqet.com/logos/symbol/${symbol}?format=png`;
-}
-
 function TokenLogo({ symbol, size = 28 }: { address?: string; symbol: string; size?: number }) {
   const [failed, setFailed] = useState(false);
   const letters = symbol.replace(/[^A-Z0-9]/g, '').slice(0, 2);
+  const src = TV_LOGO[symbol];
 
-  if (failed) {
+  if (!src || failed) {
     return (
       <span
         className="flex items-center justify-center rounded-full font-bold font-mono shrink-0"
@@ -102,7 +113,7 @@ function TokenLogo({ symbol, size = 28 }: { address?: string; symbol: string; si
 
   return (
     <img
-      src={parqetUrl(symbol)}
+      src={src}
       alt={symbol}
       width={size}
       height={size}
@@ -112,7 +123,7 @@ function TokenLogo({ symbol, size = 28 }: { address?: string; symbol: string; si
         borderRadius: '50%',
         objectFit: 'contain',
         background: '#fff',
-        padding: Math.round(size * 0.08),
+        padding: Math.round(size * 0.1),
         display: 'block',
         boxSizing: 'border-box',
       }}
