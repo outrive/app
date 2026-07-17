@@ -380,15 +380,11 @@ export function RwaPage() {
       </div>
 
       <div className="p-6 space-y-6">
-        {/* ── Network notice ── */}
-        <div className="flex items-start gap-3 border px-4 py-3 text-[12px]"
+        {/* ── Coming soon badge ── */}
+        <div className="inline-flex items-center gap-2 border px-3 py-1.5 text-[11px] uppercase tracking-widest"
           style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
-          <RefreshCw size={12} style={{ color: 'var(--out-ink)', flexShrink: 0, marginTop: 2 }} />
-          <span>
-            Prices sourced from <span style={{ color: 'var(--out-text)' }}>Chainlink Data Feeds</span> on Robinhood Chain (4663).
-            Live order execution requires KYC via the Robinhood platform.
-            <span style={{ color: 'var(--out-warn)' }}> Integration live Q3 2026.</span>
-          </span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--out-warn)' }} />
+          COMING SOON
         </div>
 
         {/* ── Sector filter ── */}
