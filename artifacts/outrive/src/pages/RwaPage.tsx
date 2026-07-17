@@ -8,14 +8,19 @@ import { encodeFunctionData, parseAbi, parseUnits, formatUnits } from 'viem';
 import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
 /* ─── On-chain swap constants ────────────────────────────────────────────── */
-const SWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564' as `0x${string}`;
-const WETH_ADDR   = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as `0x${string}`;
+// RobinhoodRouter — the canonical fee-taking meta-router on Robinhood Chain.
+// Source verified on Blockscout. Routes RWA tokens through Uniswap V2 internally.
+// DO NOT use Uniswap V3 directly — RWA tokens have no V3 pools; ETH will be lost.
+const RH_ROUTER   = '0xEa4F57DbC875889EbC435722cbFAa4A16B19B452' as `0x${string}`;
 const RH_CHAIN_ID = 4663;
-const SWAP_GAS    = 450_000n;
-const FEE_TIER    = 3000; // 0.3% Uniswap V3 pool
+const TRADE_GAS   = 400_000n;
 
-const SWAP_ROUTER_ABI = parseAbi([
-  'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)',
+// SwapParams struct (Protocol enum: 0=V2, 1=V3, 2=V4, 3=FLAP, 4=VIRTUALS)
+// extra='0x' → direct single-hop WETH↔token via V2 (confirmed from source)
+const RH_ROUTER_ABI = parseAbi([
+  'function buy((uint8 protocol, address token, uint24 fee, uint256 amountIn, uint256 minAmountOut, address recipient, bytes extra) p) payable returns (uint256 out)',
+  'function sell((uint8 protocol, address token, uint24 fee, uint256 amountIn, uint256 minAmountOut, address recipient, bytes extra) p) returns (uint256 ethOut)',
+  'function feeBps() view returns (uint16)',
 ]);
 const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
@@ -251,15 +256,17 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const explorerUrl = tokenAddr && !tokenAddr.startsWith('0x000000000000')
     ? `https://robinhoodchain.blockscout.com/token/${tokenAddr}` : null;
 
-  /* ── Wagmi: send + wait ── */
-  const { sendTransaction, data: pendingHash } = useSendTransaction();
-  const approveTxRef = useRef<`0x${string}` | undefined>(undefined);
-  const swapTxRef    = useRef<`0x${string}` | undefined>(undefined);
+  /* ── Wagmi: send + wait ──
+     IMPORTANT: hashes must be in state (not refs) so useWaitForTransactionReceipt
+     re-renders when the hash becomes available after sendTransaction resolves. */
+  const { sendTransaction } = useSendTransaction();
+  const [approveHash, setApproveHash] = useState<`0x${string}` | undefined>(undefined);
+  const [swapHash,    setSwapHash]    = useState<`0x${string}` | undefined>(undefined);
 
   const { isSuccess: approveOk, isError: approveFail } =
-    useWaitForTransactionReceipt({ hash: approveTxRef.current, query: { enabled: step === 'pending_approve' } });
+    useWaitForTransactionReceipt({ hash: approveHash, query: { enabled: !!approveHash } });
   const { isSuccess: swapOk, isError: swapFail } =
-    useWaitForTransactionReceipt({ hash: swapTxRef.current, query: { enabled: step === 'pending_swap' } });
+    useWaitForTransactionReceipt({ hash: swapHash, query: { enabled: !!swapHash } });
 
   /* ── ETH balance ── */
   const { data: ethBal } = useBalance({
@@ -276,10 +283,10 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   } as any);
   const tokenBalNum = tokenBal ? parseFloat(formatUnits(tokenBal.value, 18)) : null;
 
-  /* ── Allowance (for sell) ── */
+  /* ── Allowance (for sell) — approve RH_ROUTER, not any V3 router ── */
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: tokenAddr || undefined, abi: ERC20_ABI, functionName: 'allowance',
-    args: wallet ? [wallet, SWAP_ROUTER] : undefined,
+    args: wallet ? [wallet, RH_ROUTER] : undefined,
     query: { enabled: !!wallet && side === 'sell' && !!tokenAddr, refetchInterval: 10_000 },
   } as any);
   const needsApproval = side === 'sell' && sharesWei > 0n
@@ -309,12 +316,24 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   }, [approveOk, approveFail]);
 
   useEffect(() => {
-    if (swapOk && step === 'pending_swap') recordAndFinish();
+    if (swapOk && step === 'pending_swap') recordAndFinish(swapHash);
     if (swapFail && step === 'pending_swap') { setErr('Swap transaction failed or was rejected.'); setStep('error'); }
   }, [swapOk, swapFail]);
 
-  /* ── Record trade to DB ── */
-  async function recordAndFinish() {
+  /* ── Record trade to DB + prompt wallet to track token ── */
+  async function recordAndFinish(txH: `0x${string}` | undefined) {
+    // Prompt MetaMask / any EIP-747 wallet to add the token to its asset list
+    if (side === 'buy') {
+      try {
+        await (window as any).ethereum?.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: { address: tokenAddr, symbol: q.symbol, decimals: 18, image: q.logoUrl },
+          },
+        });
+      } catch { /* user dismissed — non-fatal */ }
+    }
     try {
       const r = await fetch(api('/api/rwa/trades'), {
         method: 'POST',
@@ -323,7 +342,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
           walletAddress: wallet, symbol: q.symbol, side,
           shares: shares.toFixed(8), priceUsd: q.price.toFixed(4),
           ethAmount: ethCost.toFixed(8), totalUsd: totalUsd.toFixed(4),
-          txHash: swapTxRef.current ?? null,
+          txHash: txH ?? null,
           status: 'confirmed', source: 'manual', network: 'robinhood-chain',
         }),
       });
@@ -332,40 +351,40 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     setStep('done');
   }
 
-  /* ── Approve ── */
+  /* ── Approve RobinhoodRouter to spend token (sell only) ── */
   async function execApprove() {
     if (!(await ensureChain())) return;
     setStep('approving');
     const MAX  = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
-    const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [SWAP_ROUTER, MAX] });
-    sendTransaction({ to: tokenAddr, data, gas: SWAP_GAS }, {
+    const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [RH_ROUTER, MAX] });
+    sendTransaction({ to: tokenAddr, data, gas: TRADE_GAS }, {
       onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
-      onSuccess: hash => { approveTxRef.current = hash; setStep('pending_approve'); },
+      onSuccess: hash => { setApproveHash(hash); setStep('pending_approve'); },
     });
   }
 
-  /* ── Swap ── */
+  /* ── Swap via RobinhoodRouter.buy() / .sell() ── */
   async function execSwap() {
     if (!(await ensureChain())) return;
     setStep('swapping');
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
-    const params = {
-      tokenIn:             side === 'buy' ? WETH_ADDR : tokenAddr,
-      tokenOut:            side === 'buy' ? tokenAddr : WETH_ADDR,
-      fee:                 FEE_TIER,
-      recipient:           wallet as `0x${string}`,
-      deadline,
-      amountIn:            side === 'buy' ? ethWei : sharesWei,
-      amountOutMinimum:    0n,
-      sqrtPriceLimitX96:   0n,
+    // SwapParams: protocol=0 (V2), extra='0x' → direct WETH↔token single-hop
+    const p = {
+      protocol:     0,                           // Protocol.V2
+      token:        tokenAddr,
+      fee:          0,                           // ignored by V2 path
+      amountIn:     side === 'buy' ? 0n : sharesWei, // buy uses msg.value
+      minAmountOut: 0n,                          // v1: no slippage floor
+      recipient:    wallet as `0x${string}`,
+      extra:        '0x' as `0x${string}`,       // empty = direct WETH↔token
     };
-    const data = encodeFunctionData({ abi: SWAP_ROUTER_ABI, functionName: 'exactInputSingle', args: [params] });
+    const fn   = side === 'buy' ? 'buy' : 'sell';
+    const data = encodeFunctionData({ abi: RH_ROUTER_ABI, functionName: fn, args: [p] });
     const txParams = side === 'buy'
-      ? { to: SWAP_ROUTER, value: ethWei, data, gas: SWAP_GAS }
-      : { to: SWAP_ROUTER, data, gas: SWAP_GAS };
+      ? { to: RH_ROUTER, value: ethWei, data, gas: TRADE_GAS }
+      : { to: RH_ROUTER, data, gas: TRADE_GAS };
     sendTransaction(txParams, {
       onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
-      onSuccess: hash => { swapTxRef.current = hash; setStep('pending_swap'); },
+      onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
     });
   }
 
@@ -385,7 +404,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
 
   function reset() {
     setStep('form'); setQty(''); setErr(''); setTid(null);
-    approveTxRef.current = undefined; swapTxRef.current = undefined;
+    setApproveHash(undefined); setSwapHash(undefined);
   }
 
   const buyColor2  = '#7ecb3b';
@@ -413,7 +432,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               { k: 'SHARES',    v: `${shares.toFixed(6)} ${q.symbol}` },
               { k: isSell2 ? 'RECEIVE' : 'PAY', v: isSell2 ? `≈ ${eth(ethCost)} WETH` : eth(ethCost) },
               { k: 'USD VALUE', v: usd(totalUsd) },
-              { k: 'ROUTER',    v: 'Uniswap V3 · fee 0.3%' },
+              { k: 'ROUTER',    v: 'RobinhoodRouter · Protocol V2' },
               { k: 'CHAIN',     v: 'Robinhood Chain 4663' },
             ].map(({ k, v }) => (
               <div key={k} className="flex justify-between items-start gap-2">
@@ -428,7 +447,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               </div>
               <div className="flex justify-between text-[9px]">
                 <span style={{ color: 'var(--out-muted)' }}>GAS LIMIT</span>
-                <span style={{ color: 'var(--out-muted)' }}>{SWAP_GAS.toString()}</span>
+                <span style={{ color: 'var(--out-muted)' }}>{TRADE_GAS.toString()}</span>
               </div>
               {isSell2 && needsApproval && (
                 <div className="flex justify-between text-[9px]">
@@ -474,7 +493,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
 
   /* ── Pending / Done / Error states ── */
   if (step !== 'form') {
-    const txHash = swapTxRef.current ?? approveTxRef.current;
+    const txHash = swapHash ?? approveHash;
     const explorerTx = txHash
       ? `https://robinhoodchain.blockscout.com/tx/${txHash}` : null;
     return (
@@ -525,7 +544,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
             </span>
             <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
-              Uniswap V3 exactInputSingle · Robinhood Chain
+              RobinhoodRouter.{side === 'buy' ? 'buy' : 'sell'}() · Protocol V2 · Robinhood Chain
             </span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
@@ -757,11 +776,11 @@ export function RwaPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Uniswap V3 badge */}
+          {/* Router badge */}
           <span className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5 flex items-center gap-1"
             style={{ borderColor: '#7ecb3b33', color: '#7ecb3b88' }}>
             <span className="w-1 h-1 rounded-full" style={{ background: '#7ecb3b' }} />
-            Uniswap V3
+            RobinhoodRouter
           </span>
 
           <button
