@@ -8,24 +8,119 @@ import { encodeFunctionData, parseAbi, parseUnits, formatUnits } from 'viem';
 import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
 /* ─── On-chain swap constants ────────────────────────────────────────────── */
-// RobinhoodRouter — the canonical fee-taking meta-router on Robinhood Chain.
-// Source verified on Blockscout. Routes RWA tokens through Uniswap V2 internally.
-// DO NOT use Uniswap V3 directly — RWA tokens have no V3 pools; ETH will be lost.
-const RH_ROUTER   = '0xEa4F57DbC875889EbC435722cbFAa4A16B19B452' as `0x${string}`;
-const RH_CHAIN_ID = 4663;
-const TRADE_GAS   = 400_000n;
+// FlapPortal — Robinhood Chain's real RWA swap contract.
+// Reverse-engineered from successful tx 0xffa2db1c09d8b1787df75c2f9da469a69b3653ac2eb059fe397b7c585aafe2ec
+// Route: ETH → WETH → USDG (via V3 pool) → Stock token (via settlement pool)
+// RobinhoodRouter (0xEa4F57DbC875889EbC435722cbFAa4A16B19B452) has flapPortal=address(0),
+// so we bypass it and call FlapPortal directly.
+const FLAP_PORTAL  = '0xC94135b63772b91D79d0A2DaAb2a8801f32359bD' as `0x${string}`;
+const RH_CHAIN_ID  = 4663;
+const TRADE_GAS    = 500_000n;
 
-// SwapParams struct (Protocol enum: 0=V2, 1=V3, 2=V4, 3=FLAP, 4=VIRTUALS)
-// extra='0x' → direct single-hop WETH↔token via V2 (confirmed from source)
-const RH_ROUTER_ABI = parseAbi([
-  'function buy((uint8 protocol, address token, uint24 fee, uint256 amountIn, uint256 minAmountOut, address recipient, bytes extra) p) payable returns (uint256 out)',
-  'function sell((uint8 protocol, address token, uint24 fee, uint256 amountIn, uint256 minAmountOut, address recipient, bytes extra) p) returns (uint256 ethOut)',
-  'function feeBps() view returns (uint16)',
-]);
+// Route components (Robinhood Chain)
+const _WETH     = '0bd7d308f8e1639fab988df18a8011f41eacad73'; // Wrapped ETH on RH Chain
+const _USDG     = '5fc5360d0400a0fd4f2af552add042d716f1d168'; // USDG stablecoin (Robinhood)
+const _WUSDG_V3 = '52e65b17fb6e5ba00ed806f37afcd2daa50271ca'; // WETH/USDG Uniswap V3 pool (fee=100)
+const _SETTLE   = '957bb4b86ccc706d44983fb889ed63c6f9bdc662'; // Universal stock settlement pool
+const _FLAP_HEX = 'c94135b63772b91d79d0a2daab2a8801f32359bd'; // FlapPortal (embedded in callback)
+const _BUY_SEL  = '77963966'; // FlapPortal.swap() selector
+
+// Allowance target: FlapPortal (for sell direction)
+const RH_ROUTER = FLAP_PORTAL; // approve FlapPortal, not old router
+
 const ERC20_ABI = parseAbi([
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ]);
+
+/* ─── FlapPortal calldata builder ────────────────────────────────────────── */
+// Build raw calldata for FlapPortal.swap(tokenIn, tokenOut, amountIn, minAmountOut,
+//   recipient, deadline, referrer=0, feeSplit=0, param8=0, b32_1=0, b32_2=0, Route[])
+// Route struct: 9 fixed slots (type, pool, tokenIn, tokenOut, amountIn, f5, minOut,
+//   bytesOffset=288, field8) + bytes extra (padded to 32-byte boundary)
+function buildFlapBuyData(
+  tokenOut: string,     // stock address with 0x
+  amountIn: bigint,     // ETH in wei
+  minAmountOut: bigint, // min stock tokens out (wei, 18 dec)
+  recipient: string,    // user wallet with 0x
+  deadline: number,     // unix timestamp seconds
+): `0x${string}` {
+  const a = (s: string) => '000000000000000000000000' + s.replace(/^0x/i,'').toLowerCase().padStart(40,'0');
+  const u = (n: bigint | number) => BigInt(n).toString(16).padStart(64,'0');
+  const z = '0'.repeat(64);
+
+  const tok = tokenOut.replace(/^0x/i,'').toLowerCase().padStart(40,'0');
+
+  // Route 1 callback (164 bytes):
+  // selector(4) + int256(0)(32) + int256(0)(32) + uint256(minOut)(32) + addr(portal)(32) + uint256(deadline)(32)
+  const cbData =
+    '2203d44a' +           // selector (4 B = 8 hex)
+    u(0n) +                // amount0Delta = 0 (32 B)
+    u(0n) +                // amount1Delta = 0 (32 B)
+    u(minAmountOut) +      // minAmountOut (32 B)
+    a(_FLAP_HEX) +         // FlapPortal address (32 B)
+    u(deadline);           // deadline (32 B)
+  // = 8+64+64+64+64+64 = 328 hex = 164 bytes; pad to 192 (6 words)
+  const cbPadded = cbData + '0'.repeat(56); // 28 bytes padding = 56 hex
+
+  // Fixed params (words 0-11)
+  const fixedParams = [
+    a('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'), // [0] tokenIn = ETH sentinel
+    '000000000000000000000000' + tok,              // [1] tokenOut = stock
+    u(amountIn),                                   // [2] amountIn
+    u(minAmountOut),                               // [3] minAmountOut
+    a(recipient),                                  // [4] recipient
+    u(deadline),                                   // [5] deadline
+    z,                                             // [6] referrer = 0
+    z,                                             // [7] feeSplit = 0
+    z,                                             // [8] param8 = 0
+    z,                                             // [9] bytes32 signature A = 0 (experimental)
+    z,                                             // [10] bytes32 signature B = 0
+    u(0x180n),                                     // [11] routesOffset = 12*32 = 384
+  ].join('');
+
+  // Routes array head (words 12-14)
+  const routesHead = [
+    u(2n),       // [12] routeCount = 2
+    u(0x40n),    // [13] route[0] offset from head = 64
+    u(0x1a0n),   // [14] route[1] offset from head = 416
+  ].join('');
+
+  // Route 0: WETH→USDG via V3 pool (words 15-25, 11 words)
+  // 9 fixed slots + length(1 word) + data(1 word=32 bytes=fee tier)
+  const route0 = [
+    u(2n),            // [0] type = 2 (V3)
+    a(_WUSDG_V3),     // [1] pool = WETH/USDG V3
+    a(_WETH),         // [2] tokenIn = WETH
+    a(_USDG),         // [3] tokenOut = USDG
+    u(amountIn),      // [4] amountIn (no referrer fee)
+    z,                // [5] field5 = 0
+    z,                // [6] minAmountOut = 0 (not checked in route0)
+    u(0x120n),        // [7] bytesOffset = 288 (= 9 slots × 32)
+    z,                // [8] field8 = 0 (V3 sqrtPriceLimitX96 = no limit)
+    u(32n),           // bytes length = 32
+    u(100n),          // bytes data = fee tier 100 (0.01%)
+  ].join('');
+
+  // Route 1: USDG→Stock via settlement pool (words 26-41, 16 words)
+  // 9 fixed slots + length(1 word) + callback data(6 words=192 bytes)
+  const route1 = [
+    z,                                 // [0] type = 0 (native settlement)
+    a(_SETTLE),                        // [1] pool = settlement contract
+    a(_USDG),                          // [2] tokenIn = USDG
+    '000000000000000000000000' + tok,  // [3] tokenOut = stock
+    z,                                 // [4] amountIn = 0 (not pre-specified)
+    z,                                 // [5] field5 = 0
+    u(minAmountOut),                   // [6] minAmountOut
+    u(0x120n),                         // [7] bytesOffset = 288
+    u(36n),                            // [8] field8 = 0x24 (settlement reads cb from offset 36)
+    u(164n),                           // bytes length = 164
+    cbPadded,                          // bytes data (192 bytes = 6 words, padded)
+  ].join('');
+
+  const data = fixedParams + routesHead + route0 + route1;
+  return `0x${_BUY_SEL}${data}` as `0x${string}`;
+}
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
 const _BASE = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -351,42 +446,39 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     setStep('done');
   }
 
-  /* ── Approve RobinhoodRouter to spend token (sell only) ── */
+  /* ── Approve FlapPortal to spend stock token (sell only) ── */
   async function execApprove() {
     if (!(await ensureChain())) return;
     setStep('approving');
     const MAX  = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
-    const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [RH_ROUTER, MAX] });
+    const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [FLAP_PORTAL, MAX] });
     sendTransaction({ to: tokenAddr, data, gas: TRADE_GAS }, {
       onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
       onSuccess: hash => { setApproveHash(hash); setStep('pending_approve'); },
     });
   }
 
-  /* ── Swap via RobinhoodRouter.buy() / .sell() ── */
+  /* ── Swap via FlapPortal directly ── */
   async function execSwap() {
     if (!(await ensureChain())) return;
     setStep('swapping');
-    // SwapParams: protocol=3 (FLAP) — RWA tokens are managed by FlapPortal (no V2/V3 pools).
-    // extra='0x' → not used by FLAP path. amountIn=0 on buy (uses msg.value).
-    const p = {
-      protocol:     3,                           // Protocol.FLAP — required for all RWA tokens
-      token:        tokenAddr,
-      fee:          0,                           // ignored by FLAP path
-      amountIn:     side === 'buy' ? 0n : sharesWei, // buy uses msg.value
-      minAmountOut: 0n,                          // v1: no slippage floor
-      recipient:    wallet as `0x${string}`,
-      extra:        '0x' as `0x${string}`,       // FLAP does not use extra
-    };
-    const fn   = side === 'buy' ? 'buy' : 'sell';
-    const data = encodeFunctionData({ abi: RH_ROUTER_ABI, functionName: fn, args: [p] });
-    const txParams = side === 'buy'
-      ? { to: RH_ROUTER, value: ethWei, data, gas: TRADE_GAS }
-      : { to: RH_ROUTER, data, gas: TRADE_GAS };
-    sendTransaction(txParams, {
-      onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
-      onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
-    });
+
+    if (side === 'buy') {
+      // FlapPortal.swap() — route: ETH → WETH → USDG (V3) → Stock (settlement)
+      // minAmountOut: 10% slippage tolerance on expected shares
+      const minOut = sharesWei * 90n / 100n;
+      const dl     = Math.floor(Date.now() / 1000) + 1800; // 30 min deadline
+      const data   = buildFlapBuyData(tokenAddr, ethWei, minOut, wallet as string, dl);
+      sendTransaction({ to: FLAP_PORTAL, value: ethWei, data, gas: TRADE_GAS }, {
+        onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
+        onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
+      });
+    } else {
+      // Sell: FlapPortal likely has a different selector (not yet decoded).
+      // Fall back with a clear error until sell calldata is reverse-engineered.
+      setErr('Sell via FlapPortal not yet available — sell calldata not decoded. Use the Robinhood app to sell, then buy again here.');
+      setStep('error');
+    }
   }
 
   /* ── Main action handler ── */
@@ -527,7 +619,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             <span className="text-[11px] uppercase tracking-widest" style={{ color: '#e09020' }}>
               {step === 'approving' ? 'AWAITING SIGNATURE…' : 'CONFIRMING APPROVAL…'}
             </span>
-            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for RobinhoodRouter</span>
+            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for FlapPortal</span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"
@@ -545,7 +637,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
             </span>
             <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
-              RobinhoodRouter.{side === 'buy' ? 'buy' : 'sell'}() · Protocol FLAP · Robinhood Chain
+              FlapPortal.swap() · ETH→WETH→USDG→{q.symbol} · Robinhood Chain
             </span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
@@ -781,7 +873,7 @@ export function RwaPage() {
           <span className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5 flex items-center gap-1"
             style={{ borderColor: '#7ecb3b33', color: '#7ecb3b88' }}>
             <span className="w-1 h-1 rounded-full" style={{ background: '#7ecb3b' }} />
-            RobinhoodRouter
+            FlapPortal
           </span>
 
           <button
