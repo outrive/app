@@ -84,6 +84,8 @@ const TOC = [
   { label: '13. Token Economics',                    id: 'wp-s13' },
   { label: '14. Risk Disclosure & Legal Posture',    id: 'wp-s14' },
   { label: '15. Glossary',                           id: 'wp-s15' },
+  { label: '16. RWA Trade Infrastructure',           id: 'wp-s16' },
+  { label: '17. Autonomous Agent Trading',           id: 'wp-s17' },
 ];
 
 export function WhitepaperPage() {
@@ -172,7 +174,7 @@ export function WhitepaperPage() {
           {/* §1 Executive Summary */}
           <Section id="wp-s1" n="§1" title="Executive Summary">
             <P>
-              OUTRIVE is a <Highlight>chat-first launchpad client</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard.
+              OUTRIVE is a <Highlight>chat-first launchpad and autonomous trading platform</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard. Alongside agent token launching, OUTRIVE operates a <Highlight>Real-World Asset (RWA) trading interface</Highlight> — a live terminal for 15 tokenized equities and ETFs (NVDA, AAPL, GOOGL, TSLA, META, MSFT, AMZN, AMD, PLTR, MU, ORCL, SNDK, SPCX, SPY, QQQ) issued as ERC-20 tokens on Robinhood Chain, with live price feeds, OHLCV data, TradingView-grade charts, and on-chain swap execution via Uniswap V3.
             </P>
             <div className="border-l-2 pl-4 py-2 italic" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
               Design doctrine: the LLM decides <em>what</em> to do; deterministic code decides <em>how</em>; the user's wallet decides <em>whether</em>.
@@ -470,7 +472,15 @@ tokens       (address PK, name, ticker, creator, created_block,
 trades       (id, token_address, trader, side, virtual_amount, token_amount,
               tx_hash, block_number, ts)
 
-watchlist    (user_id, token_address, PRIMARY KEY(user_id, token_address))`}</Code>
+watchlist    (user_id, token_address, PRIMARY KEY(user_id, token_address))
+
+-- RWA Trade tables (§16)
+rwa_trades   (id, wallet TEXT, symbol TEXT, side TEXT,   -- BUY | SELL
+              shares NUMERIC, price_usd NUMERIC,
+              eth_amount NUMERIC, total_usd NUMERIC,
+              tx_hash TEXT, status TEXT,                  -- pending|confirmed|failed
+              source TEXT, network TEXT,
+              created_at TIMESTAMP)`}</Code>
             <P><Highlight>Cache:</Highlight> in-memory LRU, TTL 20s for market_overview and per-token price reads.</P>
           </Section>
 
@@ -663,10 +673,11 @@ SESSION_SECRET=                    # session signing`}</Code>
           <Section id="wp-s12" n="§12" title="Roadmap">
             <div className="flex flex-col gap-3">
               {[
-                { ver: 'v1 (CURRENT)', items: ['Chat launch (Instant Launch)', 'Optional initial $VIRTUAL dev buy', 'Live Virtuals Protocol market dashboard', 'Creator-fee readout post-calibration'] },
-                { ver: 'v1.1', items: ['Buy/sell curve trades via chat (same preview→sign doctrine)', 'Watchlist alerts (graduation, ±X% moves)'] },
-                { ver: 'v2', items: ['Optional "auto-pilot" via MPC server wallets (Privy/Turnkey) behind a deterministic policy engine — targeting trades, NOT launches (auto-pilot launch would make the agent wallet, not the user, creator of record)'] },
-                { ver: 'v2.x', items: ['Genesis/Fund-Raise mode support if/when programmatic paths are confirmed', 'Multi-chain (Base) toggle reusing the same config layer'] },
+                { ver: 'v1 (CURRENT)', items: ['Chat launch (Instant Launch)', 'Optional initial $VIRTUAL dev buy', 'Live Virtuals Protocol market dashboard', 'Creator-fee readout post-calibration', 'RWA Trade interface — 15 tokenized equities & ETFs live on Robinhood Chain', 'Live price oracle via Blockscout + OHLCV feed (changePct, volume, open/high/low)', 'TradingView candlestick charts embedded natively per asset', 'RWA trade history & portfolio dashboard'] },
+                { ver: 'v1.1 (IN PROGRESS)', items: ['On-chain RWA swap execution via Uniswap V3 SwapRouter on Robinhood Chain (exactInputSingle WETH → RWA token)', 'Buy/sell curve trades for agent tokens via chat (same preview→sign doctrine)', 'Watchlist alerts (graduation, ±X% price moves)'] },
+                { ver: 'v1.2', items: ['Autonomous agent-driven RWA trade execution — Market Agent detects signal, Execution Agent routes swap, Portfolio Agent manages positions', 'Agent-automated portfolio rebalancing with deterministic policy engine', 'RWA position P&L tracking with unrealised/realised breakdown'] },
+                { ver: 'v2', items: ['Multi-asset autonomous portfolio management across agent tokens and RWA tokens', 'Cross-agent coordination: Intelligence Agent feeds macro signals to Execution Agent', 'Optional MPC server wallets (Privy/Turnkey) for headless agent execution behind deterministic policy — targeting trades, NOT launches'] },
+                { ver: 'v2.x', items: ['Genesis/Fund-Raise mode support if/when programmatic paths are confirmed', 'Multi-chain (Base) toggle reusing the same config layer', 'Expanded RWA registry beyond 15 tokens as Robinhood Chain lists additional assets'] },
               ].map(r => (
                 <div key={r.ver} className="border p-4" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <div className="text-[10px] uppercase tracking-widest mb-2 font-bold" style={{ color: 'var(--out-ink)' }}>{r.ver}</div>
@@ -851,6 +862,13 @@ Example (illustrative):
                 { term: '$VIRTUAL', def: 'Native ERC-20 of Virtuals Protocol; bonding curves are priced in $VIRTUAL.' },
                 { term: 'CALIBRATION REQUIRED', def: 'App mode when C1–C4 env vars are unset; read-only, launching disabled.' },
                 { term: 'UNDERGRAD / BONDING', def: 'API status for a token still on its bonding curve, pre-graduation.' },
+                { term: 'RWA (Real-World Asset)', def: 'A tokenized representation of a traditional financial asset — equity, ETF, or commodity — issued as an ERC-20 on Robinhood Chain.' },
+                { term: 'OHLCV', def: 'Open, High, Low, Close, Volume — the standard daily candlestick data set sourced from institutional market feeds (§16).' },
+                { term: 'Blockscout Oracle', def: 'The on-chain price oracle embedded in Blockscout explorer; OUTRIVE reads exchange_rate from /api/v2/tokens to get live USD prices for RWA tokens (§16).' },
+                { term: 'SwapRouter (Uniswap V3)', def: 'The Uniswap V3 swap contract deployed on Robinhood Chain; OUTRIVE routes RWA buy/sell orders through exactInputSingle (§16, §17).' },
+                { term: 'Autonomous Agent', def: 'An on-chain economic actor deployed via Virtuals Protocol that executes market analysis, order construction, and swap execution without human intervention (§17).' },
+                { term: 'Market Agent', def: 'Autonomous agent type that monitors live RWA price feeds and detects momentum signals, volume anomalies, and trend reversals (§17).' },
+                { term: 'Execution Agent', def: 'Autonomous agent type that routes constructed orders through Uniswap V3 on Robinhood Chain with optimal slippage and deadline parameters (§17).' },
               ].map(g => (
                 <div key={g.term} className="border p-3" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--out-ink)' }}>{g.term}</div>
@@ -860,9 +878,162 @@ Example (illustrative):
             </div>
           </Section>
 
+          {/* §16 RWA Trade Infrastructure */}
+          <Section id="wp-s16" n="§16" title="RWA Trade Infrastructure">
+            <P>
+              OUTRIVE operates a <Highlight>Real-World Asset trading interface</Highlight> natively on Robinhood Chain — a live terminal for tokenized equities and ETFs issued as ERC-20 tokens on-chain. The infrastructure is built on a dual data architecture: on-chain prices are sourced from the Blockscout oracle (fast, batch, no rate limit), while OHLCV candlestick data is sourced from an institutional market feed (sequential, cached at 10-minute TTL). Both streams are merged into a unified quote object served to the frontend.
+            </P>
+
+            <div className="text-[10px] uppercase tracking-widest mt-2 mb-1" style={{ color: 'var(--out-muted)' }}>TOKEN REGISTRY — 15 RWA ASSETS ON ROBINHOOD CHAIN</div>
+            <Table
+              headers={['SYMBOL', 'NAME', 'ASSET CLASS']}
+              rows={[
+                ['NVDA',  'NVIDIA Corporation',      'Equity — Semiconductor'],
+                ['AAPL',  'Apple Inc.',               'Equity — Technology'],
+                ['GOOGL', 'Alphabet Inc.',            'Equity — Technology'],
+                ['TSLA',  'Tesla Inc.',               'Equity — Automotive / EV'],
+                ['META',  'Meta Platforms Inc.',      'Equity — Technology'],
+                ['MSFT',  'Microsoft Corporation',    'Equity — Technology'],
+                ['AMZN',  'Amazon.com Inc.',          'Equity — E-Commerce / Cloud'],
+                ['AMD',   'Advanced Micro Devices',   'Equity — Semiconductor'],
+                ['PLTR',  'Palantir Technologies',    'Equity — Data / AI'],
+                ['MU',    'Micron Technology',        'Equity — Semiconductor'],
+                ['ORCL',  'Oracle Corporation',       'Equity — Enterprise Software'],
+                ['SNDK',  'SanDisk Corp. (WD)',       'Equity — Storage'],
+                ['SPCX',  'Procure Space ETF',        'ETF — Aerospace & Defense'],
+                ['SPY',   'SPDR S&P 500 ETF Trust',   'ETF — Broad Market'],
+                ['QQQ',   'Invesco QQQ Trust',        'ETF — Nasdaq-100'],
+              ]}
+            />
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>DUAL DATA ARCHITECTURE</div>
+            <Code>{`PRICE LAYER — Blockscout On-Chain Oracle
+  Source     GET /api/v2/tokens?type=ERC-20 → exchange_rate field
+  Frequency  Batch, all 15 tokens in one request (~500ms)
+  TTL        60 seconds
+  No rate limit · No API key required
+
+OHLCV LAYER — Institutional Market Data Feed
+  Fields     open, high, low, changePct, volume, 52W high/low
+  Frequency  Sequential with 800ms gap between symbols (~13s full cycle)
+  TTL        10 minutes
+  Startup    Lazy — triggered on first /api/rwa/quotes request
+
+MERGE — buildQuoteList()
+  Joins Blockscout spot price with cached OHLCV data per symbol
+  Frontend shows "—" for changePct during OHLCV warmup window (hasOhlcv guard)
+
+LOGO LAYER — TradingView SVG CDN
+  Source     s3-symbol-logo.tradingview.com/{company}--big.svg
+  Direct browser fetch — no proxy required
+  Verified working for all 15 symbols`}</Code>
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>API ENDPOINTS</div>
+            <Table
+              headers={['ENDPOINT', 'PURPOSE']}
+              rows={[
+                ['GET /api/rwa/quotes',          'Full quote list for all 15 tokens — price, changePct, OHLCV, market cap'],
+                ['GET /api/rwa/tokens',          'Static registry — symbol, name, address, description'],
+                ['GET /api/rwa/eth-price',       'Live ETH/USD price for ETH-denominated order sizing'],
+                ['GET /api/rwa/logo/:address',   'Server-side logo proxy (legacy Robinhood CDN path — superseded by TradingView direct)'],
+                ['POST /api/rwa/trades',         'Record a trade — wallet, symbol, side, shares, priceUsd, ethAmount, txHash'],
+                ['GET /api/rwa/trades',          'Trade history for a given wallet address — powers Dashboard portfolio view'],
+              ]}
+            />
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION (IN PROGRESS)</div>
+            <Code>{`Route: exactInputSingle via Uniswap V3 SwapRouter on Robinhood Chain
+
+ISwapRouter.ExactInputSingleParams({
+  tokenIn:          WETH address (Robinhood Chain)
+  tokenOut:         RWA ERC-20 address (from token registry)
+  fee:              3000  (0.3% pool tier)
+  recipient:        user wallet address
+  deadline:         block.timestamp + 300
+  amountIn:         ETH amount in wei
+  amountOutMinimum: slippage-adjusted minimum
+  sqrtPriceLimitX96: 0
+})
+
+SELL path: tokenOut = WETH, tokenIn = RWA ERC-20
+  Requires prior ERC-20 approval for SwapRouter as spender`}</Code>
+          </Section>
+
+          {/* §17 Autonomous Agent Trading */}
+          <Section id="wp-s17" n="§17" title="Autonomous Agent Trading System">
+            <P>
+              The Autonomous Agent Trading system is OUTRIVE's most advanced capability — a layer of specialized on-chain agents, deployed via Virtuals Protocol on Robinhood Chain, that can analyze market conditions, construct trade orders, and execute swaps without manual user intervention. Each agent is an independent on-chain economic actor with its own wallet, logic, and verifiable trade history. Agents are deterministic by design: they never hallucinate parameters, and every swap routes through the same Uniswap V3 SwapRouter used in the manual trade flow.
+            </P>
+
+            <div className="text-[10px] uppercase tracking-widest mt-2 mb-1" style={{ color: 'var(--out-muted)' }}>AGENT TYPES</div>
+            <Table
+              headers={['AGENT', 'ROLE', 'DATA INPUTS']}
+              rows={[
+                ['Market Agent',       'Monitors live RWA price feeds; detects momentum signals, volume anomalies, and trend reversals', 'Blockscout oracle, OHLCV feed, 52W H/L'],
+                ['Portfolio Agent',    'Manages open RWA positions; enforces stop-losses, profit-taking thresholds, and periodic rebalancing', 'rwa_trades table, live quotes, user-defined policy'],
+                ['Execution Agent',    'Routes constructed orders through Uniswap V3 with optimal fee tier and slippage parameters', 'SwapRouter, pool liquidity, gas oracle'],
+                ['Intelligence Agent', 'Synthesizes macro signals and on-chain flow data into actionable trade theses; feeds Market Agent', 'OHLCV, market breadth, agent token sentiment'],
+              ]}
+            />
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>END-TO-END AUTONOMOUS TRADE FLOW</div>
+            <Code>{`USER / AGENT INTENT
+        │
+        ▼
+ OUTRIVE AGENT FACTORY (Virtuals Protocol — Robinhood Chain)
+        │
+        ├─► INTELLIGENCE AGENT
+        │     Macro signals + on-chain flow → trade thesis
+        │     e.g. "NVDA momentum positive, volume +34% vs 10-day avg"
+        │
+        ├─► MARKET AGENT
+        │     Monitors Blockscout oracle (60s TTL) + OHLCV (10min TTL)
+        │     Detects signal crossing threshold → emits trade intent
+        │     e.g. { symbol: "NVDA", side: "BUY", confidence: 0.87 }
+        │
+        ├─► PORTFOLIO AGENT
+        │     Checks existing position + policy constraints
+        │     e.g. max 20% single-asset allocation, no duplicate buys
+        │     Approves or rejects trade intent
+        │
+        ├─► EXECUTION AGENT
+        │     Resolves ERC-20 address from token registry
+        │     Fetches live ETH/USD price → computes amountIn (wei)
+        │     Constructs exactInputSingle params
+        │     Simulates via eth_call → check revert
+        │     Submits signed transaction → Uniswap V3 SwapRouter
+        │
+        └─► TRADE RECORDING
+              POST /api/rwa/trades → rwa_trades table
+              { wallet, symbol, side, shares, priceUsd,
+                ethAmount, txHash, status, source: "agent" }
+              Visible in Dashboard under open positions & history`}</Code>
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>AGENT BEHAVIORAL CONSTRAINTS</div>
+            <div className="flex flex-col gap-1.5">
+              {[
+                'Agents never bypass the TX Engine simulation step. A simulated revert cancels the trade and logs the reason — no gas is wasted.',
+                'Position sizing is bounded by the deterministic policy engine. No single agent trade may exceed the user-configured maximum allocation per asset.',
+                'Agent-executed trades are tagged source="agent" in rwa_trades, distinguishing them from manual trades (source="manual") in the Dashboard.',
+                'The Execution Agent uses the same Uniswap V3 SwapRouter and fee tier logic as the manual trade flow — identical calldata construction, identical slippage guards.',
+                'All agent wallets are non-custodial — OUTRIVE never holds agent keys. Agents deployed via Virtuals Protocol hold their own keys under the Virtuals custody model.',
+                'Intelligence Agent outputs are advisory signals only. The Portfolio Agent applies deterministic policy rules before any execution proceeds — the LLM cannot unilaterally trigger a swap.',
+              ].map((rule, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <span style={{ color: 'var(--out-ink)' }}>⬡</span>
+                  <p className="text-[10px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{rule}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-l-2 pl-4 py-2 mt-2 italic" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
+              Design doctrine: agents decide <em>what</em> to trade; the policy engine decides <em>whether</em>; the SwapRouter executes <em>how</em>. No human in the loop — but no LLM without a deterministic guard either.
+            </div>
+          </Section>
+
           {/* Footer */}
           <div className="border-t pt-4 font-mono text-[9px] uppercase tracking-widest flex justify-between items-center" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
-            <span>OUTRIVE WHITEPAPER V1.0 · JULY 2026 · SHEET REV. A</span>
+            <span>OUTRIVE WHITEPAPER V1.1 · JULY 2026 · SHEET REV. B</span>
             <span style={{ color: 'var(--out-ink-dim)' }}>NOT FINANCIAL ADVICE · INDEPENDENT SOFTWARE</span>
           </div>
         </div>

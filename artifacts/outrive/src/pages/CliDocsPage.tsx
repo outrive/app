@@ -260,6 +260,7 @@ const TOC = [
   { label: '§9 · Security Model',        id: 'cli-s9' },
   { label: '§10 · Full Session Example', id: 'cli-s10' },
   { label: '§11 · VPS Setup Guide',      id: 'cli-s11' },
+  { label: '§12 · RWA Trade',            id: 'cli-s12' },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -288,7 +289,7 @@ export function CliDocsPage() {
           </button>
         ))}
         <div className="mt-4 pt-4 border-t text-[9px] uppercase tracking-widest" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-muted)' }}>
-          VERSION 1.0 · JULY 2026
+          VERSION 1.1 · JULY 2026
         </div>
       </aside>
 
@@ -818,6 +819,101 @@ outrive chat "what tokens are trending?"`}</Code>
               />
             </div>
 
+          </Section>
+
+          {/* §12 RWA Trade */}
+          <Section id="cli-s12" n="§12" title="RWA Trade — Real-World Asset Terminal">
+            <P>
+              OUTRIVE includes a <Hl>Real-World Asset trading interface</Hl> — a live terminal for 15 tokenized equities and ETFs
+              issued as ERC-20 tokens on Robinhood Chain. Access it via the <Hl>RWA TRADE</Hl> tab in the sidebar.
+              All prices are sourced on-chain from the Blockscout oracle; OHLCV data (changePct, volume, open/high/low)
+              is fetched from an institutional market feed with a 10-minute cache.
+            </P>
+
+            <div className="text-[10px] uppercase tracking-widest mt-2 mb-1" style={{ color: 'var(--out-muted)' }}>AVAILABLE ASSETS</div>
+            <Code label="15 RWA tokens on Robinhood Chain (chainId 4663)">{`SYMBOL  NAME                        ASSET CLASS
+──────  ──────────────────────────  ─────────────────────────
+NVDA    NVIDIA Corporation          Equity — Semiconductor
+AAPL    Apple Inc.                  Equity — Technology
+GOOGL   Alphabet Inc.               Equity — Technology
+TSLA    Tesla Inc.                  Equity — Automotive / EV
+META    Meta Platforms Inc.         Equity — Technology
+MSFT    Microsoft Corporation       Equity — Technology
+AMZN    Amazon.com Inc.             Equity — E-Commerce / Cloud
+AMD     Advanced Micro Devices      Equity — Semiconductor
+PLTR    Palantir Technologies       Equity — Data / AI
+MU      Micron Technology           Equity — Semiconductor
+ORCL    Oracle Corporation          Equity — Enterprise Software
+SNDK    SanDisk Corp. (WD)          Equity — Storage
+SPCX    Procure Space ETF           ETF — Aerospace & Defense
+SPY     SPDR S&P 500 ETF Trust      ETF — Broad Market
+QQQ     Invesco QQQ Trust           ETF — Nasdaq-100`}</Code>
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>CHAT COMMANDS — RWA QUERIES</div>
+            <P>Use <Hl>chat</Hl> to query RWA market data from the CLI. The AI agent routes these to the RWA data service automatically.</P>
+            <Code label="RWA market queries via CLI chat">{`# Get live prices for all RWA tokens
+$ node outrive-cli.mjs chat "show me all RWA token prices"
+
+# Get a specific asset quote
+$ node outrive-cli.mjs chat "what is NVDA trading at right now?"
+
+# Check daily change
+$ node outrive-cli.mjs chat "which RWA tokens are up today?"
+
+# Portfolio / trade history
+$ node outrive-cli.mjs chat "show my RWA trade history"
+$ node outrive-cli.mjs chat "what RWA positions do I have open?"`}</Code>
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>DATA ARCHITECTURE — WHAT POWERS THE QUOTES</div>
+            <Table
+              headers={['LAYER', 'SOURCE', 'TTL', 'FIELDS']}
+              rows={[
+                ['Price',    'Blockscout on-chain oracle — exchange_rate field', '60 sec', 'priceUsd, marketCap'],
+                ['OHLCV',   'Institutional market data feed — sequential, 800ms gap between symbols', '10 min', 'changePct, open, high, low, volume, 52W H/L'],
+                ['Logos',   'TradingView SVG CDN — s3-symbol-logo.tradingview.com', 'Browser cache', 'Company logo per symbol'],
+                ['ETH/USD', 'Live ETH price feed for ETH-denominated order sizing', '60 sec', 'ethPriceUsd'],
+              ]}
+            />
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>ON-CHAIN SWAP EXECUTION (COMING IN v1.1)</div>
+            <P>
+              Manual buy/sell execution routes through <Hl>Uniswap V3 SwapRouter</Hl> deployed on Robinhood Chain.
+              The Work Order pattern applies — unsigned transaction returned, user signs in their own wallet.
+            </P>
+            <Code label="swap flow (v1.1)">{`BUY NVDA with 0.05 ETH
+  → exactInputSingle(tokenIn=WETH, tokenOut=NVDA_ADDRESS, amountIn=0.05e18)
+  → SwapRouter on Robinhood Chain (chainId 4663)
+  → Work Order returned → sign in wallet → broadcast
+
+SELL NVDA (100 shares)
+  → Step 1: approve SwapRouter to spend NVDA tokens (if allowance insufficient)
+  → Step 2: exactInputSingle(tokenIn=NVDA_ADDRESS, tokenOut=WETH, amountIn=shares)
+  → Two-step Work Order → sign both txs in order`}</Code>
+
+            <div className="text-[10px] uppercase tracking-widest mt-3 mb-1" style={{ color: 'var(--out-muted)' }}>AUTONOMOUS AGENT TRADING (COMING IN v1.2)</div>
+            <P>
+              Autonomous agents deployed via <Hl>Virtuals Protocol</Hl> on Robinhood Chain will execute RWA trades
+              independently — analyzing live price feeds, constructing orders, and routing swaps through Uniswap V3
+              without user intervention. Every agent trade is tagged <code style={{ color: 'var(--out-ink)' }}>source="agent"</code> in
+              trade history and visible in the Dashboard portfolio view.
+            </P>
+            <Table
+              headers={['AGENT', 'ROLE']}
+              rows={[
+                ['Market Agent',       'Monitors live RWA prices; detects momentum signals and volume anomalies'],
+                ['Portfolio Agent',    'Manages positions; enforces stop-losses and rebalancing policy'],
+                ['Execution Agent',    'Routes orders through Uniswap V3 with optimal slippage and deadline params'],
+                ['Intelligence Agent', 'Synthesizes macro signals into trade theses; feeds the Market Agent'],
+              ]}
+            />
+
+            <div className="border p-3 mt-2" style={{ borderColor: 'var(--out-grid-major)', background: '#0A0F0A' }}>
+              <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>SEE ALSO</div>
+              <p className="text-[10px] leading-relaxed font-mono" style={{ color: 'var(--out-text)' }}>
+                Full technical specification in the Whitepaper — <span style={{ color: 'var(--out-ink)' }}>§16 RWA Trade Infrastructure</span> and{' '}
+                <span style={{ color: 'var(--out-ink)' }}>§17 Autonomous Agent Trading System</span>. Access via the WHITEPAPER tab in the sidebar.
+              </p>
+            </div>
           </Section>
 
         </div>
