@@ -14,18 +14,22 @@ export const RWA_TOKENS: Record<string, {
   logoUrl: string;
   tvSymbol: string;
 }> = {
-  AAPL:  { address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', name: 'Apple Inc.',             logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png', tvSymbol: 'NASDAQ:AAPL'  },
-  NVDA:  { address: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC', name: 'NVIDIA Corp.',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png', tvSymbol: 'NASDAQ:NVDA'  },
+  // Sorted by 24h trading volume on Robinhood Chain (Blockscout data)
+  NVDA:  { address: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC', name: 'NVIDIA Corp.',           logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png', tvSymbol: 'NASDAQ:NVDA'  },
+  SPCX:  { address: '0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa', name: 'Procure Space ETF',      logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png', tvSymbol: 'NASDAQ:SPCX'  },
+  AAPL:  { address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', name: 'Apple Inc.',              logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png', tvSymbol: 'NASDAQ:AAPL'  },
+  GOOGL: { address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', name: 'Alphabet Inc.',           logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png', tvSymbol: 'NASDAQ:GOOGL' },
+  TSLA:  { address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', name: 'Tesla Inc.',              logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x322f0929c4625ed5bad873c95208d54e1c003b2d.png', tvSymbol: 'NASDAQ:TSLA'  },
+  PLTR:  { address: '0x894E1EC2D74FFE5AEF8Dc8A9e84686acCB964F2A', name: 'Palantir Technologies', logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x894e1ec2d74ffe5aef8dc8a9e84686accb964f2a.png', tvSymbol: 'NASDAQ:PLTR'  },
+  AMD:   { address: '0x86923f96303D656E4aa86D9d42D1e57ad2023fdC', name: 'Advanced Micro Devices', logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x86923f96303d656e4aa86d9d42d1e57ad2023fdc.png', tvSymbol: 'NASDAQ:AMD'   },
+  META:  { address: '0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35', name: 'Meta Platforms Inc.',     logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png', tvSymbol: 'NASDAQ:META'  },
+  MSFT:  { address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', name: 'Microsoft Corp.',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xe93237c50d904957cf27e7b1133b510c669c2e74.png', tvSymbol: 'NASDAQ:MSFT'  },
   AMZN:  { address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', name: 'Amazon.com Inc.',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x12f190a9f9d7d37a250758b26824b97ce941bf54.png', tvSymbol: 'NASDAQ:AMZN'  },
-  GOOGL: { address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', name: 'Alphabet Inc.',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png', tvSymbol: 'NASDAQ:GOOGL' },
-  META:  { address: '0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35', name: 'Meta Platforms Inc.',      logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png', tvSymbol: 'NASDAQ:META'  },
-  MSFT:  { address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', name: 'Microsoft Corp.',           logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xe93237c50d904957cf27e7b1133b510c669c2e74.png', tvSymbol: 'NASDAQ:MSFT'  },
-  TSLA:  { address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', name: 'Tesla Inc.',               logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x322f0929c4625ed5bad873c95208d54e1c003b2d.png', tvSymbol: 'NASDAQ:TSLA'  },
-  AMD:   { address: '0x86923f96303D656E4aa86D9d42D1e57ad2023fdC', name: 'Advanced Micro Devices',   logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x86923f96303d656e4aa86d9d42d1e57ad2023fdc.png', tvSymbol: 'NASDAQ:AMD'   },
-  COIN:  { address: '0x6330D8C3178a418788dF01a47479c0ce7CCF450b', name: 'Coinbase Global Inc.',     logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x6330d8c3178a418788df01a47479c0ce7ccf450b.png', tvSymbol: 'NASDAQ:COIN'  },
-  AVGO:  { address: '0x156E175DD063a8cE274C50654eF40e0032b3fbcF', name: 'Broadcom Inc.',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x156e175dd063a8ce274c50654ef40e0032b3fbcf.png', tvSymbol: 'NASDAQ:AVGO'  },
-  SPY:   { address: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', name: 'SPDR S&P 500 ETF',        logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png', tvSymbol: 'AMEX:SPY'    },
-  QQQ:   { address: '0xD5f3879160bc7c32ebb4dC785F8a4F505888de68', name: 'Invesco QQQ ETF',          logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png', tvSymbol: 'NASDAQ:QQQ'  },
+  MU:    { address: '0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD', name: 'Micron Technology',       logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xff080c8ce2e5feadaca0da81314ae59d232d4afd.png', tvSymbol: 'NASDAQ:MU'    },
+  ORCL:  { address: '0xb0992820E760d836549ba69BC7598b4af75dEE03', name: 'Oracle Corp.',             logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xb0992820e760d836549ba69bc7598b4af75dee03.png', tvSymbol: 'NYSE:ORCL'    },
+  SNDK:  { address: '0xB90A19fF0Af67f7779afF50A882A9CfF42446400', name: 'SanDisk Corp.',            logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xb90a19ff0af67f7779aff50a882a9cff42446400.png', tvSymbol: 'NASDAQ:WDC'   },
+  SPY:   { address: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', name: 'SPDR S&P 500 ETF',       logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png', tvSymbol: 'AMEX:SPY'    },
+  QQQ:   { address: '0xD5f3879160bc7c32ebb4dC785F8a4F505888de68', name: 'Invesco QQQ ETF',         logoUrl: 'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png', tvSymbol: 'NASDAQ:QQQ'  },
 };
 
 export const WETH_ADDRESS = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as `0x${string}`;
