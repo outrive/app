@@ -823,66 +823,88 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
 
   return (
     <Sheet dwgNo="OUT-DSH-03" figCaption="FIG. 05 — RWA PORTFOLIO & TRADE HISTORY">
-      <div className="text-[12px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>
+      <div className="text-[11px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>
         RWA PORTFOLIO OVERVIEW
       </div>
 
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      {/* ── Stats bar ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'TOTAL TRADES',     value: isLoading ? '—' : String(trades.length)      },
-          { label: 'OPEN POSITIONS',   value: isLoading ? '—' : String(positions.length)   },
-          { label: 'TOTAL INVESTED',   value: isLoading ? '—' : `${totalBought.toFixed(2)}`  },
-          { label: 'AGENT TRADES',     value: isLoading ? '—' : String(agentTrades.length)  },
+          { label: 'TOTAL TRADES',   value: isLoading ? '—' : String(trades.length),                       sub: 'all time'              },
+          { label: 'OPEN POSITIONS', value: isLoading ? '—' : String(positions.length),                    sub: 'live holdings'         },
+          { label: 'TOTAL INVESTED', value: isLoading ? '—' : `${totalBought.toFixed(2)}`,                sub: 'cumulative buys'       },
+          { label: 'AGENT TRADES',   value: isLoading ? '—' : String(agentTrades.length),                  sub: 'autonomous'            },
         ].map(s => (
-          <div key={s.label} className="border border-[var(--out-grid-major)] p-3 font-mono">
-            <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>{s.label}</div>
-            <div className="text-[18px] font-bold" style={{ color: 'var(--out-ink)' }}>{s.value}</div>
+          <div key={s.label} className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-1">
+            <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{s.label}</div>
+            <div className="text-[22px] font-bold leading-none mt-1" style={{ color: 'var(--out-ink)' }}>{s.value}</div>
+            <div className="text-[9px] mt-1" style={{ color: 'var(--out-ink-dim)' }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* Open positions */}
+      {/* ── Open positions ── */}
       {positions.length > 0 && (
-        <div className="mb-5">
-          <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>OPEN POSITIONS</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="mb-6">
+          <div className="text-[10px] uppercase tracking-widest mb-3" style={{ color: 'var(--out-muted)' }}>
+            OPEN POSITIONS · {positions.length}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {positions.map(([sym, pos]) => {
-              const avgCost    = pos.buyShares > 0 ? pos.buyUsd / pos.buyShares : 0;
-              const currentPx  = flapMap[sym] || 0;
-              const costBasis  = avgCost * pos.shares;
-              const curValue   = currentPx * pos.shares;
-              const pnl        = currentPx > 0 ? curValue - costBasis : 0;
-              const pnlPct     = costBasis > 0 && currentPx > 0 ? (pnl / costBasis) * 100 : 0;
-              const hasPnl     = currentPx > 0;
-              const pnlUp      = pnl >= 0;
+              const avgCost   = pos.buyShares > 0 ? pos.buyUsd / pos.buyShares : 0;
+              const currentPx = flapMap[sym] || 0;
+              const costBasis = avgCost * pos.shares;
+              const curValue  = currentPx * pos.shares;
+              const pnl       = currentPx > 0 ? curValue - costBasis : 0;
+              const pnlPct    = costBasis > 0 && currentPx > 0 ? (pnl / costBasis) * 100 : 0;
+              const hasPnl    = currentPx > 0;
+              const pnlUp     = pnl >= 0;
               return (
-                <div key={sym} className="border border-[var(--out-grid-major)] p-3 font-mono flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <RwaTokenLogo symbol={sym} />
-                    <div>
-                      <div className="text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>{sym}</div>
-                      <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>{pos.shares.toFixed(4)} sh</div>
+                <div key={sym} className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-3">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <RwaTokenLogo symbol={sym} />
+                      <div>
+                        <div className="text-[14px] font-bold leading-none" style={{ color: 'var(--out-ink)' }}>{sym}</div>
+                        <div className="text-[10px] mt-0.5" style={{ color: 'var(--out-muted)' }}>{pos.name}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[13px] font-bold" style={{ color: 'var(--out-ink)' }}>
+                        {pos.shares.toFixed(4)}
+                      </div>
+                      <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>shares</div>
                     </div>
                   </div>
-                  <div className="border-t pt-1.5" style={{ borderColor: 'var(--out-ink-dim)' }}>
-                    <div className="flex justify-between text-[9px]">
-                      <span style={{ color: 'var(--out-muted)' }}>AVG COST</span>
-                      <span style={{ color: 'var(--out-muted)' }}>${avgCost.toFixed(2)}</span>
+                  {/* Metrics grid */}
+                  <div className="border-t pt-3 grid grid-cols-3 gap-x-4 gap-y-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
+                    <div>
+                      <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>AVG COST</div>
+                      <div className="text-[11px] font-bold mt-0.5" style={{ color: 'var(--out-text)' }}>${avgCost.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>LIVE PX</div>
+                      <div className="text-[11px] font-bold mt-0.5" style={{ color: hasPnl ? 'var(--out-text)' : 'var(--out-muted)' }}>
+                        {hasPnl ? `${currentPx.toFixed(2)}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>VALUE</div>
+                      <div className="text-[11px] font-bold mt-0.5" style={{ color: 'var(--out-ink)' }}>
+                        {hasPnl ? `${curValue.toFixed(2)}` : '—'}
+                      </div>
                     </div>
                     {hasPnl && (
-                      <>
-                        <div className="flex justify-between text-[9px] mt-0.5">
-                          <span style={{ color: 'var(--out-muted)' }}>CURRENT</span>
-                          <span style={{ color: 'var(--out-text)' }}>${currentPx.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-bold mt-1">
-                          <span style={{ color: 'var(--out-muted)' }}>P&amp;L</span>
-                          <span style={{ color: pnlUp ? '#7ecb3b' : '#e05050' }}>
-                            {pnlUp ? '+' : ''}{pnl.toFixed(2)} ({pnlUp ? '+' : ''}{pnlPct.toFixed(1)}%)
+                      <div className="col-span-3 border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
+                        <div className="text-[9px] uppercase mb-0.5" style={{ color: 'var(--out-muted)' }}>UNREALIZED P&amp;L</div>
+                        <div className="text-[13px] font-bold" style={{ color: pnlUp ? '#7ecb3b' : '#e05050' }}>
+                          {pnlUp ? '+' : ''}${pnl.toFixed(2)}
+                          <span className="text-[10px] ml-2 font-normal">
+                            ({pnlUp ? '+' : ''}{pnlPct.toFixed(2)}%)
                           </span>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -892,84 +914,80 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
         </div>
       )}
 
-      {/* Trade history table */}
+      {/* ── Trade history ── */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
-            TRADE HISTORY {agentTrades.length > 0 && `· ${agentTrades.length} AGENT`} {manualTrades.length > 0 && `· ${manualTrades.length} MANUAL`}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+            TRADE HISTORY
+            {agentTrades.length > 0 && <span className="ml-2 px-1.5 py-0.5 border text-[9px]" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-ink)' }}>{agentTrades.length} AGENT</span>}
+            {manualTrades.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 border text-[9px]" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>{manualTrades.length} MANUAL</span>}
           </div>
           <button onClick={() => refetch()}
-            className="text-[10px] font-mono transition-colors flex items-center gap-1"
-            style={{ color: 'var(--out-muted)' }}>
+            className="text-[10px] font-mono border px-2 py-1 transition-opacity hover:opacity-70 flex items-center gap-1"
+            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
             ↻ REFRESH
           </button>
         </div>
 
         {!walletAddress ? (
-          <div className="py-8 text-center font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>
-            Connect wallet to view RWA trade history.
+          <div className="py-10 text-center font-mono text-[12px] border border-dashed border-[var(--out-grid-major)]" style={{ color: 'var(--out-muted)' }}>
+            Connect wallet to view trade history.
           </div>
         ) : isLoading ? (
-          <div className="py-8 text-center font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>LOADING…</div>
+          <div className="py-10 text-center font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>LOADING…</div>
         ) : trades.length === 0 ? (
-          <div className="py-10 text-center font-mono border border-dashed border-[var(--out-grid-major)] flex flex-col items-center gap-3">
-            <div className="text-[28px] opacity-20" style={{ color: 'var(--out-ink)' }}>◈</div>
+          <div className="py-12 text-center font-mono border border-dashed border-[var(--out-grid-major)] flex flex-col items-center gap-3">
+            <div className="text-[32px] opacity-20" style={{ color: 'var(--out-ink)' }}>◈</div>
             <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>No RWA trades yet</div>
             <div className="text-[11px]" style={{ color: 'var(--out-muted)' }}>Use RWA TRADE to place your first order.</div>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            {/* Header */}
-            <div className="hidden sm:grid font-mono text-[10px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1.5 mb-0.5"
-              style={{ gridTemplateColumns: '24px 64px 1fr 56px 72px 72px 56px 40px 40px', color: 'var(--out-muted)', gap: '8px' }}>
-              <span />
-              <span>ASSET</span>
-              <span>NAME</span>
-              <span>SIDE</span>
-              <span className="text-right">SHARES</span>
-              <span className="text-right">PRICE</span>
-              <span className="text-right">TOTAL</span>
-              <span className="text-center">SRC</span>
-              <span className="text-center">ST</span>
-            </div>
+            <div style={{ minWidth: '680px' }}>
+              {/* Header */}
+              <div className="font-mono text-[9px] uppercase tracking-widest border-b pb-2 mb-1 grid items-center"
+                style={{ gridTemplateColumns: '28px 72px minmax(120px,1fr) 64px 88px 88px 72px 48px 36px', gap: '12px', borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+                <span />
+                <span>ASSET</span>
+                <span>NAME</span>
+                <span>SIDE</span>
+                <span className="text-right">SHARES</span>
+                <span className="text-right">PRICE</span>
+                <span className="text-right">TOTAL</span>
+                <span className="text-center">SRC</span>
+                <span className="text-center">ST</span>
+              </div>
 
-            {trades.map(t => {
-              const isBuy = t.side === 'buy';
-              return (
-                <div key={t.id}
-                  className="grid font-mono text-[11px] py-2 border-b items-center"
-                  style={{ gridTemplateColumns: '24px 64px 1fr 56px 72px 72px 56px 40px 40px', gap: '8px', borderColor: 'var(--out-ink-dim)' }}>
-                  {/* Logo */}
-                  <RwaTokenLogo symbol={t.symbol} />
-                  {/* Symbol */}
-                  <span className="font-bold" style={{ color: 'var(--out-ink)' }}>{t.symbol}</span>
-                  {/* Name — hidden on mobile */}
-                  <span className="hidden sm:block truncate" style={{ color: 'var(--out-muted)', fontSize: '10px' }}>{t.name}</span>
-                  {/* Side */}
-                  <span className="font-bold" style={{ color: isBuy ? 'var(--out-ink)' : 'var(--out-danger)' }}>
-                    {isBuy ? '▲ BUY' : '▼ SELL'}
-                  </span>
-                  {/* Shares */}
-                  <span className="text-right" style={{ color: 'var(--out-text)' }}>
-                    {parseFloat(t.shares).toFixed(4)}
-                  </span>
-                  {/* Price */}
-                  <span className="text-right" style={{ color: 'var(--out-text)' }}>
-                    ${parseFloat(t.priceUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                  {/* Total */}
-                  <span className="text-right font-bold" style={{ color: 'var(--out-ink)' }}>
-                    ${parseFloat(t.totalUsd).toFixed(2)}
-                  </span>
-                  {/* Source */}
-                  <span className="text-center text-[9px] uppercase" style={{ color: t.source === 'agent' ? 'var(--out-ink)' : 'var(--out-muted)' }}>
-                    {t.source === 'agent' ? 'AGT' : 'MAN'}
-                  </span>
-                  {/* Status */}
-                  <span className="text-center">{statusIcon(t.status)}</span>
-                </div>
-              );
-            })}
+              {trades.map(t => {
+                const isBuy = t.side === 'buy';
+                return (
+                  <div key={t.id}
+                    className="grid font-mono py-2.5 border-b items-center"
+                    style={{ gridTemplateColumns: '28px 72px minmax(120px,1fr) 64px 88px 88px 72px 48px 36px', gap: '12px', borderColor: 'var(--out-ink-dim)' }}>
+                    <RwaTokenLogo symbol={t.symbol} />
+                    <span className="text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>{t.symbol}</span>
+                    <span className="truncate text-[10px]" style={{ color: 'var(--out-muted)' }}>{t.name}</span>
+                    <span className="text-[11px] font-bold" style={{ color: isBuy ? 'var(--out-ink)' : '#e05050' }}>
+                      {isBuy ? '▲ BUY' : '▼ SELL'}
+                    </span>
+                    <span className="text-right text-[11px]" style={{ color: 'var(--out-text)' }}>
+                      {parseFloat(t.shares).toFixed(4)}
+                    </span>
+                    <span className="text-right text-[11px]" style={{ color: 'var(--out-text)' }}>
+                      ${parseFloat(t.priceUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-right text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>
+                      ${parseFloat(t.totalUsd).toFixed(2)}
+                    </span>
+                    <span className="text-center text-[9px] uppercase tracking-wide border px-1 py-0.5"
+                      style={{ borderColor: t.source === 'agent' ? 'var(--out-ink-dim)' : 'transparent', color: t.source === 'agent' ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+                      {t.source === 'agent' ? 'AGT' : 'MAN'}
+                    </span>
+                    <span className="text-center text-[12px]">{statusIcon(t.status)}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
