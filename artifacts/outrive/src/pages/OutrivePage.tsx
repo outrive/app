@@ -212,7 +212,7 @@ function CustomTierInput({
 
 /* ── Main purchase panel ── */
 function CreditPurchasePanel({ walletAddress, onPurchased }: {
-  walletAddress: string;
+  walletAddress: string | undefined;
   onPurchased: () => void;
 }) {
   const [selectedTier, setSelectedTier]   = useState<TierId | 'custom'>(0);
@@ -232,13 +232,15 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
     ? customChats
     : TIERS[selectedTier].chats;
 
+  const walletConnected = !!walletAddress;
+
   // ── Read OTR balance ──
   const { data: otrBalance } = useReadContract({
     address: OTR_TOKEN_ADDRESS,
     abi:     ERC20_ABI,
     functionName: 'balanceOf',
     args:    [walletAddress as `0x${string}`],
-    query:   { enabled: contractReady },
+    query:   { enabled: contractReady && walletConnected },
   });
 
   // ── Read current allowance ──
@@ -247,7 +249,7 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
     abi:     ERC20_ABI,
     functionName: 'allowance',
     args:    [walletAddress as `0x${string}`, OTR_CREDIT_POOL_ADDRESS!],
-    query:   { enabled: contractReady && !!OTR_CREDIT_POOL_ADDRESS },
+    query:   { enabled: contractReady && walletConnected && !!OTR_CREDIT_POOL_ADDRESS },
   });
 
   // ── Write: approve ──
@@ -292,7 +294,7 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
   }
 
   async function handleBuy() {
-    if (!OTR_CREDIT_POOL_ADDRESS) return;
+    if (!OTR_CREDIT_POOL_ADDRESS || !walletAddress) return;
     setErrorMsg('');
     try {
       // Step 1: approve if needed
@@ -348,7 +350,7 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
     ? parseFloat(formatUnits(otrBalance, 18)).toFixed(2)
     : '—';
 
-  const insufficientBalance = otrBalance !== undefined && otrBalance < currentOtr;
+  const insufficientBalance = walletConnected && otrBalance !== undefined && otrBalance < currentOtr;
 
   if (!contractReady) {
     return (
@@ -505,18 +507,25 @@ function CreditPurchasePanel({ walletAddress, onPurchased }: {
             )}
 
             {/* Buy button */}
-            <button
-              onClick={handleBuy}
-              disabled={step !== 'idle' || insufficientBalance}
-              className="border px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{
-                borderColor: step === 'idle' && !insufficientBalance ? 'var(--out-ink)' : 'var(--out-ink-dim)',
-                color:       step === 'idle' && !insufficientBalance ? 'var(--out-ink)' : 'var(--out-muted)',
-                background:  step !== 'idle' ? '#0d1a0d' : 'transparent',
-              }}
-            >
-              {step === 'idle' ? `BUY ${currentChats} CHATS` : '● PROCESSING…'}
-            </button>
+            {!walletConnected ? (
+              <div className="border px-6 py-3 text-[11px] uppercase tracking-widest font-bold text-center opacity-50 cursor-not-allowed select-none"
+                style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+                CONNECT WALLET TO BUY
+              </div>
+            ) : (
+              <button
+                onClick={handleBuy}
+                disabled={step !== 'idle' || insufficientBalance}
+                className="border px-6 py-3 text-[11px] uppercase tracking-widest font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  borderColor: step === 'idle' && !insufficientBalance ? 'var(--out-ink)' : 'var(--out-ink-dim)',
+                  color:       step === 'idle' && !insufficientBalance ? 'var(--out-ink)' : 'var(--out-muted)',
+                  background:  step !== 'idle' ? '#0d1a0d' : 'transparent',
+                }}
+              >
+                {step === 'idle' ? `BUY ${currentChats} CHATS` : '● PROCESSING…'}
+              </button>
+            )}
           </div>
 
           {/* How it works */}
@@ -732,14 +741,10 @@ export function OutrivePage() {
 
       {/* ── SHEET B — BUY CREDITS ── */}
       <Sheet dwgNo="OUT-OTR-02" figCaption="FIG. 02 — CREDIT PURCHASE · $OTR TOKEN">
-        {!address ? (
-          <ConnectPrompt />
-        ) : (
-          <CreditPurchasePanel
-            walletAddress={address}
-            onPurchased={handlePurchased}
-          />
-        )}
+        <CreditPurchasePanel
+          walletAddress={address}
+          onPurchased={handlePurchased}
+        />
       </Sheet>
 
       {/* ── SHEET C — PURCHASE HISTORY ── */}
