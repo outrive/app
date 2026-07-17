@@ -482,10 +482,12 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const { isSuccess: swapOk, isError: swapFail } =
     useWaitForTransactionReceipt({ hash: swapHash, query: { enabled: !!swapHash } });
 
-  /* ── ETH balance ── */
+  /* ── ETH balance — must specify chainId so wagmi queries Robinhood Chain,
+       not whatever chain the wallet last reported ── */
   const { data: ethBal } = useBalance({
     address: wallet ?? undefined,
-    query: { enabled: !!wallet, refetchInterval: 15_000 },
+    chainId: RH_CHAIN_ID,
+    query: { enabled: !!wallet, refetchInterval: 12_000 },
   });
   const ethBalNum = ethBal ? parseFloat(formatUnits(ethBal.value, 18)) : null;
 
@@ -493,15 +495,17 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const { data: tokenBal } = useBalance({
     address: wallet ?? undefined,
     token: tokenAddr || undefined,
-    query: { enabled: !!wallet && !!tokenAddr && side === 'sell', refetchInterval: 15_000 },
+    chainId: RH_CHAIN_ID,
+    query: { enabled: !!wallet && !!tokenAddr && side === 'sell', refetchInterval: 12_000 },
   } as any);
   const tokenBalNum = tokenBal ? parseFloat(formatUnits(tokenBal.value, 18)) : null;
 
-  /* ── Allowance (for sell) — approve RH_ROUTER, not any V3 router ── */
+  /* ── Allowance (for sell) ── */
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: tokenAddr || undefined, abi: ERC20_ABI, functionName: 'allowance',
     args: wallet ? [wallet, RH_ROUTER] : undefined,
-    query: { enabled: !!wallet && side === 'sell' && !!tokenAddr, refetchInterval: 10_000 },
+    chainId: RH_CHAIN_ID,
+    query: { enabled: !!wallet && side === 'sell' && !!tokenAddr, refetchInterval: 8_000 },
   } as any);
   const needsApproval = side === 'sell' && sharesWei > 0n
     && (allowance === undefined || (allowance as bigint) < sharesWei);
@@ -571,7 +575,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     setStep('approving');
     const MAX  = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
     const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [FLAP_PORTAL, MAX] });
-    sendTransaction({ to: tokenAddr, data, gas: TRADE_GAS }, {
+    sendTransaction({ to: tokenAddr, data, gas: 80_000n, chainId: RH_CHAIN_ID }, {
       onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
       onSuccess: hash => { setApproveHash(hash); setStep('pending_approve'); },
     });
@@ -595,9 +599,13 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
         setErr(`Insufficient ETH — need ${formatUnits(payWei, 18).slice(0, 10)} ETH plus gas.`);
         setStep('error'); return;
       }
-      const minOut = sharesWei * 98n / 100n; // max 2% slippage, enforced on-chain
+      // minOut: based on on-chain quote rate (not YF price) to avoid stale-price reverts
+      const refOut = buyRate ? BigInt(buyRate.amountOut) : 0n;
+      const refIn  = buyRate ? BigInt(buyRate.ethIn)    : 0n;
+      const expectedOut = refOut > 0n ? (payWei * refOut) / refIn : sharesWei;
+      const minOut = expectedOut * 97n / 100n; // 3% slippage — RWA oracle prices can move between blocks
       const data   = buildFlapBuyData(tokenAddr, payWei, minOut, wallet as string, dl, settlePool);
-      sendTransaction({ to: FLAP_PORTAL, value: payWei, data, gas: TRADE_GAS }, {
+      sendTransaction({ to: FLAP_PORTAL, value: payWei, data, gas: TRADE_GAS, chainId: RH_CHAIN_ID }, {
         onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
         onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
       });
@@ -608,9 +616,9 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
         setStep('error'); return;
       }
       if (sellEthWei <= 0n) { setErr('Live sell quote not ready — wait a second and retry.'); setStep('error'); return; }
-      const minEthOut = sellEthWei * 98n / 100n; // max 2% slippage, enforced on-chain
+      const minEthOut = sellEthWei * 97n / 100n; // 3% slippage
       const data = buildFlapSellData(tokenAddr, sharesWei, minEthOut, wallet as string, dl, settlePool);
-      sendTransaction({ to: FLAP_PORTAL, value: 0n, data, gas: TRADE_GAS }, {
+      sendTransaction({ to: FLAP_PORTAL, value: 0n, data, gas: TRADE_GAS, chainId: RH_CHAIN_ID }, {
         onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
         onSuccess: hash => { setSwapHash(hash); setStep('pending_swap'); },
       });
