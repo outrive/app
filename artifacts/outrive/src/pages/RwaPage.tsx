@@ -142,6 +142,7 @@ function TvChart({ symbol }: { symbol: string }) {
 function MarketRow({ q, active, onClick }: { q: Quote; active: boolean; onClick: () => void }) {
   const up = q.changePct >= 0;
   const hasPrice = q.price > 0;
+  const hasOhlcv = q.open > 0 || q.changePct !== 0; // false until Yahoo Finance data loads
   return (
     <button
       onClick={onClick}
@@ -171,9 +172,9 @@ function MarketRow({ q, active, onClick }: { q: Quote; active: boolean; onClick:
             : q.price.toFixed(2)}` : <span style={{ color: 'var(--out-muted)' }}>···</span>}
         </div>
         <div className="text-[9.5px] leading-tight mt-[1px] flex items-center justify-end gap-[2px]"
-          style={{ color: !hasPrice ? 'var(--out-muted)' : up ? '#7ecb3b' : '#e05050' }}>
-          {hasPrice && (up ? <TrendingUp size={8} strokeWidth={2} /> : <TrendingDown size={8} strokeWidth={2} />)}
-          {hasPrice ? pct(q.changePct) : '—'}
+          style={{ color: (!hasPrice || !hasOhlcv) ? 'var(--out-muted)' : up ? '#7ecb3b' : '#e05050' }}>
+          {hasOhlcv && hasPrice && (up ? <TrendingUp size={8} strokeWidth={2} /> : <TrendingDown size={8} strokeWidth={2} />)}
+          {hasOhlcv && hasPrice ? pct(q.changePct) : '—'}
         </div>
       </div>
     </button>

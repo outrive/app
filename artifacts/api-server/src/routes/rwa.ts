@@ -38,7 +38,8 @@ export const RWA_TOKENS: Record<string, {
 export const WETH_ADDRESS = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as `0x${string}`;
 const SYMBOLS = Object.keys(RWA_TOKENS);
 
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+// Windows UA — Yahoo Finance blocks Mac/Linux server IPs with Mac UA; Windows Chrome UA gets 200
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /* ── Quote types ─────────────────────────────────────────────────────────── */
@@ -49,10 +50,16 @@ type QuoteResult = {
   fiftyTwoHigh: number; fiftyTwoLow: number; currency: string;
 };
 
-/* ── Price caches ────────────────────────────────────────────────────────── */
-let _quoteCache: { quotes: QuoteResult[]; updatedAt: string } | null = null;
-let _quoteCacheExpiry = 0;
-let _quoteInflight: Promise<typeof _quoteCache> | null = null;
+/* ── Dual cache: Blockscout prices (60s) + Yahoo Finance OHLCV (5 min) ─────── */
+// Prices — cheap Blockscout batch, refreshed every 60s
+let _prices: Record<string, number> = {};
+let _pricesExp = 0;
+
+// OHLCV (changePct, open, high, low, vol, 52w) — expensive YF sequential fetch, 5-min TTL
+type OhlcvData = { change: number; changePct: number; open: number; high: number; low: number; volume: number; fiftyTwoHigh: number; fiftyTwoLow: number };
+let _ohlcv: Record<string, OhlcvData | null> = {};
+let _ohlcvExp = 0;
+let _ohlcvInflight: Promise<void> | null = null;
 
 let _ethPrice = 1828;
 let _ethPriceExpiry = 0;
@@ -108,93 +115,101 @@ async function fetchChangePct(symbol: string): Promise<{ change: number; changeP
       headers: { "User-Agent": UA, "Accept": "application/json", "Referer": "https://finance.yahoo.com/" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[rwa] YF ${symbol} → HTTP ${res.status}`);
+      return null;
+    }
     const json: any = await res.json();
     const result = json?.chart?.result?.[0];
-    if (!result) return null;
+    if (!result) {
+      const err = json?.chart?.error;
+      console.warn(`[rwa] YF ${symbol} → no result, error:`, JSON.stringify(err));
+      return null;
+    }
 
     const meta   = result.meta ?? {};
     const q      = result.indicators?.quote?.[0] ?? {};
-    const closes = (q.close  as number[]) ?? [];
-    const opens  = (q.open   as number[]) ?? [];
-    const highs  = (q.high   as number[]) ?? [];
-    const lows   = (q.low    as number[]) ?? [];
-    const vols   = (q.volume as number[]) ?? [];
+    const closes = (q.close  as (number | null)[]) ?? [];
+    const opens  = (q.open   as (number | null)[]) ?? [];
+    const highs  = (q.high   as (number | null)[]) ?? [];
+    const lows   = (q.low    as (number | null)[]) ?? [];
+    const vols   = (q.volume as (number | null)[]) ?? [];
 
-    const price     = (meta.regularMarketPrice as number) ?? closes.at(-1) ?? 0;
-    const prevClose = closes.at(-2) ?? price;
-    const change    = price - prevClose;
-    const changePct = prevClose ? (change / prevClose) * 100 : 0;
+    const price     = (meta.regularMarketPrice as number) ?? closes.findLast(v => v != null) ?? 0;
+    // find last two valid closes for delta
+    const validCloses = closes.filter((v): v is number => v != null);
+    const prevClose   = validCloses.at(-2) ?? price;
+    const change      = price - prevClose;
+    const changePct   = prevClose ? (change / prevClose) * 100 : 0;
 
     return {
       change: +change.toFixed(4), changePct: +changePct.toFixed(4),
-      open:         +(opens.at(-1)  ?? 0),
-      high:         +(highs.at(-1)  ?? meta.regularMarketDayHigh ?? 0),
-      low:          +(lows.at(-1)   ?? meta.regularMarketDayLow  ?? 0),
-      volume:       +(vols.at(-1)   ?? 0),
+      open:         +((opens.findLast(v => v != null))  ?? meta.regularMarketOpen        ?? 0),
+      high:         +((highs.findLast(v => v != null))  ?? meta.regularMarketDayHigh     ?? 0),
+      low:          +((lows.findLast(v => v != null))   ?? meta.regularMarketDayLow      ?? 0),
+      volume:       +((vols.findLast(v => v != null))   ?? meta.regularMarketVolume      ?? 0),
       fiftyTwoHigh: +(meta.fiftyTwoWeekHigh ?? 0),
       fiftyTwoLow:  +(meta.fiftyTwoWeekLow  ?? 0),
     };
-  } catch {
+  } catch (e: any) {
+    console.warn(`[rwa] YF ${symbol} → CATCH: ${e?.message}`);
     return null;
   }
 }
 
-/* ── Build complete quote list ────────────────────────────────────────────── */
-async function fetchAllQuotes(): Promise<typeof _quoteCache> {
-  // 1. Get on-chain oracle prices from Blockscout (single batch, fast)
-  const prices = await fetchBlockscoutPrices();
+/* ── Map RWA symbol → Yahoo Finance ticker (where they differ) ────────────── */
+const YF_SYMBOL: Record<string, string> = {
+  SNDK: 'WDC',  // SanDisk acquired by Western Digital; WDC trades on NASDAQ
+};
 
-  // 2. Get change/OHLCV for each symbol sequentially from Yahoo Finance
-  //    (1s delay between requests to stay under rate limit)
-  const changeData: Record<string, Awaited<ReturnType<typeof fetchChangePct>>> = {};
+/* ── Refresh Blockscout prices (fast, 60s TTL) ───────────────────────────── */
+async function refreshPrices(): Promise<void> {
+  const p = await fetchBlockscoutPrices();
+  if (Object.keys(p).length) { _prices = p; _pricesExp = Date.now() + 60_000; }
+}
+
+/* ── Refresh Yahoo Finance OHLCV (sequential 400ms gaps, 5-min TTL) ──────── */
+async function refreshOhlcv(): Promise<void> {
+  const data: typeof _ohlcv = {};
   for (let i = 0; i < SYMBOLS.length; i++) {
-    changeData[SYMBOLS[i]] = await fetchChangePct(SYMBOLS[i]);
-    if (i < SYMBOLS.length - 1) await sleep(1000);
+    const sym = SYMBOLS[i];
+    data[sym] = await fetchChangePct(YF_SYMBOL[sym] ?? sym);
+    if (i < SYMBOLS.length - 1) await sleep(800); // 800ms gap — avoids Yahoo Finance 429
   }
+  // Only commit if we got at least one valid result
+  if (Object.values(data).some(v => v !== null)) {
+    _ohlcv    = data;
+    _ohlcvExp = Date.now() + 10 * 60_000; // 10-min TTL
+    console.info('[rwa] OHLCV cache refreshed — changePct ready');
+  } else {
+    console.warn('[rwa] OHLCV refresh: all null (YF rate-limited?), retry in 3 min');
+    _ohlcvExp = Date.now() + 3 * 60_000; // back off 3 min before retry
+  }
+  _ohlcvInflight = null;
+}
 
-  const quotes: QuoteResult[] = SYMBOLS.map(sym => {
-    const info   = RWA_TOKENS[sym];
-    const price  = prices[sym] ?? 0;
-    const cd     = changeData[sym];
+/* ── Merge both caches into a quote list ─────────────────────────────────── */
+function buildQuoteList(): QuoteResult[] {
+  return SYMBOLS.map(sym => {
+    const info = RWA_TOKENS[sym];
+    const cd   = _ohlcv[sym];
     return {
       symbol:       sym,
       name:         info.name,
       address:      info.address,
       logoUrl:      info.logoUrl,
-      price,
-      change:       cd ? cd.change    : 0,
-      changePct:    cd ? cd.changePct : 0,
-      open:         cd ? cd.open      : 0,
-      high:         cd ? cd.high      : 0,
-      low:          cd ? cd.low       : 0,
-      volume:       cd ? cd.volume    : 0,
-      fiftyTwoHigh: cd ? cd.fiftyTwoHigh : 0,
-      fiftyTwoLow:  cd ? cd.fiftyTwoLow  : 0,
+      price:        _prices[sym]     ?? 0,
+      change:       cd?.change       ?? 0,
+      changePct:    cd?.changePct    ?? 0,
+      open:         cd?.open         ?? 0,
+      high:         cd?.high         ?? 0,
+      low:          cd?.low          ?? 0,
+      volume:       cd?.volume       ?? 0,
+      fiftyTwoHigh: cd?.fiftyTwoHigh ?? 0,
+      fiftyTwoLow:  cd?.fiftyTwoLow  ?? 0,
       currency:     'USD',
     };
   });
-
-  const payload = { quotes, updatedAt: new Date().toISOString() };
-  _quoteCache       = payload;
-  _quoteCacheExpiry = Date.now() + 60_000;
-  _quoteInflight    = null;
-  return payload;
-}
-
-/* ── Serve prices-only immediately while OHLCV loads in background ────────── */
-async function fetchPricesOnly(): Promise<typeof _quoteCache> {
-  const prices = await fetchBlockscoutPrices();
-  const quotes: QuoteResult[] = SYMBOLS.map(sym => {
-    const info = RWA_TOKENS[sym];
-    return {
-      symbol: sym, name: info.name, address: info.address, logoUrl: info.logoUrl,
-      price: prices[sym] ?? 0,
-      change: 0, changePct: 0, open: 0, high: 0, low: 0, volume: 0,
-      fiftyTwoHigh: 0, fiftyTwoLow: 0, currency: 'USD',
-    };
-  });
-  return { quotes, updatedAt: new Date().toISOString() };
 }
 
 /* ── GET /rwa/logo/:address  (proxy — cdn.robinhood.com blocks browsers) ─── */
@@ -231,25 +246,17 @@ router.get("/rwa/logo/:address", async (req: Request, res: Response) => {
 /* ── GET /rwa/quotes ──────────────────────────────────────────────────────── */
 router.get("/rwa/quotes", async (req: Request, res: Response) => {
   try {
-    // Serve from cache if fresh
-    if (_quoteCache && Date.now() < _quoteCacheExpiry) { res.json(_quoteCache); return; }
+    // Refresh prices if stale (fast, ~500ms) — await so response always has current price
+    if (Date.now() >= _pricesExp) await refreshPrices();
 
-    // For the first request, serve prices-only immediately (fast), kick off full fetch in background
-    if (!_quoteCache) {
-      const fast = await fetchPricesOnly();
-      res.json(fast);
-      // Then populate full cache in background
-      if (!_quoteInflight) _quoteInflight = fetchAllQuotes();
-      return;
+    // Trigger OHLCV refresh in background if stale (slow ~7s) — never block the response
+    if (!_ohlcvInflight && Date.now() >= _ohlcvExp) {
+      _ohlcvInflight = refreshOhlcv();
     }
 
-    // On subsequent refreshes, wait for full data
-    if (!_quoteInflight) _quoteInflight = fetchAllQuotes();
-    const payload = await _quoteInflight;
-    res.json(payload ?? { quotes: [], updatedAt: new Date().toISOString() });
+    res.json({ quotes: buildQuoteList(), updatedAt: new Date().toISOString() });
   } catch (err: any) {
     req.log?.error({ err }, "rwa/quotes failed");
-    if (_quoteCache) { res.json(_quoteCache); return; }
     res.status(502).json({ error: "Failed to fetch quotes" });
   }
 });
@@ -331,5 +338,10 @@ router.patch("/rwa/trades/:id", async (req: Request, res: Response) => {
 
   res.json({ trade: updated });
 });
+
+/* ── Pre-warm prices only on module load (Blockscout, fast, no rate-limit) ── */
+/* ── OHLCV is triggered lazily on first /rwa/quotes request ─────────────── */
+/* ── (Avoid YF warmup on every dev restart — the IP gets rate-limited)    ── */
+refreshPrices().catch(() => {});
 
 export default router;
