@@ -110,10 +110,9 @@ export function Topbar() {
       {/* ── Left: logo + wordmark ── */}
       <div className="flex items-center gap-2 shrink-0 min-w-0">
         <img
-          src="/spacex-logo.jpg"
+          src="/outrive-logo.png"
           alt="OUTRIVE"
           className="h-6 w-6 sm:h-7 sm:w-7 object-contain shrink-0"
-          style={{ mixBlendMode: 'screen' }}
         />
         <div className="flex items-baseline gap-2">
           <span
