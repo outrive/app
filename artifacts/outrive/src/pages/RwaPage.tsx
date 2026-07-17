@@ -367,15 +367,16 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   async function execSwap() {
     if (!(await ensureChain())) return;
     setStep('swapping');
-    // SwapParams: protocol=0 (V2), extra='0x' → direct WETH↔token single-hop
+    // SwapParams: protocol=3 (FLAP) — RWA tokens are managed by FlapPortal (no V2/V3 pools).
+    // extra='0x' → not used by FLAP path. amountIn=0 on buy (uses msg.value).
     const p = {
-      protocol:     0,                           // Protocol.V2
+      protocol:     3,                           // Protocol.FLAP — required for all RWA tokens
       token:        tokenAddr,
-      fee:          0,                           // ignored by V2 path
+      fee:          0,                           // ignored by FLAP path
       amountIn:     side === 'buy' ? 0n : sharesWei, // buy uses msg.value
       minAmountOut: 0n,                          // v1: no slippage floor
       recipient:    wallet as `0x${string}`,
-      extra:        '0x' as `0x${string}`,       // empty = direct WETH↔token
+      extra:        '0x' as `0x${string}`,       // FLAP does not use extra
     };
     const fn   = side === 'buy' ? 'buy' : 'sell';
     const data = encodeFunctionData({ abi: RH_ROUTER_ABI, functionName: fn, args: [p] });
@@ -432,7 +433,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               { k: 'SHARES',    v: `${shares.toFixed(6)} ${q.symbol}` },
               { k: isSell2 ? 'RECEIVE' : 'PAY', v: isSell2 ? `≈ ${eth(ethCost)} WETH` : eth(ethCost) },
               { k: 'USD VALUE', v: usd(totalUsd) },
-              { k: 'ROUTER',    v: 'RobinhoodRouter · Protocol V2' },
+              { k: 'ROUTER',    v: 'RobinhoodRouter · Protocol FLAP' },
               { k: 'CHAIN',     v: 'Robinhood Chain 4663' },
             ].map(({ k, v }) => (
               <div key={k} className="flex justify-between items-start gap-2">
@@ -544,7 +545,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
             </span>
             <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
-              RobinhoodRouter.{side === 'buy' ? 'buy' : 'sell'}() · Protocol V2 · Robinhood Chain
+              RobinhoodRouter.{side === 'buy' ? 'buy' : 'sell'}() · Protocol FLAP · Robinhood Chain
             </span>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"

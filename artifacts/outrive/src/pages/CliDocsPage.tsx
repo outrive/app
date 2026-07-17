@@ -609,7 +609,7 @@ OUTRIVE cli
               headers={['PROTOCOL', 'TRIGGER', 'ROUTER / CONTRACT']}
               rows={[
                 ['Virtuals Bonding Curve ($VIRTUAL)', 'BondingV5.tokenInfo → trading=true, tradingOnUniswap=false', '0x7180727d66… (ETH Router)'],
-                ['RobinhoodRouter · Protocol V2', 'RWA tokenized equities & ETFs (NVDA, AAPL, TSLA, etc.) — no AMM pools exist for these tokens; only valid on-chain path', '0xEa4F57DbC… (RobinhoodRouter)'],
+                ['RobinhoodRouter · Protocol FLAP', 'RWA tokenized equities & ETFs (NVDA, AAPL, TSLA, etc.) — FlapPortal native mint/redeem; no AMM pools exist for these tokens', '0xEa4F57DbC… (RobinhoodRouter)'],
                 ['Uniswap V3', 'Pool found at factory; used when agent token is graduated', 'Uniswap V3 SwapRouter'],
                 ['Uniswap V4', 'V4 pool found', 'Uniswap V4 UniversalRouter'],
                 ['Uniswap V2', 'Fallback if V3/V4 not found', 'Uniswap V2 Router02'],
@@ -883,7 +883,7 @@ $ node outrive-cli.mjs chat "what RWA positions do I have open?"`}</Code>
               The swap is non-custodial: the unsigned transaction is presented in the Work Order, and the user signs it in their own wallet.
             </P>
             <Code label="swap flow (v1 — live)">{`BUY NVDA with 0.05 ETH
-  → RobinhoodRouter.buy({ protocol: V2, token: NVDA_ADDRESS,
+  → RobinhoodRouter.buy({ protocol: FLAP, token: NVDA_ADDRESS,
       amountIn: 0, minAmountOut: 0, recipient: wallet, extra: '0x' })
   → tx.value = 0.05e18 wei  |  gas: 400,000
   → Router skims feeBps from ETH, swaps remainder for NVDA via V2
@@ -891,7 +891,7 @@ $ node outrive-cli.mjs chat "what RWA positions do I have open?"`}</Code>
 
 SELL NVDA (100 shares)
   → Step 1: approve(RobinhoodRouter, MAX_UINT256) on NVDA contract
-  → Step 2: RobinhoodRouter.sell({ protocol: V2, token: NVDA_ADDRESS,
+  → Step 2: RobinhoodRouter.sell({ protocol: FLAP, token: NVDA_ADDRESS,
       amountIn: shares_wei, minAmountOut: 0, recipient: wallet, extra: '0x' })
   → Two-step Work Order → sign both txs in order`}</Code>
 
@@ -907,7 +907,7 @@ SELL NVDA (100 shares)
               rows={[
                 ['Market Agent',       'Monitors live RWA prices; detects momentum signals and volume anomalies'],
                 ['Portfolio Agent',    'Manages positions; enforces stop-losses and rebalancing policy'],
-                ['Execution Agent',    'Routes orders through RobinhoodRouter (Protocol V2) — the verified swap path for all RWA tokens on Robinhood Chain'],
+                ['Execution Agent',    'Routes orders through RobinhoodRouter (Protocol FLAP) — FlapPortal native minting for all RWA tokenized equities & ETFs on Robinhood Chain'],
                 ['Intelligence Agent', 'Synthesizes macro signals into trade theses; feeds the Market Agent'],
               ]}
             />

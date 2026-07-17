@@ -174,7 +174,7 @@ export function WhitepaperPage() {
           {/* §1 Executive Summary */}
           <Section id="wp-s1" n="§1" title="Executive Summary">
             <P>
-              OUTRIVE is a <Highlight>chat-first launchpad and autonomous trading platform</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard. Alongside agent token launching, OUTRIVE operates a <Highlight>Real-World Asset (RWA) trading interface</Highlight> — a live terminal for 15 tokenized equities and ETFs (NVDA, AAPL, GOOGL, TSLA, META, MSFT, AMZN, AMD, PLTR, MU, ORCL, SNDK, SPCX, SPY, QQQ) issued as ERC-20 tokens on Robinhood Chain, with live price feeds, OHLCV data, TradingView-grade charts, and on-chain swap execution via RobinhoodRouter (Protocol V2).
+              OUTRIVE is a <Highlight>chat-first launchpad and autonomous trading platform</Highlight>. A user connects their own wallet, types natural-language instructions to an AI deployment agent (e.g., <em style={{ color: 'var(--out-ink)' }}>"launch an agent token called DogeRiv, ticker DRIV"</em>), and the agent drafts, validates, and simulates an on-chain launch through <Highlight>Virtuals Protocol</Highlight> on <Highlight>Robinhood Chain</Highlight>. The user's wallet signs every transaction; therefore the user — never OUTRIVE — is the on-chain creator of record and the beneficiary of any creator fee share. After launch, OUTRIVE indexes the token's bonding-curve life (prototype → graduation) and presents live market data through both the chat agent and a dashboard. Alongside agent token launching, OUTRIVE operates a <Highlight>Real-World Asset (RWA) trading interface</Highlight> — a live terminal for 15 tokenized equities and ETFs (NVDA, AAPL, GOOGL, TSLA, META, MSFT, AMZN, AMD, PLTR, MU, ORCL, SNDK, SPCX, SPY, QQQ) issued as ERC-20 tokens on Robinhood Chain, with live price feeds, OHLCV data, TradingView-grade charts, and on-chain swap execution via RobinhoodRouter (Protocol FLAP — FlapPortal native minting).
             </P>
             <div className="border-l-2 pl-4 py-2 italic" style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
               Design doctrine: the LLM decides <em>what</em> to do; deterministic code decides <em>how</em>; the user's wallet decides <em>whether</em>.
@@ -868,7 +868,7 @@ Example (illustrative):
                 { term: 'RobinhoodRouter', def: 'Fee-taking meta-router at 0xEa4F57DbC… on Robinhood Chain; the only correct on-chain swap path for RWA tokenized equities & ETFs. Routes internally via Uniswap V2 single-hop (WETH↔token). Exposes buy(SwapParams) and sell(SwapParams) (§16, §17).' },
                 { term: 'Autonomous Agent', def: 'An on-chain economic actor deployed via Virtuals Protocol that executes market analysis, order construction, and swap execution without human intervention (§17).' },
                 { term: 'Market Agent', def: 'Autonomous agent type that monitors live RWA price feeds and detects momentum signals, volume anomalies, and trend reversals (§17).' },
-                { term: 'Execution Agent', def: 'Autonomous agent type that routes constructed orders through RobinhoodRouter (Protocol V2) on Robinhood Chain — the only valid swap path for RWA tokens (§17).' },
+                { term: 'Execution Agent', def: 'Autonomous agent type that routes constructed orders through RobinhoodRouter (Protocol FLAP) on Robinhood Chain — RWA tokens use FlapPortal, not AMM pools (§17).' },
               ].map(g => (
                 <div key={g.term} className="border p-3" style={{ borderColor: 'var(--out-grid-major)' }}>
                   <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--out-ink)' }}>{g.term}</div>
@@ -949,7 +949,7 @@ LOGO LAYER — TradingView SVG CDN
          correct on-chain path for tokenized equities & ETFs.
 
 SwapParams struct:
-  protocol:     0          // Protocol.V2 — direct WETH↔token single-hop
+  protocol:     3          // Protocol.FLAP — FlapPortal native mint/redeem for RWA tokens
   token:        <RWA ERC-20 address>
   fee:          0          // ignored for V2 path
   amountIn:     0          // BUY: ignored (router uses msg.value)
@@ -981,7 +981,7 @@ SELL path (RWA token → ETH):
               rows={[
                 ['Market Agent',       'Monitors live RWA price feeds; detects momentum signals, volume anomalies, and trend reversals', 'Blockscout oracle, OHLCV feed, 52W H/L'],
                 ['Portfolio Agent',    'Manages open RWA positions; enforces stop-losses, profit-taking thresholds, and periodic rebalancing', 'rwa_trades table, live quotes, user-defined policy'],
-                ['Execution Agent',    'Routes constructed orders through RobinhoodRouter (Protocol V2) — the verified on-chain path for all RWA token swaps', 'RobinhoodRouter, token registry, gas oracle'],
+                ['Execution Agent',    'Routes constructed orders through RobinhoodRouter (Protocol FLAP) — FlapPortal native minting, no AMM required', 'RobinhoodRouter, token registry, gas oracle'],
                 ['Intelligence Agent', 'Synthesizes macro signals and on-chain flow data into actionable trade theses; feeds Market Agent', 'OHLCV, market breadth, agent token sentiment'],
               ]}
             />
@@ -1009,7 +1009,7 @@ SELL path (RWA token → ETH):
         ├─► EXECUTION AGENT
         │     Resolves ERC-20 address from token registry
         │     Fetches live ETH/USD price → computes amountIn (wei)
-        │     Constructs SwapParams struct (protocol=V2, extra=0x)
+        │     Constructs SwapParams struct (protocol=FLAP, extra=0x)
         │     Simulates via eth_call → check revert
         │     Submits signed transaction → RobinhoodRouter.buy() / .sell()
         │
@@ -1025,7 +1025,7 @@ SELL path (RWA token → ETH):
                 'Agents never bypass the TX Engine simulation step. A simulated revert cancels the trade and logs the reason — no gas is wasted.',
                 'Position sizing is bounded by the deterministic policy engine. No single agent trade may exceed the user-configured maximum allocation per asset.',
                 'Agent-executed trades are tagged source="agent" in rwa_trades, distinguishing them from manual trades (source="manual") in the Dashboard.',
-                'The Execution Agent uses the same RobinhoodRouter (Protocol V2) as the manual trade flow — identical SwapParams construction, identical gas limits.',
+                'The Execution Agent uses the same RobinhoodRouter (Protocol FLAP) as the manual trade flow — identical SwapParams construction, identical gas limits.',
                 'All agent wallets are non-custodial — OUTRIVE never holds agent keys. Agents deployed via Virtuals Protocol hold their own keys under the Virtuals custody model.',
                 'Intelligence Agent outputs are advisory signals only. The Portfolio Agent applies deterministic policy rules before any execution proceeds — the LLM cannot unilaterally trigger a swap.',
               ].map((rule, i) => (
