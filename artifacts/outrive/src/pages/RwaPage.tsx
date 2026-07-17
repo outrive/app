@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query';
 import {
   useAccount, useSendTransaction, useWaitForTransactionReceipt,
-  useReadContract, useSwitchChain, useBalance,
+  useReadContract, useSwitchChain, useBalance, useGasPrice,
 } from 'wagmi';
 import { encodeFunctionData, parseAbi, parseUnits, formatUnits } from 'viem';
 import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
@@ -406,6 +406,8 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   const [step, setStep]       = useState<TxStep>('form');
   const [errMsg, setErr]      = useState('');
   const [tradeId, setTid]     = useState<number | null>(null);
+  const [slippage, setSlippage] = useState(3);   // user-adjustable slippage %
+  const [isTwoStep, setIsTwoStep] = useState(false); // true when sell needs approval
 
   /* ── Derived amounts (3 input modes) ──────────────────────────────────────
      shares mode : qty = share count  → ETH cost from live rate
@@ -515,6 +517,12 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
     useWaitForTransactionReceipt({ hash: approveHash, query: { enabled: !!approveHash } });
   const { isSuccess: swapOk, isError: swapFail } =
     useWaitForTransactionReceipt({ hash: swapHash, query: { enabled: !!swapHash } });
+
+  /* ── Live gas price → estimate cost before signing ── */
+  const { data: gasPrice } = useGasPrice({ chainId: RH_CHAIN_ID, query: { refetchInterval: 15_000 } });
+  const gasCostEth = gasPrice ? parseFloat(formatUnits(gasPrice * TRADE_GAS, 18)) : null;
+  const gasCostUsd = gasCostEth && ethUsd > 0 ? gasCostEth * ethUsd : null;
+  const approveGasCostEth = gasPrice ? parseFloat(formatUnits(gasPrice * 80_000n, 18)) : null;
 
   /* ── ETH balance — must specify chainId so wagmi queries Robinhood Chain,
        not whatever chain the wallet last reported ── */
@@ -637,7 +645,8 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
       const refOut = buyRate ? BigInt(buyRate.amountOut) : 0n;
       const refIn  = buyRate ? BigInt(buyRate.ethIn)    : 0n;
       const expectedOut = refOut > 0n ? (payWei * refOut) / refIn : sharesWei;
-      const minOut = expectedOut * 97n / 100n; // 3% slippage — RWA oracle prices can move between blocks
+      const slip   = BigInt(100 - slippage);
+      const minOut = expectedOut * slip / 100n; // user-set slippage
       const data   = buildFlapBuyData(tokenAddr, payWei, minOut, wallet as string, dl, settlePool);
       sendTransaction({ to: FLAP_PORTAL, value: payWei, data, gas: TRADE_GAS, chainId: RH_CHAIN_ID }, {
         onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
@@ -650,7 +659,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
         setStep('error'); return;
       }
       if (sellEthWei <= 0n) { setErr('Live sell quote not ready — wait a second and retry.'); setStep('error'); return; }
-      const minEthOut = sellEthWei * 97n / 100n; // 3% slippage
+      const minEthOut = sellEthWei * BigInt(100 - slippage) / 100n; // user-set slippage
       const data = buildFlapSellData(tokenAddr, sharesWei, minEthOut, wallet as string, dl, settlePool);
       sendTransaction({ to: FLAP_PORTAL, value: 0n, data, gas: TRADE_GAS, chainId: RH_CHAIN_ID }, {
         onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
@@ -662,8 +671,13 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   /* ── Main action handler ── */
   async function handleExecute() {
     if (!(await ensureChain())) return;
-    if (side === 'sell' && needsApproval) { await execApprove(); }
-    else { await execSwap(); }
+    if (side === 'sell' && needsApproval) {
+      setIsTwoStep(true);
+      await execApprove();
+    } else {
+      setIsTwoStep(false);
+      await execSwap();
+    }
   }
 
   /* ── UI helpers ── */
@@ -675,7 +689,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
 
   function reset() {
     setStep('form'); setQty(''); setErr(''); setTid(null);
-    setApproveHash(undefined); setSwapHash(undefined);
+    setApproveHash(undefined); setSwapHash(undefined); setIsTwoStep(false);
   }
 
   const buyColor2  = '#7ecb3b';
@@ -715,16 +729,26 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
             <div className="border-t pt-2 space-y-1" style={{ borderColor: 'var(--out-ink-dim)' }}>
               <div className="flex justify-between text-[9px]">
                 <span style={{ color: 'var(--out-muted)' }}>SLIPPAGE</span>
-                <span style={{ color: '#7ecb3b' }}>max 2% (on-chain enforced)</span>
+                <span style={{ color: slippage >= 7 ? '#e05050' : slippage >= 5 ? '#e09020' : '#7ecb3b' }}>
+                  {slippage}% max (on-chain enforced)
+                </span>
               </div>
               <div className="flex justify-between text-[9px]">
                 <span style={{ color: 'var(--out-muted)' }}>GAS LIMIT</span>
-                <span style={{ color: 'var(--out-muted)' }}>{TRADE_GAS.toString()}</span>
+                <span style={{ color: 'var(--out-muted)' }}>{TRADE_GAS.toLocaleString()} units</span>
               </div>
+              {gasCostEth !== null && (
+                <div className="flex justify-between text-[9px]">
+                  <span style={{ color: 'var(--out-muted)' }}>GAS EST.</span>
+                  <span style={{ color: 'var(--out-muted)' }}>
+                    ~{gasCostEth.toFixed(6)} ETH{gasCostUsd ? ` / ${usd(gasCostUsd)}` : ''}
+                  </span>
+                </div>
+              )}
               {isSell2 && needsApproval && (
                 <div className="flex justify-between text-[9px]">
-                  <span style={{ color: 'var(--out-muted)' }}>STEPS</span>
-                  <span style={{ color: '#e09020' }}>1. APPROVE  2. SWAP</span>
+                  <span style={{ color: '#e09020' }}>STEPS</span>
+                  <span style={{ color: '#e09020' }}>① APPROVE  ② SELL</span>
                 </div>
               )}
             </div>
@@ -734,7 +758,7 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
           <div className="flex items-start gap-2 text-[9px] border px-2 py-1.5"
             style={{ borderColor: '#e0902040', background: '#0d0a05', color: '#e09020' }}>
             <AlertTriangle size={10} className="shrink-0 mt-[1px]" />
-            <span>Settles at the live on-chain oracle rate. minAmountOut enforces max 3% slippage — a worse fill reverts the whole swap.</span>
+            <span>Settles at the live on-chain oracle rate. minAmountOut enforces max {slippage}% slippage — a worse fill reverts the whole swap.</span>
           </div>
 
           {/* OHLCV mini */}
@@ -793,35 +817,87 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
         )}
 
         {(step === 'approving' || step === 'pending_approve') && (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <RefreshCw size={22} className="animate-spin" style={{ color: '#e09020' }} />
-            <span className="text-[11px] uppercase tracking-widest" style={{ color: '#e09020' }}>
-              {step === 'approving' ? 'AWAITING SIGNATURE…' : 'CONFIRMING APPROVAL…'}
-            </span>
-            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for FlapPortal</span>
+          <div className="flex flex-col items-center gap-4 py-4 w-full px-4">
+            {/* 2-step progress bar */}
+            {isTwoStep && (
+              <div className="flex items-center w-full gap-0">
+                {/* Step 1 — active */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold animate-pulse"
+                    style={{ borderColor: '#e09020', background: '#e0902020', color: '#e09020' }}>1</div>
+                  <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: '#e09020' }}>APPROVE</span>
+                </div>
+                {/* Connector */}
+                <div className="flex-1 h-px mx-2 mb-4" style={{ background: 'var(--out-ink-dim)' }} />
+                {/* Step 2 — waiting */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold"
+                    style={{ borderColor: 'var(--out-ink-dim)', background: 'transparent', color: 'var(--out-muted)' }}>2</div>
+                  <span className="text-[8px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>SELL</span>
+                </div>
+              </div>
+            )}
+            <RefreshCw size={20} className="animate-spin" style={{ color: '#e09020' }} />
+            <div className="flex flex-col items-center gap-1 text-center">
+              <span className="text-[11px] uppercase tracking-widest font-bold" style={{ color: '#e09020' }}>
+                {step === 'approving' ? 'CHECK YOUR WALLET…' : 'CONFIRMING APPROVAL…'}
+              </span>
+              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
+                {isTwoStep ? `Step 1 of 2 — Approve ${q.symbol} for FlapPortal` : `Approving ${q.symbol}…`}
+              </span>
+              {step === 'approving' && (
+                <span className="text-[9px] mt-1" style={{ color: 'var(--out-muted)' }}>
+                  Your wallet is waiting for a signature. Approve ERC-20 spending for FlapPortal.
+                </span>
+              )}
+            </div>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"
-                style={{ color: 'var(--out-muted)' }}>
-                View tx <ExternalLink size={9} />
+                className="flex items-center gap-1 text-[10px] border px-2 py-1 transition-opacity hover:opacity-80"
+                style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+                View approval tx <ExternalLink size={9} />
               </a>
             )}
           </div>
         )}
 
         {(step === 'swapping' || step === 'pending_swap') && (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <RefreshCw size={22} className="animate-spin" style={{ color: 'var(--out-ink)' }} />
-            <span className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
-              {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
-            </span>
-            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
-              FlapPortal.swap() · {side === 'buy' ? `ETH→USDG→${q.symbol}` : `${q.symbol}→USDG→ETH`} · Robinhood Chain
-            </span>
+          <div className="flex flex-col items-center gap-4 py-4 w-full px-4">
+            {/* 2-step progress bar */}
+            {isTwoStep && (
+              <div className="flex items-center w-full gap-0">
+                {/* Step 1 — done */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold"
+                    style={{ borderColor: '#7ecb3b', background: '#7ecb3b20', color: '#7ecb3b' }}>✓</div>
+                  <span className="text-[8px] uppercase tracking-widest" style={{ color: '#7ecb3b' }}>APPROVED</span>
+                </div>
+                {/* Connector — filled */}
+                <div className="flex-1 h-px mx-2 mb-4" style={{ background: '#7ecb3b40' }} />
+                {/* Step 2 — active */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-bold animate-pulse"
+                    style={{ borderColor: 'var(--out-ink)', background: 'var(--out-ink-dim)', color: 'var(--out-ink)' }}>2</div>
+                  <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: 'var(--out-ink)' }}>SELL</span>
+                </div>
+              </div>
+            )}
+            <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--out-ink)' }} />
+            <div className="flex flex-col items-center gap-1 text-center">
+              <span className="text-[11px] uppercase tracking-widest font-bold" style={{ color: 'var(--out-ink)' }}>
+                {step === 'swapping' ? 'CHECK YOUR WALLET…' : 'SWAP PENDING ON-CHAIN…'}
+              </span>
+              <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
+                {isTwoStep ? `Step 2 of 2 — ${side === 'buy' ? `ETH→${q.symbol}` : `${q.symbol}→ETH`}` : `FlapPortal.swap() · ${side === 'buy' ? `ETH→USDG→${q.symbol}` : `${q.symbol}→USDG→ETH`}`}
+              </span>
+              <span className="text-[9px] mt-0.5" style={{ color: 'var(--out-muted)' }}>
+                Robinhood Chain · FlapPortal
+              </span>
+            </div>
             {explorerTx && (
               <a href={explorerTx} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"
-                style={{ color: 'var(--out-muted)' }}>
+                className="flex items-center gap-1 text-[10px] border px-2 py-1 transition-opacity hover:opacity-80"
+                style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
                 Track on Blockscout <ExternalLink size={9} />
               </a>
             )}
@@ -962,14 +1038,48 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
               <span style={{ color: 'var(--out-muted)' }}>ETH PRICE</span>
               <span style={{ color: 'var(--out-muted)' }}>{usd(ethUsd, 0)}</span>
             </div>
+            {gasCostEth !== null && (
+              <div className="flex justify-between items-center">
+                <span style={{ color: 'var(--out-muted)' }}>GAS EST.</span>
+                <span style={{ color: 'var(--out-muted)' }}>
+                  ~{gasCostEth < 0.000001 ? gasCostEth.toExponential(2) : gasCostEth.toFixed(6)} ETH
+                  {gasCostUsd ? ` (${usd(gasCostUsd)})` : ''}
+                </span>
+              </div>
+            )}
             {side === 'sell' && needsApproval && (
               <div className="flex justify-between items-center border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
-                <span style={{ color: '#e09020' }}>APPROVAL</span>
-                <span style={{ color: '#e09020' }}>required (step 1)</span>
+                <span style={{ color: '#e09020' }}>STEPS</span>
+                <span style={{ color: '#e09020' }}>① APPROVE  ② SELL</span>
               </div>
             )}
           </div>
         )}
+
+        {/* Slippage control */}
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>SLIPPAGE</span>
+            <span className="text-[10px] font-bold"
+              style={{ color: slippage >= 7 ? '#e05050' : slippage >= 5 ? '#e09020' : 'var(--out-ink)' }}>
+              {slippage}%{slippage >= 7 ? ' · HIGH' : slippage >= 5 ? ' · WIDE' : ''}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            {[1, 2, 3, 5, 10].map(pct => (
+              <button key={pct}
+                onClick={() => setSlippage(pct)}
+                className="flex-1 py-1 border text-[9px] transition-colors"
+                style={{
+                  borderColor: slippage === pct ? 'var(--out-ink)' : 'var(--out-ink-dim)',
+                  color:       slippage === pct ? 'var(--out-text)' : 'var(--out-muted)',
+                  background:  slippage === pct ? '#0e1a08' : 'transparent',
+                }}>
+                {pct}%
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Contract link */}
         {explorerUrl && (
