@@ -1122,6 +1122,78 @@ function Docs() {
               enforced server-side. Chat requests are unlimited.
             </p>
           </div>
+
+          {/* 08 RWA contract addresses */}
+          <div>
+            <SectionHead n="08" t="RWA TOKEN CONTRACTS — ROBINHOOD CHAIN (chainId 4663)" />
+            <p className="text-[11px] leading-relaxed max-w-3xl mb-4" style={{ color: 'var(--out-text)' }}>
+              All RWA tokens below are ERC-20 contracts on Robinhood Chain. Trading routes through{' '}
+              <span style={{ color: 'var(--out-ink)' }}>FlapPortal</span> — a native mint/redeem gateway
+              that prices assets at the on-chain oracle rate. Every address is verifiable on{' '}
+              <a href="https://robinhoodchain.blockscout.com" target="_blank" rel="noreferrer"
+                className="underline" style={{ color: 'var(--out-ink)' }}>robinhoodchain.blockscout.com</a>.
+            </p>
+
+            {/* Infrastructure */}
+            <div className="mb-4">
+              <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>INFRASTRUCTURE</div>
+              {[
+                { k: 'FLAPPORTAL',  v: '0xC94135b63772b91D79d0A2DaAb2a8801f32359bD', desc: 'RWA swap router — buy & sell entry point' },
+                { k: 'WETH',        v: '0x0bd7d308f8e1639fab988df18a8011f41eacad73', desc: 'Wrapped ETH on Robinhood Chain' },
+                { k: 'USDG',        v: '0x5fc5360d0400a0fd4f2af552add042d716f1d168', desc: 'Robinhood stablecoin (intermediate)' },
+              ].map(r => (
+                <div key={r.k} className="grid py-1.5 border-b items-baseline gap-2" style={{ borderColor: 'var(--out-grid-major)', gridTemplateColumns: '72px 1fr auto' }}>
+                  <span className="text-[11px] font-bold uppercase" style={{ color: 'var(--out-ink)' }}>{r.k}</span>
+                  <span className="font-mono text-[10px] break-all" style={{ color: 'var(--out-text)' }}>{r.v}</span>
+                  <span className="text-[10px] hidden sm:block" style={{ color: 'var(--out-muted)' }}>{r.desc}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Stock tokens */}
+            <div>
+              <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>STOCK & ETF TOKENS (20)</div>
+              <div className="grid gap-0" style={{ gridTemplateColumns: '1fr' }}>
+                {[
+                  { k: 'NVDA',  name: 'NVIDIA Corp.',           v: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC' },
+                  { k: 'AAPL',  name: 'Apple Inc.',             v: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9' },
+                  { k: 'TSLA',  name: 'Tesla Inc.',             v: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d' },
+                  { k: 'META',  name: 'Meta Platforms Inc.',    v: '0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35' },
+                  { k: 'GOOGL', name: 'Alphabet Inc.',          v: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3' },
+                  { k: 'MSFT',  name: 'Microsoft Corp.',        v: '0xe93237C50D904957Cf27E7B1133b510C669c2e74' },
+                  { k: 'AMZN',  name: 'Amazon.com Inc.',        v: '0x12f190a9F9d7D37a250758b26824B97CE941bF54' },
+                  { k: 'AMD',   name: 'Advanced Micro Devices', v: '0x86923f96303D656E4aa86D9d42D1e57ad2023fdC' },
+                  { k: 'PLTR',  name: 'Palantir Technologies',  v: '0x894E1EC2D74FFE5AEF8Dc8A9e84686acCB964F2A' },
+                  { k: 'MU',    name: 'Micron Technology',      v: '0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD' },
+                  { k: 'ORCL',  name: 'Oracle Corp.',           v: '0xb0992820E760d836549ba69BC7598b4af75dEE03' },
+                  { k: 'COIN',  name: 'Coinbase Global',        v: '0x6330D8C3178a418788dF01a47479c0ce7CCF450b' },
+                  { k: 'INTC',  name: 'Intel Corp.',            v: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681' },
+                  { k: 'CRWV',  name: 'CoreWeave Inc.',         v: '0x5f10A1C971B69e47e059e1dC91901B59b3fB49C3' },
+                  { k: 'SPY',   name: 'SPDR S&P 500 ETF',       v: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C' },
+                  { k: 'QQQ',   name: 'Invesco QQQ ETF',        v: '0xD5f3879160bc7c32ebb4dC785F8a4F505888de68' },
+                  { k: 'BE',    name: 'Bloom Energy',           v: '0x822CC93fFD030293E9842c30BBD678F530701867' },
+                  { k: 'USAR',  name: 'USA Rare Earth',         v: '0xd917B029C761D264c6A312BBbcDA868658eF86a6' },
+                  { k: 'USO',   name: 'United States Oil Fund', v: '0xa30FA36Db767ad9eD3f7a60fC79526fB4d56D344' },
+                  { k: 'SPCX',  name: 'Procure Space ETF',      v: '0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa' },
+                ].map(r => (
+                  <div key={r.k} className="grid py-1.5 border-b items-center gap-2"
+                    style={{ borderColor: 'var(--out-grid-major)', gridTemplateColumns: '52px 160px 1fr' }}>
+                    <span className="text-[11px] font-bold" style={{ color: 'var(--out-ink)' }}>{r.k}</span>
+                    <span className="text-[10px] hidden sm:block truncate" style={{ color: 'var(--out-muted)' }}>{r.name}</span>
+                    <a
+                      href={`https://robinhoodchain.blockscout.com/token/${r.v}`}
+                      target="_blank" rel="noreferrer"
+                      className="font-mono text-[10px] break-all transition-opacity hover:opacity-70"
+                      style={{ color: 'var(--out-text)' }}
+                    >
+                      {r.v}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
         </div>
       </Sheet>
     </div>
