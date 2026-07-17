@@ -130,6 +130,21 @@ export function AutonomousPage() {
 
   return (
     <div className="font-mono">
+      {/* ── COMING SOON banner ── */}
+      <div className="flex items-center gap-3 px-6 py-3 border-b"
+        style={{ borderColor: '#e0902060', background: '#0d0a04' }}>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#e09020' }} />
+          <span className="text-[11px] uppercase tracking-widest font-bold" style={{ color: '#e09020' }}>
+            COMING IN v1.2
+          </span>
+        </div>
+        <span className="text-[10px] border-l pl-3" style={{ borderColor: '#e0902040', color: '#e09020aa' }}>
+          Autonomous agent trading is under development — Market Agent · Portfolio Agent · Execution Agent.
+          Config below is a preview. No trades will execute until v1.2 ships.
+        </span>
+      </div>
+
       {/* ── Page header ── */}
       <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--out-ink-dim)' }}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -138,15 +153,14 @@ export function AutonomousPage() {
               AUTONOMOUS
             </h1>
             <p className="text-[12px] mt-1" style={{ color: 'var(--out-muted)' }}>
-              Configure &amp; activate autonomous agent-driven RWA trading
+              Configure autonomous agent-driven RWA trading — launching v1.2
             </p>
           </div>
 
-          {/* Coming soon badge */}
           <div className="inline-flex items-center gap-2 border px-3 py-1.5 text-[11px] uppercase tracking-widest"
-            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--out-warn)' }} />
-            COMING SOON
+            style={{ borderColor: '#e0902060', color: '#e09020', background: '#0d0a05' }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#e09020' }} />
+            PREVIEW — NOT LIVE
           </div>
         </div>
       </div>

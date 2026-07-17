@@ -1,7 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAccount } from 'wagmi';
-import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import {
+  useAccount, useSendTransaction, useWaitForTransactionReceipt,
+  useReadContract, useSwitchChain, useBalance,
+} from 'wagmi';
+import { encodeFunctionData, parseAbi, parseUnits, formatUnits } from 'viem';
+import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+
+/* ─── On-chain swap constants ────────────────────────────────────────────── */
+const SWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564' as `0x${string}`;
+const WETH_ADDR   = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as `0x${string}`;
+const RH_CHAIN_ID = 4663;
+const SWAP_GAS    = 450_000n;
+const FEE_TIER    = 3000; // 0.3% Uniswap V3 pool
+
+const SWAP_ROUTER_ABI = parseAbi([
+  'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)',
+]);
+const ERC20_ABI = parseAbi([
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+]);
 
 /* ─── helpers ────────────────────────────────────────────────────────────── */
 const _BASE = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -209,24 +228,93 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /* ─── Order panel ────────────────────────────────────────────────────────── */
-function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: string }) {
+type TxStep = 'form' | 'preview' | 'approving' | 'pending_approve' | 'swapping' | 'pending_swap' | 'done' | 'error';
+
+function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
+  const { address: wallet, chain } = useAccount();
+  const { switchChainAsync }        = useSwitchChain();
+
   const [side, setSide]   = useState<'buy' | 'sell'>('buy');
   const [qty, setQty]     = useState('');
-  const [busy, setBusy]   = useState(false);
-  const [msg, setMsg]     = useState<'ok' | 'err' | null>(null);
+  const [step, setStep]   = useState<TxStep>('form');
+  const [errMsg, setErr]  = useState('');
   const [tradeId, setTid] = useState<number | null>(null);
 
+  /* Computed amounts */
   const shares   = parseFloat(qty) || 0;
   const totalUsd = shares * (q.price || 0);
   const ethCost  = ethUsd > 0 ? totalUsd / ethUsd : 0;
-  const canGo    = !!(wallet && shares > 0 && q.price > 0 && !busy);
+  const sharesWei = shares > 0 ? parseUnits(shares.toFixed(8), 18) : 0n;
+  const ethWei    = ethCost > 0 ? parseUnits(ethCost.toFixed(8), 18) : 0n;
 
-  const explorerUrl = q.address && !q.address.startsWith('0x000000000000')
-    ? `https://robinhoodchain.blockscout.com/token/${q.address}` : null;
+  const tokenAddr = (q.address ?? '') as `0x${string}`;
+  const explorerUrl = tokenAddr && !tokenAddr.startsWith('0x000000000000')
+    ? `https://robinhoodchain.blockscout.com/token/${tokenAddr}` : null;
 
-  async function submit() {
-    if (!canGo) return;
-    setBusy(true); setMsg(null);
+  /* ── Wagmi: send + wait ── */
+  const { sendTransaction, data: pendingHash } = useSendTransaction();
+  const approveTxRef = useRef<`0x${string}` | undefined>(undefined);
+  const swapTxRef    = useRef<`0x${string}` | undefined>(undefined);
+
+  const { isSuccess: approveOk, isError: approveFail } =
+    useWaitForTransactionReceipt({ hash: approveTxRef.current, query: { enabled: step === 'pending_approve' } });
+  const { isSuccess: swapOk, isError: swapFail } =
+    useWaitForTransactionReceipt({ hash: swapTxRef.current, query: { enabled: step === 'pending_swap' } });
+
+  /* ── ETH balance ── */
+  const { data: ethBal } = useBalance({
+    address: wallet ?? undefined,
+    query: { enabled: !!wallet, refetchInterval: 15_000 },
+  });
+  const ethBalNum = ethBal ? parseFloat(formatUnits(ethBal.value, 18)) : null;
+
+  /* ── RWA token balance ── */
+  const { data: tokenBal } = useBalance({
+    address: wallet ?? undefined,
+    token: tokenAddr || undefined,
+    query: { enabled: !!wallet && !!tokenAddr && side === 'sell', refetchInterval: 15_000 },
+  } as any);
+  const tokenBalNum = tokenBal ? parseFloat(formatUnits(tokenBal.value, 18)) : null;
+
+  /* ── Allowance (for sell) ── */
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddr || undefined, abi: ERC20_ABI, functionName: 'allowance',
+    args: wallet ? [wallet, SWAP_ROUTER] : undefined,
+    query: { enabled: !!wallet && side === 'sell' && !!tokenAddr, refetchInterval: 10_000 },
+  } as any);
+  const needsApproval = side === 'sell' && sharesWei > 0n
+    && (allowance === undefined || (allowance as bigint) < sharesWei);
+
+  /* ── Chain guard ── */
+  const ensureChain = useCallback(async (): Promise<boolean> => {
+    if (chain?.id === RH_CHAIN_ID || chain?.id === 46630) return true;
+    try { await switchChainAsync({ chainId: RH_CHAIN_ID }); return true; }
+    catch {
+      setErr('Switch your wallet to Robinhood Chain (4663) to trade.');
+      setStep('error'); return false;
+    }
+  }, [chain, switchChainAsync]);
+
+  /* ── React to tx receipts ── */
+  useEffect(() => {
+    if (approveOk && step === 'pending_approve') {
+      refetchAllowance();
+      setStep('swapping');
+      execSwap();
+    }
+    if (approveFail && step === 'pending_approve') {
+      setErr('Approval transaction failed or was rejected.');
+      setStep('error');
+    }
+  }, [approveOk, approveFail]);
+
+  useEffect(() => {
+    if (swapOk && step === 'pending_swap') recordAndFinish();
+    if (swapFail && step === 'pending_swap') { setErr('Swap transaction failed or was rejected.'); setStep('error'); }
+  }, [swapOk, swapFail]);
+
+  /* ── Record trade to DB ── */
+  async function recordAndFinish() {
     try {
       const r = await fetch(api('/api/rwa/trades'), {
         method: 'POST',
@@ -235,37 +323,253 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
           walletAddress: wallet, symbol: q.symbol, side,
           shares: shares.toFixed(8), priceUsd: q.price.toFixed(4),
           ethAmount: ethCost.toFixed(8), totalUsd: totalUsd.toFixed(4),
-          source: 'manual',
+          txHash: swapTxRef.current ?? null,
+          status: 'confirmed', source: 'manual', network: 'robinhood-chain',
         }),
       });
-      if (!r.ok) throw new Error();
-      const d = await r.json();
-      setTid(d.trade?.id ?? null);
-      setMsg('ok'); setQty('');
-    } catch { setMsg('err'); }
-    finally { setBusy(false); }
+      if (r.ok) { const d = await r.json(); setTid(d.trade?.id ?? null); }
+    } catch { /* non-fatal — swap already on-chain */ }
+    setStep('done');
   }
 
+  /* ── Approve ── */
+  async function execApprove() {
+    if (!(await ensureChain())) return;
+    setStep('approving');
+    const MAX  = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+    const data = encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [SWAP_ROUTER, MAX] });
+    sendTransaction({ to: tokenAddr, data, gas: SWAP_GAS }, {
+      onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
+      onSuccess: hash => { approveTxRef.current = hash; setStep('pending_approve'); },
+    });
+  }
+
+  /* ── Swap ── */
+  async function execSwap() {
+    if (!(await ensureChain())) return;
+    setStep('swapping');
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+    const params = {
+      tokenIn:             side === 'buy' ? WETH_ADDR : tokenAddr,
+      tokenOut:            side === 'buy' ? tokenAddr : WETH_ADDR,
+      fee:                 FEE_TIER,
+      recipient:           wallet as `0x${string}`,
+      deadline,
+      amountIn:            side === 'buy' ? ethWei : sharesWei,
+      amountOutMinimum:    0n,
+      sqrtPriceLimitX96:   0n,
+    };
+    const data = encodeFunctionData({ abi: SWAP_ROUTER_ABI, functionName: 'exactInputSingle', args: [params] });
+    const txParams = side === 'buy'
+      ? { to: SWAP_ROUTER, value: ethWei, data, gas: SWAP_GAS }
+      : { to: SWAP_ROUTER, data, gas: SWAP_GAS };
+    sendTransaction(txParams, {
+      onError: e => { setErr(e.message.slice(0, 200)); setStep('error'); },
+      onSuccess: hash => { swapTxRef.current = hash; setStep('pending_swap'); },
+    });
+  }
+
+  /* ── Main action handler ── */
+  async function handleExecute() {
+    if (!(await ensureChain())) return;
+    if (side === 'sell' && needsApproval) { await execApprove(); }
+    else { await execSwap(); }
+  }
+
+  /* ── UI helpers ── */
   const buyColor  = '#7ecb3b';
   const sellColor = '#e05050';
   const sideColor = side === 'buy' ? buyColor : sellColor;
+  const canPreview = !!(wallet && shares > 0 && q.price > 0);
+  const isSpinning = step === 'approving' || step === 'pending_approve' || step === 'swapping' || step === 'pending_swap';
 
+  function reset() {
+    setStep('form'); setQty(''); setErr(''); setTid(null);
+    approveTxRef.current = undefined; swapTxRef.current = undefined;
+  }
+
+  const buyColor2  = '#7ecb3b';
+  const sellColor2 = '#e05050';
+
+  /* ── Work Order Preview ── */
+  if (step === 'preview') {
+    const isSell2 = side === 'sell';
+    return (
+      <div className="flex flex-col gap-0 h-full font-mono">
+        <div className="p-4 flex flex-col gap-3 flex-1">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>WORK ORDER</span>
+            <span className="text-[9px] uppercase tracking-widest border px-1.5 py-0.5"
+              style={{ borderColor: 'var(--out-ink-dim)', color: isSell2 ? sellColor2 : buyColor2 }}>
+              {isSell2 ? '▼ SELL' : '▲ BUY'} {q.symbol}
+            </span>
+          </div>
+
+          {/* Parameter table */}
+          <div className="border p-3 text-[10px] space-y-2" style={{ borderColor: 'var(--out-ink)', background: '#08100a' }}>
+            {[
+              { k: 'ACTION',    v: `${isSell2 ? 'SELL' : 'BUY'} ${q.symbol}` },
+              { k: 'SHARES',    v: `${shares.toFixed(6)} ${q.symbol}` },
+              { k: isSell2 ? 'RECEIVE' : 'PAY', v: isSell2 ? `≈ ${eth(ethCost)} WETH` : eth(ethCost) },
+              { k: 'USD VALUE', v: usd(totalUsd) },
+              { k: 'ROUTER',    v: 'Uniswap V3 · fee 0.3%' },
+              { k: 'CHAIN',     v: 'Robinhood Chain 4663' },
+            ].map(({ k, v }) => (
+              <div key={k} className="flex justify-between items-start gap-2">
+                <span style={{ color: 'var(--out-muted)' }}>{k}</span>
+                <span className="text-right font-bold" style={{ color: 'var(--out-ink)' }}>{v}</span>
+              </div>
+            ))}
+            <div className="border-t pt-2 space-y-1" style={{ borderColor: 'var(--out-ink-dim)' }}>
+              <div className="flex justify-between text-[9px]">
+                <span style={{ color: 'var(--out-muted)' }}>SLIPPAGE</span>
+                <span style={{ color: '#e09020' }}>unlimited (v1)</span>
+              </div>
+              <div className="flex justify-between text-[9px]">
+                <span style={{ color: 'var(--out-muted)' }}>GAS LIMIT</span>
+                <span style={{ color: 'var(--out-muted)' }}>{SWAP_GAS.toString()}</span>
+              </div>
+              {isSell2 && needsApproval && (
+                <div className="flex justify-between text-[9px]">
+                  <span style={{ color: 'var(--out-muted)' }}>STEPS</span>
+                  <span style={{ color: '#e09020' }}>1. APPROVE  2. SWAP</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Warning */}
+          <div className="flex items-start gap-2 text-[9px] border px-2 py-1.5"
+            style={{ borderColor: '#e0902040', background: '#0d0a05', color: '#e09020' }}>
+            <AlertTriangle size={10} className="shrink-0 mt-[1px]" />
+            <span>No slippage protection in v1. Trade may fill at any price. Only trade amounts you can afford to lose on slippage.</span>
+          </div>
+
+          {/* OHLCV mini */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3" style={{ borderColor: 'var(--out-ink-dim)' }}>
+            <Stat label="PRICE" value={usd(q.price)} />
+            <Stat label="OPEN"  value={q.open  ? usd(q.open) : '—'} />
+            <Stat label="HIGH"  value={q.high  ? usd(q.high) : '—'} />
+            <Stat label="LOW"   value={q.low   ? usd(q.low)  : '—'} />
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-0 border-t shrink-0" style={{ borderColor: 'var(--out-ink-dim)' }}>
+          <button onClick={reset}
+            className="flex-1 py-3 text-[11px] uppercase tracking-widest border-r transition-colors"
+            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+            CANCEL
+          </button>
+          <button onClick={handleExecute}
+            className="flex-1 py-3 text-[11px] uppercase tracking-widest font-bold transition-all"
+            style={{ color: sideColor, background: '#0e1a08' }}>
+            {isSell2 && needsApproval ? '① APPROVE FIRST' : '⬡ SIGN & SEND'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Pending / Done / Error states ── */
+  if (step !== 'form') {
+    const txHash = swapTxRef.current ?? approveTxRef.current;
+    const explorerTx = txHash
+      ? `https://robinhoodchain.blockscout.com/tx/${txHash}` : null;
+    return (
+      <div className="flex flex-col gap-4 p-4 h-full font-mono justify-center">
+        {step === 'done' && (
+          <>
+            <div className="flex flex-col items-center gap-3 py-4">
+              <CheckCircle2 size={28} style={{ color: '#7ecb3b' }} />
+              <span className="text-[11px] uppercase tracking-widest" style={{ color: '#7ecb3b' }}>SWAP CONFIRMED</span>
+              {tradeId && <span className="text-[10px]" style={{ color: 'var(--out-muted)' }}>Order #{tradeId} · Dashboard → RWA Portfolio</span>}
+            </div>
+            {explorerTx && (
+              <a href={explorerTx} target="_blank" rel="noreferrer"
+                className="flex items-center justify-center gap-1.5 text-[10px] border py-1.5 transition-opacity hover:opacity-80"
+                style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+                VIEW ON BLOCKSCOUT <ExternalLink size={9} />
+              </a>
+            )}
+            <button onClick={reset}
+              className="py-2 border text-[11px] uppercase tracking-widest text-center transition-colors"
+              style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+              NEW ORDER
+            </button>
+          </>
+        )}
+
+        {(step === 'approving' || step === 'pending_approve') && (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <RefreshCw size={22} className="animate-spin" style={{ color: '#e09020' }} />
+            <span className="text-[11px] uppercase tracking-widest" style={{ color: '#e09020' }}>
+              {step === 'approving' ? 'AWAITING SIGNATURE…' : 'CONFIRMING APPROVAL…'}
+            </span>
+            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>Step 1 of 2 — Approve {q.symbol} for SwapRouter</span>
+            {explorerTx && (
+              <a href={explorerTx} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"
+                style={{ color: 'var(--out-muted)' }}>
+                View tx <ExternalLink size={9} />
+              </a>
+            )}
+          </div>
+        )}
+
+        {(step === 'swapping' || step === 'pending_swap') && (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <RefreshCw size={22} className="animate-spin" style={{ color: 'var(--out-ink)' }} />
+            <span className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>
+              {step === 'swapping' ? 'AWAITING SIGNATURE…' : 'SWAP PENDING ON-CHAIN…'}
+            </span>
+            <span className="text-[10px] text-center" style={{ color: 'var(--out-muted)' }}>
+              Uniswap V3 exactInputSingle · Robinhood Chain
+            </span>
+            {explorerTx && (
+              <a href={explorerTx} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] transition-opacity hover:opacity-80"
+                style={{ color: 'var(--out-muted)' }}>
+                Track on Blockscout <ExternalLink size={9} />
+              </a>
+            )}
+          </div>
+        )}
+
+        {step === 'error' && (
+          <>
+            <div className="flex flex-col items-center gap-3 py-4">
+              <XCircle size={28} style={{ color: '#e05050' }} />
+              <span className="text-[11px] uppercase tracking-widest" style={{ color: '#e05050' }}>TRANSACTION FAILED</span>
+              {errMsg && <span className="text-[10px] text-center break-all" style={{ color: 'var(--out-muted)' }}>{errMsg}</span>}
+            </div>
+            <button onClick={reset}
+              className="py-2 border text-[11px] uppercase tracking-widest text-center transition-colors"
+              style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+              TRY AGAIN
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  /* ── Default: form ── */
   return (
     <div className="flex flex-col h-full font-mono">
 
       {/* BUY / SELL tabs */}
       <div className="flex shrink-0 border-b" style={{ borderColor: 'var(--out-ink-dim)' }}>
         {(['buy', 'sell'] as const).map(s => (
-          <button
-            key={s}
-            onClick={() => { setSide(s); setMsg(null); }}
+          <button key={s}
+            onClick={() => { setSide(s); setErr(''); }}
             className="flex-1 py-2.5 text-[11px] uppercase tracking-widest transition-colors"
             style={{
-              color:       side === s ? (s === 'buy' ? buyColor : sellColor) : 'var(--out-muted)',
-              background:  side === s ? '#0e1a08' : 'transparent',
+              color:        side === s ? (s === 'buy' ? buyColor : sellColor) : 'var(--out-muted)',
+              background:   side === s ? '#0e1a08' : 'transparent',
               borderBottom: `2px solid ${side === s ? (s === 'buy' ? buyColor : sellColor) : 'transparent'}`,
-            }}
-          >
+            }}>
             {s === 'buy' ? '▲ BUY' : '▼ SELL'}
           </button>
         ))}
@@ -273,14 +577,38 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
 
       <div className="flex flex-col gap-3 p-4 flex-1 overflow-y-auto">
 
+        {/* Balance */}
+        {wallet && (
+          <div className="flex justify-between text-[10px]" style={{ color: 'var(--out-muted)' }}>
+            <span>{side === 'buy' ? 'ETH BALANCE' : `${q.symbol} BALANCE`}</span>
+            <button
+              onClick={() => {
+                if (side === 'buy' && ethBalNum !== null) {
+                  const reserve = 0.001;
+                  setQty(ethBalNum > reserve
+                    ? ((ethBalNum - reserve) * ethUsd / (q.price || 1)).toFixed(6)
+                    : '0');
+                } else if (side === 'sell' && tokenBalNum !== null) {
+                  setQty(tokenBalNum.toFixed(6));
+                }
+              }}
+              className="font-bold underline underline-offset-2 transition-opacity hover:opacity-70"
+              style={{ color: 'var(--out-ink)' }}>
+              {side === 'buy'
+                ? (ethBalNum !== null ? `${ethBalNum.toFixed(4)} ETH` : '—')
+                : (tokenBalNum !== null ? `${tokenBalNum.toFixed(4)} ${q.symbol}` : '—')}
+            </button>
+          </div>
+        )}
+
         {/* Quantity */}
         <div>
           <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--out-muted)' }}>
-            Shares
+            Shares ({q.symbol})
           </label>
           <input
             type="number" min="0" step="0.001" placeholder="0.000000" value={qty}
-            onChange={e => { setQty(e.target.value); setMsg(null); }}
+            onChange={e => { setQty(e.target.value); setErr(''); }}
             className="w-full bg-transparent border px-3 py-2 text-[13px] font-mono outline-none transition-colors"
             style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-text)' }}
             onFocus={e => (e.currentTarget.style.borderColor = 'var(--out-ink)')}
@@ -296,13 +624,19 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
               <span className="font-bold" style={{ color: 'var(--out-text)' }}>{usd(totalUsd)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span style={{ color: 'var(--out-muted)' }}>ETH EQUIV</span>
+              <span style={{ color: 'var(--out-muted)' }}>{side === 'buy' ? 'ETH COST' : 'ETH RECEIVE'}</span>
               <span className="font-bold" style={{ color: 'var(--out-ink)' }}>{eth(ethCost)}</span>
             </div>
             <div className="flex justify-between items-center border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
               <span style={{ color: 'var(--out-muted)' }}>ETH PRICE</span>
               <span style={{ color: 'var(--out-muted)' }}>{usd(ethUsd, 0)}</span>
             </div>
+            {side === 'sell' && needsApproval && (
+              <div className="flex justify-between items-center border-t pt-2" style={{ borderColor: 'var(--out-ink-dim)' }}>
+                <span style={{ color: '#e09020' }}>APPROVAL</span>
+                <span style={{ color: '#e09020' }}>required (step 1)</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -313,13 +647,13 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
             <a href={explorerUrl} target="_blank" rel="noreferrer"
               className="flex items-center gap-1 transition-opacity hover:opacity-80"
               style={{ color: 'var(--out-muted)', fontFamily: 'monospace' }}>
-              {q.address.slice(0, 8)}…{q.address.slice(-6)}
+              {tokenAddr.slice(0, 8)}…{tokenAddr.slice(-6)}
               <ExternalLink size={9} />
             </a>
           </div>
         )}
 
-        {/* Submit */}
+        {/* Execute / connect */}
         {!wallet ? (
           <div className="py-2.5 border text-center text-[11px] uppercase tracking-widest"
             style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
@@ -327,33 +661,17 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
           </div>
         ) : (
           <button
-            onClick={submit}
-            disabled={!canGo}
+            onClick={() => setStep('preview')}
+            disabled={!canPreview || isSpinning}
             className="py-2.5 border text-[11px] uppercase tracking-widest font-mono flex items-center justify-center gap-2 transition-all"
             style={{
-              borderColor: canGo ? sideColor : 'var(--out-ink-dim)',
-              color:       canGo ? sideColor : 'var(--out-muted)',
-              background:  canGo ? '#0e1a08' : 'transparent',
-              cursor: canGo ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {busy
-              ? <><RefreshCw size={11} className="animate-spin" /> PLACING…</>
-              : `${side === 'buy' ? '▲ BUY' : '▼ SELL'} ${q.symbol}`}
+              borderColor: canPreview ? sideColor : 'var(--out-ink-dim)',
+              color:       canPreview ? sideColor : 'var(--out-muted)',
+              background:  canPreview ? '#0e1a08' : 'transparent',
+              cursor: canPreview ? 'pointer' : 'not-allowed',
+            }}>
+            {`${side === 'buy' ? '▲ BUY' : '▼ SELL'} ${q.symbol} →`}
           </button>
-        )}
-
-        {/* Feedback */}
-        {msg === 'ok' && (
-          <div className="flex items-center gap-2 text-[11px]" style={{ color: '#7ecb3b' }}>
-            <CheckCircle2 size={12} />
-            Order #{tradeId} recorded — see Dashboard → RWA Portfolio
-          </div>
-        )}
-        {msg === 'err' && (
-          <div className="flex items-center gap-2 text-[11px]" style={{ color: '#e05050' }}>
-            <XCircle size={12} /> Failed — please try again
-          </div>
         )}
 
         {/* OHLCV mini grid */}
@@ -372,7 +690,7 @@ function OrderPanel({ q, ethUsd, wallet }: { q: Quote; ethUsd: number; wallet?: 
 
 /* ─── Main page ──────────────────────────────────────────────────────────── */
 export function RwaPage() {
-  const { address: wallet } = useAccount();
+  const { address: _wallet } = useAccount();
   const [selected, setSelected] = useState<Quote>(CATALOGUE[0]);
   const lastSym = useRef(CATALOGUE[0].symbol);
 
@@ -579,7 +897,7 @@ export function RwaPage() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-            <OrderPanel q={selected} ethUsd={ethUsd} wallet={wallet} />
+            <OrderPanel q={selected} ethUsd={ethUsd} />
           </div>
         </div>
       </div>

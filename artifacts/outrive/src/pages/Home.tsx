@@ -74,6 +74,9 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
 
   const choose = (id: View) => { setView(id); setOpen(false); };
 
+  /* Tabs that are not yet live — show SOON badge */
+  const SOON_TABS = new Set<View>(['autonomous']);
+
   /* ── Desktop sidebar item ── */
   const sideItem = (t: TabDef) => (
     <button
@@ -89,7 +92,13 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
       onMouseLeave={e => { if (view !== t.id) e.currentTarget.style.color = 'var(--out-muted)'; }}
     >
       <t.Icon size={11} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-      <span>{t.label}</span>
+      <span className="flex-1">{t.label}</span>
+      {SOON_TABS.has(t.id) && (
+        <span className="text-[8px] px-1 py-0.5 border font-mono tracking-widest shrink-0"
+          style={{ borderColor: '#e0902060', color: '#e09020', background: '#0d0a05' }}>
+          SOON
+        </span>
+      )}
     </button>
   );
 
@@ -140,8 +149,12 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
                   borderLeft: view === t.id ? '2px solid var(--out-ink)' : '2px solid transparent',
                 }}>
                 <t.Icon size={13} strokeWidth={1.75} style={{ flexShrink: 0 }} />
-                <span className="text-[11px]">{t.label}</span>
-                {view === t.id && <span className="ml-auto text-[11px]" style={{ color: 'var(--out-ink)' }}>●</span>}
+                <span className="text-[11px] flex-1">{t.label}</span>
+                {SOON_TABS.has(t.id) && (
+                  <span className="text-[8px] px-1 py-0.5 border font-mono tracking-widest"
+                    style={{ borderColor: '#e0902060', color: '#e09020', background: '#0d0a05' }}>SOON</span>
+                )}
+                {view === t.id && !SOON_TABS.has(t.id) && <span className="ml-auto text-[11px]" style={{ color: 'var(--out-ink)' }}>●</span>}
               </button>
             ))}
             <div className="px-3 pt-3 pb-1 text-[11px] tracking-widest border-t"
