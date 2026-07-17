@@ -142,35 +142,12 @@ export function AutonomousPage() {
             </p>
           </div>
 
-          {/* Big status toggle */}
-          <button
-            onClick={toggleAgent}
-            disabled={launching}
-            className="flex items-center gap-3 border px-5 py-3 transition-all"
-            style={{
-              borderColor: state.enabled ? 'var(--out-ink)' : 'var(--out-ink-dim)',
-              background: state.enabled ? '#12180f' : 'transparent',
-              color: statusColor,
-              opacity: launching ? 0.6 : 1,
-              cursor: launching ? 'wait' : 'pointer',
-            }}
-          >
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{
-                background: state.enabled ? 'var(--out-ink)' : 'var(--out-muted)',
-                boxShadow: state.enabled ? '0 0 6px var(--out-ink)' : 'none',
-                animation: state.enabled ? 'pulse 2s infinite' : 'none',
-              }}
-            />
-            <span className="text-[12px] uppercase tracking-widest">
-              {state.enabled ? <><Zap size={11} style={{ display: 'inline', marginRight: 4 }} />DEACTIVATE AGENT</> : 'ACTIVATE AGENT'}
-            </span>
-            <span className="text-[10px] border px-2 py-0.5 uppercase tracking-widest"
-              style={{ borderColor: statusColor, color: statusColor }}>
-              {statusLabel}
-            </span>
-          </button>
+          {/* Coming soon badge */}
+          <div className="inline-flex items-center gap-2 border px-3 py-1.5 text-[11px] uppercase tracking-widest"
+            style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)', background: '#0a0f0a' }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--out-warn)' }} />
+            COMING SOON
+          </div>
         </div>
       </div>
 
