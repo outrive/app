@@ -8,6 +8,7 @@ import {
   BookOpen, Play, Terminal, Network,
   HelpCircle, Info, ScrollText,
   Menu, X, Coins, Rocket,
+  CandlestickChart, Zap,
 } from 'lucide-react';
 import { Sheet } from '@/components/Sheet';
 import { ChatConsole } from '@/components/ChatConsole';
@@ -17,6 +18,8 @@ import { WhitepaperPage } from '@/pages/WhitepaperPage';
 import { LaunchesPage } from '@/pages/LaunchesPage';
 import { OutrivePage } from '@/pages/OutrivePage';
 import { CliDocsPage } from '@/pages/CliDocsPage';
+import { RwaPage } from '@/pages/RwaPage';
+import { AutonomousPage } from '@/pages/AutonomousPage';
 import { TickerStrip } from '@/components/MarketTicker';
 import { CalibrationBanner } from '@/components/CalibrationBanner';
 import { useListLaunches, useGetSystemStatus, useGetMarketSummary } from '@workspace/api-client-react';
@@ -27,7 +30,7 @@ const _BASE = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
 function apiUrl(path: string) { return _BASE + path; }
 
 type StepState = 'active' | 'locked' | 'done';
-type View = 'agent' | 'market' | 'launches' | 'dashboard' | 'outrive' | 'docs' | 'faq' | 'architecture' | 'about' | 'howto' | 'cli' | 'whitepaper';
+type View = 'agent' | 'market' | 'launches' | 'dashboard' | 'outrive' | 'rwa' | 'autonomous' | 'docs' | 'faq' | 'architecture' | 'about' | 'howto' | 'cli' | 'whitepaper';
 
 function StepBadge({ label, state }: { label: string; state: StepState }) {
   const color = state === 'active'
@@ -45,11 +48,13 @@ function StepBadge({ label, state }: { label: string; state: StepState }) {
 type TabDef = { id: View; label: string; Icon: React.ElementType };
 
 const APP_TABS: TabDef[] = [
-  { id: 'agent',     label: 'AGENT',     Icon: Bot            },
-  { id: 'market',    label: 'MARKET',    Icon: TrendingUp     },
-  { id: 'launches',  label: 'LAUNCHES',  Icon: Rocket         },
-  { id: 'dashboard', label: 'DASHBOARD', Icon: LayoutDashboard },
-  { id: 'outrive',   label: 'OUTRIVE',   Icon: Coins          },
+  { id: 'agent',      label: 'AGENT',      Icon: Bot               },
+  { id: 'market',     label: 'MARKET',     Icon: TrendingUp        },
+  { id: 'launches',   label: 'LAUNCHES',   Icon: Rocket            },
+  { id: 'dashboard',  label: 'DASHBOARD',  Icon: LayoutDashboard   },
+  { id: 'outrive',    label: 'OUTRIVE',    Icon: Coins             },
+  { id: 'rwa',        label: 'RWA TRADE',  Icon: CandlestickChart  },
+  { id: 'autonomous', label: 'AUTONOMOUS', Icon: Zap               },
 ];
 const INFO_TABS: TabDef[] = [
   { id: 'docs',         label: 'DOCS',         Icon: BookOpen    },
@@ -1454,6 +1459,8 @@ export default function Home() {
     if (view === 'whitepaper')   return <WhitepaperPage />;
     if (view === 'launches')     return <LaunchesPage />;
     if (view === 'outrive')      return <OutrivePage />;
+    if (view === 'rwa')          return <RwaPage />;
+    if (view === 'autonomous')   return <AutonomousPage />;
 
     // market — full-width rich page
     if (view === 'market') return <MarketPage />;
