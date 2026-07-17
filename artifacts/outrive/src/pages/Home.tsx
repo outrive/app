@@ -631,9 +631,14 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
       </Sheet>
 
       {/* ═══════════════════════════════════════
-          SHEET C — SYSTEM STATUS
+          SHEET C — RWA PORTFOLIO & TRADE HISTORY
       ═══════════════════════════════════════ */}
-      <Sheet dwgNo="OUT-DSH-03" figCaption="FIG. 05 — PROTOCOL & SYSTEM STATUS">
+      <RwaPortfolioSheet walletAddress={walletAddress} />
+
+      {/* ═══════════════════════════════════════
+          SHEET D — SYSTEM STATUS
+      ═══════════════════════════════════════ */}
+      <Sheet dwgNo="OUT-DSH-04" figCaption="FIG. 06 — PROTOCOL & SYSTEM STATUS">
         <div className="text-[12px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>SYSTEM STATUS</div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -707,6 +712,206 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
       </Sheet>
 
     </div>
+  );
+}
+
+/* ─── RWA Portfolio Sheet ────────────────────────────────────────────────── */
+type RwaTrade = {
+  id: number; symbol: string; name: string; tokenAddress: string;
+  side: string; shares: string; priceUsd: string; ethAmount: string;
+  totalUsd: string; status: string; source: string; createdAt: string;
+  txHash?: string | null;
+};
+
+const RWA_LOGOS: Record<string, string> = {
+  AAPL:  'https://cdn.robinhood.com/ncw_assets/logos/0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png',
+  NVDA:  'https://cdn.robinhood.com/ncw_assets/logos/0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png',
+  AMZN:  'https://cdn.robinhood.com/ncw_assets/logos/0x12f190a9f9d7d37a250758b26824b97ce941bf54.png',
+  GOOGL: 'https://cdn.robinhood.com/ncw_assets/logos/0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png',
+  META:  'https://cdn.robinhood.com/ncw_assets/logos/0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png',
+  MSFT:  'https://cdn.robinhood.com/ncw_assets/logos/0xe93237c50d904957cf27e7b1133b510c669c2e74.png',
+  TSLA:  'https://cdn.robinhood.com/ncw_assets/logos/0x322f0929c4625ed5bad873c95208d54e1c003b2d.png',
+  AMD:   'https://cdn.robinhood.com/ncw_assets/logos/0x86923f96303d656e4aa86d9d42d1e57ad2023fdc.png',
+  COIN:  'https://cdn.robinhood.com/ncw_assets/logos/0x6330d8c3178a418788df01a47479c0ce7ccf450b.png',
+  NFLX:  'https://financialmodelingprep.com/image-stock/NFLX.png',
+  SPY:   'https://cdn.robinhood.com/ncw_assets/logos/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png',
+  QQQ:   'https://cdn.robinhood.com/ncw_assets/logos/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png',
+};
+
+function RwaTokenLogo({ symbol }: { symbol: string }) {
+  const [err, setErr] = React.useState(false);
+  const src = RWA_LOGOS[symbol];
+  if (err || !src) {
+    return (
+      <div className="rounded-full flex items-center justify-center font-mono font-bold text-[9px]"
+        style={{ width: 22, height: 22, minWidth: 22, background: '#1a2a0a', color: 'var(--out-ink)' }}>
+        {symbol.slice(0, 2)}
+      </div>
+    );
+  }
+  return <img src={src} alt={symbol} onError={() => setErr(true)}
+    style={{ width: 22, height: 22, minWidth: 22, borderRadius: '50%', objectFit: 'cover', background: '#111' }} />;
+}
+
+function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
+  const { data, isLoading, refetch } = useQuery<{ trades: RwaTrade[] }>({
+    queryKey: ['rwa-trades', walletAddress],
+    queryFn: () => fetch(apiUrl(`/api/rwa/trades?wallet=${walletAddress}`)).then(r => r.json()),
+    enabled: !!walletAddress,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
+  const trades = data?.trades ?? [];
+
+  // Compute portfolio summary
+  const { totalBought, totalSold, positions } = React.useMemo(() => {
+    let totalBought = 0, totalSold = 0;
+    const pos: Record<string, { shares: number; cost: number; name: string }> = {};
+    for (const t of trades) {
+      const shares = parseFloat(t.shares) || 0;
+      const usd    = parseFloat(t.totalUsd) || 0;
+      if (t.side === 'buy')  { totalBought += usd; pos[t.symbol] = pos[t.symbol] ?? { shares: 0, cost: 0, name: t.name }; pos[t.symbol].shares += shares; pos[t.symbol].cost += usd; }
+      if (t.side === 'sell') { totalSold   += usd; if (pos[t.symbol]) pos[t.symbol].shares -= shares; }
+    }
+    return { totalBought, totalSold, positions: Object.entries(pos).filter(([, v]) => v.shares > 0.0001) };
+  }, [trades]);
+
+  const agentTrades  = trades.filter(t => t.source === 'agent');
+  const manualTrades = trades.filter(t => t.source === 'manual');
+
+  const statusIcon = (s: string) => {
+    if (s === 'confirmed') return <span style={{ color: 'var(--out-ink)' }}>✓</span>;
+    if (s === 'failed')    return <span style={{ color: 'var(--out-danger)' }}>✗</span>;
+    return <span style={{ color: 'var(--out-warn)' }}>○</span>;
+  };
+
+  return (
+    <Sheet dwgNo="OUT-DSH-03" figCaption="FIG. 05 — RWA PORTFOLIO & TRADE HISTORY">
+      <div className="text-[12px] uppercase tracking-widest mb-4" style={{ color: 'var(--out-muted)' }}>
+        RWA PORTFOLIO OVERVIEW
+      </div>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: 'TOTAL TRADES',     value: isLoading ? '—' : String(trades.length)      },
+          { label: 'OPEN POSITIONS',   value: isLoading ? '—' : String(positions.length)   },
+          { label: 'TOTAL INVESTED',   value: isLoading ? '—' : `${totalBought.toFixed(2)}`  },
+          { label: 'AGENT TRADES',     value: isLoading ? '—' : String(agentTrades.length)  },
+        ].map(s => (
+          <div key={s.label} className="border border-[var(--out-grid-major)] p-3 font-mono">
+            <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-muted)' }}>{s.label}</div>
+            <div className="text-[18px] font-bold" style={{ color: 'var(--out-ink)' }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Open positions */}
+      {positions.length > 0 && (
+        <div className="mb-5">
+          <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>OPEN POSITIONS</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {positions.map(([sym, pos]) => (
+              <div key={sym} className="border border-[var(--out-grid-major)] p-3 font-mono flex items-center gap-2.5">
+                <RwaTokenLogo symbol={sym} />
+                <div>
+                  <div className="text-[12px] font-bold" style={{ color: 'var(--out-ink)' }}>{sym}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
+                    {pos.shares.toFixed(4)} shares
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--out-muted)' }}>
+                    ${pos.cost.toFixed(2)} cost
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trade history table */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+            TRADE HISTORY {agentTrades.length > 0 && `· ${agentTrades.length} AGENT`} {manualTrades.length > 0 && `· ${manualTrades.length} MANUAL`}
+          </div>
+          <button onClick={() => refetch()}
+            className="text-[10px] font-mono transition-colors flex items-center gap-1"
+            style={{ color: 'var(--out-muted)' }}>
+            ↻ REFRESH
+          </button>
+        </div>
+
+        {!walletAddress ? (
+          <div className="py-8 text-center font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>
+            Connect wallet to view RWA trade history.
+          </div>
+        ) : isLoading ? (
+          <div className="py-8 text-center font-mono text-[12px]" style={{ color: 'var(--out-muted)' }}>LOADING…</div>
+        ) : trades.length === 0 ? (
+          <div className="py-10 text-center font-mono border border-dashed border-[var(--out-grid-major)] flex flex-col items-center gap-3">
+            <div className="text-[28px] opacity-20" style={{ color: 'var(--out-ink)' }}>◈</div>
+            <div className="text-[12px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>No RWA trades yet</div>
+            <div className="text-[11px]" style={{ color: 'var(--out-muted)' }}>Use RWA TRADE to place your first order.</div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            {/* Header */}
+            <div className="hidden sm:grid font-mono text-[10px] uppercase tracking-widest border-b border-[var(--out-ink-dim)] pb-1.5 mb-0.5"
+              style={{ gridTemplateColumns: '24px 64px 1fr 56px 72px 72px 56px 40px 40px', color: 'var(--out-muted)', gap: '8px' }}>
+              <span />
+              <span>ASSET</span>
+              <span>NAME</span>
+              <span>SIDE</span>
+              <span className="text-right">SHARES</span>
+              <span className="text-right">PRICE</span>
+              <span className="text-right">TOTAL</span>
+              <span className="text-center">SRC</span>
+              <span className="text-center">ST</span>
+            </div>
+
+            {trades.map(t => {
+              const isBuy = t.side === 'buy';
+              return (
+                <div key={t.id}
+                  className="grid font-mono text-[11px] py-2 border-b items-center"
+                  style={{ gridTemplateColumns: '24px 64px 1fr 56px 72px 72px 56px 40px 40px', gap: '8px', borderColor: 'var(--out-ink-dim)' }}>
+                  {/* Logo */}
+                  <RwaTokenLogo symbol={t.symbol} />
+                  {/* Symbol */}
+                  <span className="font-bold" style={{ color: 'var(--out-ink)' }}>{t.symbol}</span>
+                  {/* Name — hidden on mobile */}
+                  <span className="hidden sm:block truncate" style={{ color: 'var(--out-muted)', fontSize: '10px' }}>{t.name}</span>
+                  {/* Side */}
+                  <span className="font-bold" style={{ color: isBuy ? 'var(--out-ink)' : 'var(--out-danger)' }}>
+                    {isBuy ? '▲ BUY' : '▼ SELL'}
+                  </span>
+                  {/* Shares */}
+                  <span className="text-right" style={{ color: 'var(--out-text)' }}>
+                    {parseFloat(t.shares).toFixed(4)}
+                  </span>
+                  {/* Price */}
+                  <span className="text-right" style={{ color: 'var(--out-text)' }}>
+                    ${parseFloat(t.priceUsd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  {/* Total */}
+                  <span className="text-right font-bold" style={{ color: 'var(--out-ink)' }}>
+                    ${parseFloat(t.totalUsd).toFixed(2)}
+                  </span>
+                  {/* Source */}
+                  <span className="text-center text-[9px] uppercase" style={{ color: t.source === 'agent' ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+                    {t.source === 'agent' ? 'AGT' : 'MAN'}
+                  </span>
+                  {/* Status */}
+                  <span className="text-center">{statusIcon(t.status)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
