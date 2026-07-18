@@ -243,7 +243,7 @@ router.post("/autonomous/vault", requireAutonomousAuth, async (req: Request, res
     const configJson = strategyConfig ? JSON.stringify(strategyConfig) : null;
     await pool.query(`
       INSERT INTO agent_vaults (wallet_address, agent_address, pk_hint, status, strategy_config)
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, COALESCE($4, 'idle'), $5)
       ON CONFLICT (wallet_address) DO UPDATE SET
         agent_address   = COALESCE($2, agent_vaults.agent_address),
         pk_hint         = COALESCE($3, agent_vaults.pk_hint),
