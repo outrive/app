@@ -13,6 +13,7 @@ import creditsRouter from "./credits.js";
 import cliAuthRouter from "./cli-auth.js";
 import rwaRouter from "./rwa.js";
 import distributionsRouter from "./distributions.js";
+import autonomousRouter from "./autonomous.js";
 const router: IRouter = Router();
 
 router.use(healthRouter);
@@ -29,5 +30,6 @@ router.use(creditsRouter);
 router.use(cliAuthRouter);
 router.use(rwaRouter);
 router.use(distributionsRouter);
+router.use(autonomousRouter);
 
 export default router;
