@@ -335,70 +335,101 @@ export function AutonomousPage() {
 
   /* ── VPS setup snippets ── */
   const apiKey = keys[0]?.keyPrefix ? keys[0].keyPrefix + '…' : 'OTR-your-key-here';
-  const snippetEnv = `# ── .env on your VPS ─────────────────────────────────
-# Your agent wallet private key — stays on your server ONLY
-AGENT_PRIVATE_KEY=0xYOUR_AGENT_PRIVATE_KEY
+  const snippetEnv = `# Save this as ~/outrive-agent/.env
+# Never commit this file to git
 
-# OTR API key — generated above in this page
+# Agent wallet private key — stays on your VPS ONLY, never enters the browser
+AGENT_PRIVATE_KEY=0xYOUR_AGENT_WALLET_PRIVATE_KEY
+
+# OTR API key — generated from the API Access panel on this page
 OUTRIVE_API_KEY=${apiKey}
 
-# Your main wallet address (read-only, for vault binding)
-WALLET_ADDRESS=${address ?? '0xYOUR_WALLET'}
+# Your main wallet address — used to bind the vault
+WALLET_ADDRESS=${address ?? '0xYOUR_MAIN_WALLET_ADDRESS'}
 
-# ── OUTRIVE API URL ──────────────────────────────────
-# Option A: custom domain (requires Cloudflare CNAME setup — see HOW TO tab)
-OUTRIVE_API_URL=https://api.outrive.io
+# OUTRIVE API base URL
+OUTRIVE_API_URL=https://api.outrive.io`;
 
-# Option B: use your Replit production URL directly (no custom domain needed)
-# OUTRIVE_API_URL=https://YOUR-APP.replit.app
-#
-# ⚠ The custom domain only works AFTER:
-#   1. You publish the app on Replit (Publish button, top right)
-#   2. You add api.outrive.io as a Custom Domain in Replit deployment settings
-#   3. You add a CNAME record in Cloudflare: api → YOUR-APP.replit.app`;
-
-  const snippetAgent = `// ── agent/index.mjs — minimal agent loop ──────────────
-import { createWalletClient, http } from "viem";
+  const snippetAgent = `// Save as ~/outrive-agent/index.mjs
+import "dotenv/config";
+import { createPublicClient, createWalletClient, http, formatEther, defineChain } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { robinhoodChain } from "@outrive/chains";
 
-const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
-const client  = createWalletClient({ account, chain: robinhoodChain, transport: http() });
+// Robinhood Chain — chain ID 4663
+const robinhoodChain = defineChain({
+  id: 4663,
+  name: "Robinhood Chain",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://rpc.mainnet.chain.robinhood.com"] },
+    public:  { http: ["https://rpc.mainnet.chain.robinhood.com"] },
+  },
+});
 
-// All OUTRIVE API routes are under /api/ — always include this prefix
-const OUTRIVE_BASE = process.env.OUTRIVE_API_URL; // e.g. https://api.outrive.io
+const API     = process.env.OUTRIVE_API_URL;
+const OTR_KEY = process.env.OUTRIVE_API_KEY;
+const PK      = process.env.AGENT_PRIVATE_KEY;
 
-async function tick() {
-  // 1. Fetch strategy config — GET /api/autonomous/vault
-  const cfg = await fetch(\`\${OUTRIVE_BASE}/api/autonomous/vault\`, {
-    headers: { Authorization: \`Bearer \${process.env.OUTRIVE_API_KEY}\` },
-  }).then(r => r.json());
+const account      = privateKeyToAccount(PK);
+const pubClient    = createPublicClient({ chain: robinhoodChain, transport: http() });
+const walletClient = createWalletClient({ account, chain: robinhoodChain, transport: http() });
+const H = { "Content-Type": "application/json", "Authorization": \`Bearer \${OTR_KEY}\` };
 
-  if (cfg.vault?.status !== "running") return;
-  const { token, budget_eth, tp_pct, sl_pct, entry_type } = cfg.vault.strategyConfig;
+console.log("[agent] started | wallet:", account.address);
 
-  // 2. Evaluate entry condition + sign + submit trade via FlapPortal
-  // ... your execution logic here
+async function ensureVault() {
+  const { vault } = await fetch(\`\${API}/api/autonomous/vault\`, { headers: H }).then(r => r.json());
+  if (vault) return vault;
+  const r = await fetch(\`\${API}/api/autonomous/vault\`, {
+    method: "POST", headers: H,
+    body: JSON.stringify({ agentAddress: account.address, pkHint: PK.slice(0,6)+"..."+PK.slice(-4), status: "running" }),
+  });
+  const result = await r.json();
+  console.log("[agent] vault registered:", result.vault?.agentAddress);
+  return result.vault;
 }
 
-setInterval(tick, 30_000); // poll every 30 s`;
+async function tick() {
+  try {
+    const { vault } = await fetch(\`\${API}/api/autonomous/vault\`, { headers: H }).then(r => r.json());
+    if (!vault || vault.status === "paused") { console.log("[tick]", vault ? "PAUSED" : "no vault"); return; }
+    const bal = await pubClient.getBalance({ address: account.address });
+    if (!vault.strategyConfig) {
+      console.log(\`[tick] IDLE — set strategy at outrive.io | bal: \${formatEther(bal)} ETH\`);
+      return;
+    }
+    const { token, strategy, budget_eth } = vault.strategyConfig;
+    console.log(\`[tick] OK | \${token} | \${strategy} | budget=\${budget_eth} ETH | trades=\${vault.totalTrades} | pnl=$\${vault.totalPnlUsd} | bal=\${formatEther(bal)} ETH\`);
+    // Add your trade execution logic here
+  } catch (err) { console.error("[tick] error:", err.message); }
+}
 
-  const snippetDocker = `# ── docker-compose.yml ────────────────────────────────
+await ensureVault();
+tick();
+setInterval(tick, 30_000);`;
+
+  const snippetDocker = `# ── docker-compose.yml ──────────────────────────────
 services:
   outrive-agent:
     image: node:20-alpine
     working_dir: /app
     volumes:
-      - ./agent:/app
+      - ./:/app
     env_file: .env
-    command: node index.mjs
+    command: sh -c "npm install && node index.mjs"
     restart: unless-stopped
 
-# Deploy:
-#   docker compose up -d
-#
-# Logs:
-#   docker compose logs -f outrive-agent`;
+# ── Commands ─────────────────────────────────────────
+# Start:       docker compose up -d
+# Live logs:   docker compose logs -f outrive-agent
+# Stop:        docker compose down
+# Restart:     docker compose restart outrive-agent
+
+# ── PM2 (alternative to Docker) ──────────────────────
+# npm install -g pm2
+# pm2 start index.mjs --name outrive-agent
+# pm2 save && pm2 startup
+# pm2 logs outrive-agent`;
 
   /* ── Render ── */
   return (
@@ -825,39 +856,39 @@ services:
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {([
               {
-                n: '01', title: 'CREATE A DEDICATED AGENT WALLET',
-                body: 'Generate a brand-new EVM wallet exclusively for the agent — never reuse your main wallet. Fund it with 0.02–0.05 ETH on Robinhood Chain for gas. Keep its private key only on your server.',
+                n: '01', title: 'INSTALL NODE.JS ON YOUR VPS',
+                body: 'SSH into your VPS and install Node.js 20 LTS. Any Ubuntu 22.04+ server works (min 1 vCPU / 512 MB RAM).',
+                cmd: 'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt install -y nodejs\nnode -v   # should print v20.x.x',
+              },
+              {
+                n: '02', title: 'CREATE AGENT DIRECTORY',
+                body: 'Create a fresh folder for the agent, initialise npm, and install the two required packages.',
+                cmd: 'mkdir ~/outrive-agent && cd ~/outrive-agent\nnpm init -y\nnpm install dotenv viem',
+              },
+              {
+                n: '03', title: 'GENERATE AN OTR API KEY',
+                body: 'On this page: connect wallet → Authenticate → open API Access panel → enter a label → click Generate. Copy the full key — it is shown only once.',
                 cmd: null,
               },
               {
-                n: '02', title: 'PROVISION YOUR SERVER',
-                body: 'Any Ubuntu 22.04+ VPS works (1 vCPU / 512 MB RAM minimum). Install Node.js 20 LTS with the following two commands:',
-                cmd: 'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt install -y nodejs git',
+                n: '04', title: 'CREATE YOUR .ENV FILE',
+                body: 'Create the .env file with your agent wallet private key, OTR key, and wallet address. Never commit this file to git.',
+                cmd: 'cat > ~/outrive-agent/.env << \'EOF\'\nAGENT_PRIVATE_KEY=0xYOUR_AGENT_PRIVATE_KEY\nOUTRIVE_API_KEY=OTR-your-key-here\nWALLET_ADDRESS=0xYOUR_WALLET\nOUTRIVE_API_URL=https://api.outrive.io\nEOF',
               },
               {
-                n: '03', title: 'CREATE THE AGENT DIRECTORY',
-                body: 'Make a project folder, initialise npm, and install viem (the on-chain signing library the agent uses to submit trades):',
-                cmd: 'mkdir outrive-agent && cd outrive-agent\nnpm init -y\nnpm install viem',
+                n: '05', title: 'COPY INDEX.MJS TO YOUR VPS',
+                body: 'Copy the full agent script from the AGENT LOOP snippet below into ~/outrive-agent/index.mjs. The script reads Robinhood Chain (chain ID 4663) — do not use Base or Ethereum mainnet.',
+                cmd: 'nano ~/outrive-agent/index.mjs\n# paste the full AGENT LOOP snippet below\n# save with Ctrl+O, exit with Ctrl+X',
               },
               {
-                n: '04', title: 'GENERATE AN OTR API KEY',
-                body: 'Connect your wallet on this page → click Authenticate → open the API Access panel → enter an optional label → click Generate. Copy the full key immediately — it is shown only once and is never recoverable.',
-                cmd: null,
+                n: '06', title: 'TEST & RUN THE AGENT',
+                body: 'Test the OTR key first, then start the agent. You should see vault registered and tick logs every 30 seconds.',
+                cmd: '# Test connection\ncurl -s https://api.outrive.io/api/autonomous/vault \\\n  -H "Authorization: Bearer OTR-your-key" | python3 -m json.tool\n\n# Run agent\ncd ~/outrive-agent && node index.mjs',
               },
               {
-                n: '05', title: 'CREATE YOUR .ENV FILE',
-                body: 'Create a .env file in your agent directory. Paste your agent wallet private key, the OTR key you just generated, and your main wallet address. Never commit this file to git.',
-                cmd: 'nano .env\n# add: AGENT_PRIVATE_KEY, OUTRIVE_API_KEY, WALLET_ADDRESS\n# see the .ENV snippet below for the full template',
-              },
-              {
-                n: '06', title: 'START THE AGENT',
-                body: 'Run directly with Node.js, or use Docker Compose for a production-grade persistent deployment. The agent polls OUTRIVE every 30 seconds and respects your configured strategy.',
-                cmd: '# direct\nnode index.mjs\n\n# or with Docker\ndocker compose up -d\ndocker compose logs -f outrive-agent',
-              },
-              {
-                n: '07', title: 'MONITOR ON THIS PAGE',
-                body: 'Any strategy changes you save on this page — token, TP%, SL%, budget — are picked up by the agent on its next poll (≤ 30 s). The Live Monitor panel shows open positions and past executions as they are reported back.',
-                cmd: null,
+                n: '07', title: 'RUN PERMANENTLY WITH PM2',
+                body: 'Use PM2 to keep the agent running after disconnecting from SSH and automatically restart it on server reboot.',
+                cmd: 'npm install -g pm2\ncd ~/outrive-agent\npm2 start index.mjs --name outrive-agent\npm2 save && pm2 startup\n\n# Check live logs\npm2 logs outrive-agent\n\n# Stop / restart\npm2 stop outrive-agent\npm2 restart outrive-agent',
               },
             ] as { n: string; title: string; body: string; cmd: string | null }[]).map(s => (
               <div key={s.n} className="flex flex-col gap-2 p-4 border"
