@@ -77,7 +77,7 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
   const choose = (id: View) => { setView(id); setOpen(false); };
 
   /* Tabs that are not yet live — show SOON badge */
-  const SOON_TABS = new Set<View>(['autonomous']);
+  const SOON_TABS = new Set<View>(['autonomous', 'distribution']);
 
   /* ── Desktop sidebar item ── */
   const sideItem = (t: TabDef) => (
