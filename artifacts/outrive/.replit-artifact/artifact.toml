@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "OUTRIVE"
+version = "1.0.0"
+id = "artifacts/outrive"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19608
+
+[services.development]
+run = "pnpm --filter @workspace/outrive run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/outrive", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/outrive/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19608"
+BASE_PATH = "/"

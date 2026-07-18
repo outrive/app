@@ -21,7 +21,6 @@ replit.md
 .cache/
 attached_assets/
 .npmrc
-.replit-artifact/
 
 # IDE
 .idea/
