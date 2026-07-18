@@ -73,21 +73,51 @@ function generateOtrKey(): { full: string; prefix: string; hash: string } {
 }
 
 /* ── Auth middleware ─────────────────────────────────────────────────── */
-function requireAutonomousAuth(req: Request, res: Response, next: NextFunction): void {
+// Accepts both:
+//   1. Session token (UUID) — from browser sign-in flow, in-memory, 1h TTL
+//   2. OTR API key (OTR-xxxx) — from VPS agent, stored as SHA-256 hash in DB
+async function requireAutonomousAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) {
     res.status(401).json({
-      error: "Missing Authorization header. Obtain a session token via POST /api/autonomous/auth/verify first.",
+      error: "Missing Authorization header. Use a session token or OTR API key.",
     });
     return;
   }
-  const wallet = getSessionWallet(auth.slice(7));
-  if (!wallet) {
-    res.status(401).json({ error: "Session expired or invalid. Re-authenticate." });
+
+  const token = auth.slice(7);
+
+  // 1. Try session token first (fast in-memory lookup)
+  const sessionWallet = getSessionWallet(token);
+  if (sessionWallet) {
+    (req as Request & { authedWallet: string }).authedWallet = sessionWallet;
+    next();
     return;
   }
-  (req as Request & { authedWallet: string }).authedWallet = wallet;
-  next();
+
+  // 2. Try OTR API key (database lookup + update last_used_at)
+  if (token.startsWith("OTR-")) {
+    try {
+      const keyHash = hashKey(token);
+      const r = await pool.query<{ wallet_address: string }>(
+        `UPDATE agent_api_keys
+         SET last_used_at = NOW()
+         WHERE key_hash = $1 AND revoked = false
+         RETURNING wallet_address`,
+        [keyHash],
+      );
+      if (r.rows[0]) {
+        (req as Request & { authedWallet: string }).authedWallet = r.rows[0].wallet_address;
+        next();
+        return;
+      }
+    } catch (err) {
+      res.status(500).json({ error: "Auth lookup error" });
+      return;
+    }
+  }
+
+  res.status(401).json({ error: "Session expired or invalid. Re-authenticate." });
 }
 
 /* ──────────────────────────────────────────────────────────────────────
