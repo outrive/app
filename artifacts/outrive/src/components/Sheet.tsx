@@ -38,12 +38,6 @@ export function Sheet({ dwgNo, rev = 'A', figCaption, children, className, ...pr
         {children}
       </div>
 
-      {/* Optional figure caption */}
-      {figCaption && (
-        <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 text-[9px] sm:text-[10px] text-[var(--out-ink-dim)] uppercase tracking-[0.08em] hidden sm:block">
-          {figCaption}
-        </div>
-      )}
     </div>
   );
 }
