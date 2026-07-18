@@ -1277,9 +1277,31 @@ function Docs() {
             ].map((r, i) => <Row key={i} r={r} />)}
           </div>
 
-          {/* 07 Auth + rate limit */}
+          {/* 07 Autonomous Vault API */}
           <div>
-            <SectionHead n="07" t="AUTHENTICATION & RATE LIMITS" />
+            <SectionHead n="07" t="AUTONOMOUS VAULT API — OTR KEY AUTH" />
+            <p className="text-[11px] leading-relaxed max-w-3xl mb-4" style={{ color: 'var(--out-text)' }}>
+              The Autonomous Vault API is protected by{' '}
+              <span style={{ color: 'var(--out-ink)' }}>signed-nonce session tokens</span>.
+              Clients authenticate once via EIP-191 wallet signature (valid 1 hour), then include a Bearer token on every request.
+              External agents running on a VPS use{' '}
+              <span style={{ color: 'var(--out-ink)' }}>OTR API keys</span>{' '}
+              (format: <code style={{ color: 'var(--out-ink)' }}>OTR-&#123;32 hex chars&#125;</code>) to read vault config and report execution results.
+            </p>
+            {[
+              { method: 'POST', path: '/api/autonomous/auth/nonce',   desc: 'Step 1 — send walletAddress → receive one-time nonce (5 min TTL)' },
+              { method: 'POST', path: '/api/autonomous/auth/verify',  desc: 'Step 2 — send walletAddress + nonce + EIP-191 signature → receive session token (1 h)' },
+              { method: 'GET',  path: '/api/autonomous/vault',        desc: 'Read vault config + stats for the authenticated wallet (Bearer required)' },
+              { method: 'POST', path: '/api/autonomous/vault',        desc: 'Create or update vault: strategyConfig (token/TP/SL/budget), status (idle|running|paused)' },
+              { method: 'GET',  path: '/api/autonomous/api-keys',     desc: 'List active OTR API keys for the authenticated wallet (Bearer required)' },
+              { method: 'POST', path: '/api/autonomous/api-keys',     desc: 'Generate a new OTR key — returns full key once, stores SHA-256 hash only' },
+              { method: 'DELETE', path: '/api/autonomous/api-keys/:id', desc: 'Revoke an OTR key by id — must be owned by the authenticated wallet' },
+            ].map((r, i) => <Row key={i} r={r} />)}
+          </div>
+
+          {/* 08 Auth + rate limit */}
+          <div>
+            <SectionHead n="08" t="AUTHENTICATION & RATE LIMITS" />
             <p className="text-[11px] leading-relaxed max-w-3xl" style={{ color: 'var(--out-text)' }}>
               No account or login required. Your{' '}
               <span style={{ color: 'var(--out-ink)' }}>wallet address is the only identity</span>.
@@ -1290,9 +1312,9 @@ function Docs() {
             </p>
           </div>
 
-          {/* 08 RWA contract addresses */}
+          {/* 09 RWA contract addresses */}
           <div>
-            <SectionHead n="08" t="RWA TOKEN CONTRACTS — ROBINHOOD CHAIN (chainId 4663)" />
+            <SectionHead n="09" t="RWA TOKEN CONTRACTS — ROBINHOOD CHAIN (chainId 4663)" />
             <p className="text-[11px] leading-relaxed max-w-3xl mb-4" style={{ color: 'var(--out-text)' }}>
               All RWA tokens below are ERC-20 contracts on Robinhood Chain. Trading routes through{' '}
               <span style={{ color: 'var(--out-ink)' }}>FlapPortal</span> — a native mint/redeem gateway
@@ -1473,6 +1495,73 @@ function HowTo() {
                   <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
                 </div>
                 <p className="text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Sheet>
+
+      <Sheet dwgNo="OUT-HOW-03" figCaption="FIG. 07 — AUTONOMOUS AGENT SETUP GUIDE">
+        <div className="py-4 flex flex-col gap-3 font-mono">
+          <div className="text-[12px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>
+            AUTONOMOUS AGENT VPS SETUP — STEPS 01–07
+          </div>
+          <p className="text-[11px] leading-relaxed max-w-3xl mb-4" style={{ color: 'var(--out-text)' }}>
+            OUTRIVE's Autonomous Vault lets you run a self-hosted trading agent on your own server.
+            You configure strategy (token, TP%, SL%, budget) on this site; the agent running on your VPS
+            reads that config via OTR API key and executes trades on-chain independently.
+            Your private key stays on your server — OUTRIVE never sees it.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                n: '01', title: 'CREATE A DEDICATED AGENT WALLET',
+                body: 'Generate a brand-new EVM wallet exclusively for the agent — never reuse your main wallet. Fund it with 0.02–0.05 ETH on Robinhood Chain (chainId 4663) for gas. Separate keys = contained risk.',
+                cmd: null,
+              },
+              {
+                n: '02', title: 'PROVISION YOUR VPS',
+                body: 'Any Ubuntu 22.04+ server works (1 vCPU / 512 MB RAM minimum). Install Node.js 20 LTS with the following two commands, then verify with node --version.',
+                cmd: 'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt install -y nodejs git',
+              },
+              {
+                n: '03', title: 'CREATE THE AGENT DIRECTORY',
+                body: 'Make a project folder, initialise npm, and install viem — the on-chain signing library the agent uses to build and submit trades to FlapPortal on Robinhood Chain.',
+                cmd: 'mkdir outrive-agent && cd outrive-agent\nnpm init -y\nnpm install viem',
+              },
+              {
+                n: '04', title: 'GENERATE AN OTR API KEY',
+                body: 'Navigate to AUTONOMOUS in the left sidebar. Connect your wallet → click Authenticate (one-time wallet signature, no gas) → open the API Access panel → enter an optional label → click Generate. Copy the full key — shown only once.',
+                cmd: null,
+              },
+              {
+                n: '05', title: 'CREATE YOUR .ENV FILE',
+                body: 'On your VPS, create a .env file in your agent directory. Never commit this file to git — add it to .gitignore immediately. The file needs three values: your agent wallet private key, the OTR key, and your main wallet address.',
+                cmd: 'nano .env\n# AGENT_PRIVATE_KEY=0xYOUR_AGENT_PRIVATE_KEY\n# OUTRIVE_API_KEY=OTR-…\n# WALLET_ADDRESS=0xYOUR_MAIN_WALLET\necho ".env" >> .gitignore',
+              },
+              {
+                n: '06', title: 'CONFIGURE STRATEGY ON THIS PAGE',
+                body: 'Go to AUTONOMOUS → Strategy Configuration. Choose a token, strategy type (DCA / Momentum / Dip Buy / Breakout), entry condition, TP%, SL%, budget per trade, and max concurrent positions. Click Save Configuration. The agent will pick this up on its next poll.',
+                cmd: null,
+              },
+              {
+                n: '07', title: 'START THE AGENT AND MONITOR',
+                body: 'Run the agent directly or use Docker Compose for a persistent production deployment. Once running, it polls OUTRIVE every 30 seconds, reads your latest strategy, and executes qualifying trades. Monitor activity back on this page.',
+                cmd: '# direct\nnode index.mjs\n\n# or Docker (recommended)\ndocker compose up -d\ndocker compose logs -f outrive-agent',
+              },
+            ].map((s) => (
+              <div key={s.n} className="border border-[var(--out-grid-major)] p-4 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--out-ink)] text-[20px] font-bold leading-none">{s.n}</span>
+                  <span className="text-[13px] uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
+                </div>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+                {s.cmd && (
+                  <pre className="mt-1 p-3 text-[11px] leading-relaxed overflow-x-auto whitespace-pre rounded"
+                    style={{ background: 'var(--out-bg)', border: '1px solid var(--out-grid-major)', color: 'var(--out-ink)', fontFamily: 'var(--font-mono, monospace)' }}>
+                    {s.cmd}
+                  </pre>
+                )}
               </div>
             ))}
           </div>

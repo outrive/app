@@ -793,7 +793,7 @@ services:
 
       {/* ════ OUT-AUT-05 — VPS AGENT SETUP ════════════════════════════ */}
       <Sheet dwgNo="OUT-AUT-05">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Server size={12} color="var(--out-ink)" />
             <span className="text-[11px] uppercase tracking-[0.12em] font-bold" style={{ color: 'var(--out-ink)' }}>VPS Agent Setup</span>
@@ -804,10 +804,72 @@ services:
             <Download size={10} /> SKILL.MD TEMPLATE
           </a>
         </div>
-        <p className="text-[10px] mb-5 leading-relaxed" style={{ color: 'var(--out-muted)' }}>
-          Run the agent on your own server. Your private key stays on your VPS — it is never entered here.
-          Generate an OTR key above, add it to your <code style={{ color: 'var(--out-ink)' }}>.env</code>, and start the agent loop below.
-        </p>
+
+        {/* Step-by-step guide */}
+        <div className="mb-8">
+          <div className="text-[9px] uppercase tracking-[0.16em] mb-4" style={{ color: 'var(--out-muted)', ...MONO }}>
+            SETUP GUIDE — STEPS 01 – 07
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {([
+              {
+                n: '01', title: 'CREATE A DEDICATED AGENT WALLET',
+                body: 'Generate a brand-new EVM wallet exclusively for the agent — never reuse your main wallet. Fund it with 0.02–0.05 ETH on Robinhood Chain for gas. Keep its private key only on your server.',
+                cmd: null,
+              },
+              {
+                n: '02', title: 'PROVISION YOUR SERVER',
+                body: 'Any Ubuntu 22.04+ VPS works (1 vCPU / 512 MB RAM minimum). Install Node.js 20 LTS with the following two commands:',
+                cmd: 'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt install -y nodejs git',
+              },
+              {
+                n: '03', title: 'CREATE THE AGENT DIRECTORY',
+                body: 'Make a project folder, initialise npm, and install viem (the on-chain signing library the agent uses to submit trades):',
+                cmd: 'mkdir outrive-agent && cd outrive-agent\nnpm init -y\nnpm install viem',
+              },
+              {
+                n: '04', title: 'GENERATE AN OTR API KEY',
+                body: 'Connect your wallet on this page → click Authenticate → open the API Access panel → enter an optional label → click Generate. Copy the full key immediately — it is shown only once and is never recoverable.',
+                cmd: null,
+              },
+              {
+                n: '05', title: 'CREATE YOUR .ENV FILE',
+                body: 'Create a .env file in your agent directory. Paste your agent wallet private key, the OTR key you just generated, and your main wallet address. Never commit this file to git.',
+                cmd: 'nano .env\n# add: AGENT_PRIVATE_KEY, OUTRIVE_API_KEY, WALLET_ADDRESS\n# see the .ENV snippet below for the full template',
+              },
+              {
+                n: '06', title: 'START THE AGENT',
+                body: 'Run directly with Node.js, or use Docker Compose for a production-grade persistent deployment. The agent polls OUTRIVE every 30 seconds and respects your configured strategy.',
+                cmd: '# direct\nnode index.mjs\n\n# or with Docker\ndocker compose up -d\ndocker compose logs -f outrive-agent',
+              },
+              {
+                n: '07', title: 'MONITOR ON THIS PAGE',
+                body: 'Any strategy changes you save on this page — token, TP%, SL%, budget — are picked up by the agent on its next poll (≤ 30 s). The Live Monitor panel shows open positions and past executions as they are reported back.',
+                cmd: null,
+              },
+            ] as { n: string; title: string; body: string; cmd: string | null }[]).map(s => (
+              <div key={s.n} className="flex flex-col gap-2 p-4 border"
+                style={{ borderColor: 'var(--out-ink-dim)', background: '#060c05' }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[20px] font-bold leading-none" style={{ color: 'var(--out-ink)', ...MONO }}>{s.n}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--out-ink)' }}>{s.title}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+                {s.cmd && (
+                  <pre className="mt-1 p-3 text-[10px] leading-relaxed overflow-x-auto whitespace-pre"
+                    style={{ background: '#030703', border: '1px solid var(--out-ink-dim)', color: 'var(--out-ink)', ...MONO }}>
+                    {s.cmd}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Code snippets */}
+        <div className="text-[9px] uppercase tracking-[0.16em] mb-4" style={{ color: 'var(--out-muted)', ...MONO }}>
+          REFERENCE CONFIG — COPY TO YOUR VPS
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <CodeBlock lang=".ENV — VPS CONFIG"       code={snippetEnv}    onCopy={() => copyText(snippetEnv)} />
           <CodeBlock lang="AGENT LOOP — NODE.JS"    code={snippetAgent}  onCopy={() => copyText(snippetAgent)} />
