@@ -5,7 +5,8 @@ import {
   useReadContract, useSwitchChain, useBalance, useGasPrice,
 } from 'wagmi';
 import { encodeFunctionData, parseAbi, parseUnits, formatUnits } from 'viem';
-import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { RefreshCw, ExternalLink, CheckCircle2, XCircle, TrendingUp, TrendingDown, AlertTriangle, Bell, BellOff, Trash2, Zap } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 /* ─── On-chain swap constants ────────────────────────────────────────────── */
 // FlapPortal — Robinhood Chain's real RWA swap contract.
@@ -396,13 +397,26 @@ function Stat({ label, value }: { label: string; value: string }) {
 /* ─── Order panel ────────────────────────────────────────────────────────── */
 type TxStep = 'form' | 'preview' | 'approving' | 'pending_approve' | 'swapping' | 'pending_swap' | 'done' | 'error';
 
-function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
+function OrderPanel({ q, ethUsd, prefill, onPrefillUsed }: {
+  q: Quote; ethUsd: number;
+  prefill?: { side: 'buy' | 'sell'; qty: string; qtyMode: 'eth' | 'shares' } | null;
+  onPrefillUsed?: () => void;
+}) {
   const { address: wallet, chain } = useAccount();
   const { switchChainAsync }        = useSwitchChain();
 
   const [side, setSide]       = useState<'buy' | 'sell'>('buy');
   const [qty, setQty]         = useState('');
   const [inputMode, setMode]  = useState<'shares' | 'eth' | 'usd'>('shares');
+
+  /* apply prefill from triggered limit order */
+  useEffect(() => {
+    if (!prefill) return;
+    setSide(prefill.side);
+    setQty(prefill.qty);
+    setMode(prefill.qtyMode === 'eth' ? 'eth' : 'shares');
+    onPrefillUsed?.();
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
   const [step, setStep]       = useState<TxStep>('form');
   const [errMsg, setErr]      = useState('');
   const [tradeId, setTid]     = useState<number | null>(null);
@@ -1138,6 +1152,335 @@ function OrderPanel({ q, ethUsd }: { q: Quote; ethUsd: number }) {
   );
 }
 
+/* ─── Limit order type ───────────────────────────────────────────────────── */
+type RwaLimitOrder = {
+  id: number; symbol: string; name: string; side: string;
+  targetPriceUsd: string; qtyEth: string | null; qtyShares: string | null;
+  status: string; triggeredAt: string | null; expiresAt: string | null; createdAt: string;
+};
+
+/* ─── Limit Order Panel ──────────────────────────────────────────────────── */
+function LimitOrderPanel({
+  q, ethUsd, onExecuteTriggered,
+}: {
+  q: Quote;
+  ethUsd: number;
+  onExecuteTriggered: (order: RwaLimitOrder) => void;
+}) {
+  const { address: wallet } = useAccount();
+  const qc = useQueryClient();
+
+  /* form state */
+  const [side, setSide]         = useState<'buy' | 'sell'>('buy');
+  const [targetPrice, setTarget] = useState('');
+  const [qty, setQty]           = useState('');
+  const [qtyMode, setQtyMode]   = useState<'eth' | 'shares'>('eth');
+  const [expiry, setExpiry]     = useState<'1d' | '7d' | 'never'>('7d');
+  const [err, setErr]           = useState('');
+
+  /* live orders */
+  const { data: ordersData, refetch } = useQuery<{ orders: RwaLimitOrder[] }>({
+    queryKey: ['rwa-limit-orders', wallet],
+    queryFn: () => fetch(api(`/api/rwa/limit-orders?wallet=${wallet}`)).then(r => r.json()),
+    enabled: !!wallet,
+    refetchInterval: 8_000,
+    staleTime: 5_000,
+  });
+
+  const orders = ordersData?.orders ?? [];
+  const active  = orders.filter(o => o.status === 'pending' || o.status === 'triggered');
+  const history = orders.filter(o => o.status !== 'pending' && o.status !== 'triggered').slice(0, 10);
+  const triggered = active.filter(o => o.status === 'triggered' && o.symbol === q.symbol);
+
+  /* create mutation */
+  const create = useMutation({
+    mutationFn: async () => {
+      const expiresAt = expiry === '1d'
+        ? new Date(Date.now() + 86_400_000).toISOString()
+        : expiry === '7d'
+        ? new Date(Date.now() + 7 * 86_400_000).toISOString()
+        : null;
+      const body: Record<string, unknown> = {
+        walletAddress: wallet,
+        symbol: q.symbol,
+        side,
+        targetPriceUsd: parseFloat(targetPrice),
+        expiresAt,
+      };
+      if (qtyMode === 'eth')    body.qtyEth    = parseFloat(qty) || null;
+      if (qtyMode === 'shares') body.qtyShares = parseFloat(qty) || null;
+      const r = await fetch(api('/api/rwa/limit-orders'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error ?? 'Failed');
+      return r.json();
+    },
+    onSuccess: () => {
+      setTarget(''); setQty(''); setErr('');
+      qc.invalidateQueries({ queryKey: ['rwa-limit-orders', wallet] });
+    },
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  /* cancel mutation */
+  const cancel = useMutation({
+    mutationFn: (id: number) =>
+      fetch(api(`/api/rwa/limit-orders/${id}`), { method: 'DELETE' }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rwa-limit-orders', wallet] }),
+  });
+
+  /* mark executed mutation */
+  const markExecuted = useMutation({
+    mutationFn: (id: number) =>
+      fetch(api(`/api/rwa/limit-orders/${id}/execute`), { method: 'PATCH' }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rwa-limit-orders', wallet] }),
+  });
+
+  const sideColor  = side === 'buy' ? 'var(--out-ink)' : '#e05050';
+  const livePrice  = q.price;
+  const tgt        = parseFloat(targetPrice) || 0;
+  const priceDiff  = livePrice > 0 && tgt > 0 ? ((tgt - livePrice) / livePrice) * 100 : 0;
+  const canSubmit  = !!wallet && !!targetPrice && parseFloat(targetPrice) > 0;
+
+  function statusColor(s: string) {
+    if (s === 'triggered') return '#e09020';
+    if (s === 'executed')  return '#7ecb3b';
+    if (s === 'cancelled' || s === 'expired') return '#e05050';
+    return 'var(--out-muted)';
+  }
+
+  return (
+    <div className="flex flex-col font-mono text-[11px]">
+      {/* ── Triggered alert banner ── */}
+      {triggered.length > 0 && (
+        <div className="border-b px-3 py-2.5 flex flex-col gap-2" style={{ borderColor: '#e0902060', background: '#100c0220' }}>
+          {triggered.map(o => (
+            <div key={o.id} className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold" style={{ color: '#e09020' }}>
+                <Zap size={10} />
+                LIMIT ORDER TRIGGERED
+              </div>
+              <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+                {o.side === 'buy' ? '▲ BUY' : '▼ SELL'} {o.symbol} target ${parseFloat(o.targetPriceUsd).toFixed(2)}
+                {o.qtyEth ? ` · ${parseFloat(o.qtyEth).toFixed(4)} ETH` : ''}
+                {o.qtyShares ? ` · ${parseFloat(o.qtyShares).toFixed(4)} sh` : ''}
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => { onExecuteTriggered(o); markExecuted.mutate(o.id); }}
+                  className="flex-1 py-1 text-[9px] uppercase tracking-widest border font-bold transition-opacity hover:opacity-80"
+                  style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)', background: '#0e1a0820' }}>
+                  ▲ EXECUTE NOW
+                </button>
+                <button
+                  onClick={() => cancel.mutate(o.id)}
+                  className="px-2 py-1 border text-[9px] transition-opacity hover:opacity-70"
+                  style={{ borderColor: '#e05050', color: '#e05050' }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Create form ── */}
+      <div className="px-3 py-3 flex flex-col gap-2.5 border-b" style={{ borderColor: 'var(--out-ink-dim)' }}>
+        <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+          NEW LIMIT ORDER · {q.symbol}
+        </div>
+
+        {/* Side toggle */}
+        <div className="grid grid-cols-2 border" style={{ borderColor: 'var(--out-ink-dim)' }}>
+          {(['buy', 'sell'] as const).map(s => (
+            <button key={s} onClick={() => setSide(s)}
+              className="py-1.5 text-[10px] uppercase tracking-widest transition-all"
+              style={{
+                background: side === s ? (s === 'buy' ? '#0e1a08' : '#1a0808') : 'transparent',
+                color: side === s ? (s === 'buy' ? 'var(--out-ink)' : '#e05050') : 'var(--out-muted)',
+                borderRight: s === 'buy' ? `1px solid var(--out-ink-dim)` : undefined,
+              }}>
+              {s === 'buy' ? '▲ BUY' : '▼ SELL'}
+            </button>
+          ))}
+        </div>
+
+        {/* Target price */}
+        <div className="flex flex-col gap-1">
+          <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>TARGET PRICE (USD)</div>
+          <div className="flex items-center border" style={{ borderColor: tgt > 0 ? sideColor : 'var(--out-ink-dim)' }}>
+            <span className="px-2 text-[10px]" style={{ color: 'var(--out-muted)' }}>$</span>
+            <input
+              type="number" min="0" step="0.01"
+              value={targetPrice}
+              onChange={e => setTarget(e.target.value)}
+              placeholder={livePrice > 0 ? livePrice.toFixed(2) : '0.00'}
+              className="flex-1 bg-transparent py-1.5 pr-2 text-[11px] outline-none font-mono"
+              style={{ color: 'var(--out-text)', caretColor: 'var(--out-ink)' }}
+            />
+          </div>
+          {livePrice > 0 && tgt > 0 && (
+            <div className="text-[9px] flex justify-between" style={{ color: 'var(--out-muted)' }}>
+              <span>Live: ${livePrice.toFixed(2)}</span>
+              <span style={{ color: priceDiff >= 0 ? '#7ecb3b' : '#e05050' }}>
+                {priceDiff >= 0 ? '+' : ''}{priceDiff.toFixed(2)}% from now
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Qty */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>QTY (optional)</div>
+            <div className="flex gap-1">
+              {(['eth', 'shares'] as const).map(m => (
+                <button key={m} onClick={() => setQtyMode(m)}
+                  className="text-[8px] px-1.5 py-0.5 border uppercase"
+                  style={{ borderColor: qtyMode === m ? 'var(--out-ink)' : 'var(--out-ink-dim)', color: qtyMode === m ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+                  {m === 'eth' ? 'ETH' : 'SH'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center border" style={{ borderColor: 'var(--out-ink-dim)' }}>
+            <input
+              type="number" min="0" step="0.0001"
+              value={qty}
+              onChange={e => setQty(e.target.value)}
+              placeholder={qtyMode === 'eth' ? '0.01' : '0.0100'}
+              className="flex-1 bg-transparent py-1.5 px-2 text-[11px] outline-none font-mono"
+              style={{ color: 'var(--out-text)', caretColor: 'var(--out-ink)' }}
+            />
+            <span className="pr-2 text-[9px]" style={{ color: 'var(--out-muted)' }}>
+              {qtyMode === 'eth' ? 'ETH' : 'sh'}
+            </span>
+          </div>
+        </div>
+
+        {/* Expiry */}
+        <div className="flex flex-col gap-1">
+          <div className="text-[9px] uppercase" style={{ color: 'var(--out-muted)' }}>EXPIRES IN</div>
+          <div className="flex gap-1">
+            {([['1d','1 Day'],['7d','7 Days'],['never','Never']] as const).map(([v,l]) => (
+              <button key={v} onClick={() => setExpiry(v)}
+                className="flex-1 py-1 text-[9px] border uppercase tracking-wide"
+                style={{ borderColor: expiry === v ? 'var(--out-ink)' : 'var(--out-ink-dim)', color: expiry === v ? 'var(--out-ink)' : 'var(--out-muted)', background: expiry === v ? '#0e1a08' : 'transparent' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {err && (
+          <div className="text-[9px] px-2 py-1 border" style={{ borderColor: '#e0505040', color: '#e05050', background: '#1a080820' }}>{err}</div>
+        )}
+
+        {!wallet ? (
+          <div className="py-2 border text-center text-[10px] uppercase tracking-widest" style={{ borderColor: 'var(--out-ink-dim)', color: 'var(--out-muted)' }}>
+            CONNECT WALLET
+          </div>
+        ) : (
+          <button
+            onClick={() => create.mutate()}
+            disabled={!canSubmit || create.isPending}
+            className="py-2 border text-[10px] uppercase tracking-widest font-bold flex items-center justify-center gap-2 transition-all"
+            style={{
+              borderColor: canSubmit ? sideColor : 'var(--out-ink-dim)',
+              color: canSubmit ? sideColor : 'var(--out-muted)',
+              background: canSubmit ? (side === 'buy' ? '#0e1a0820' : '#1a080820') : 'transparent',
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
+            }}>
+            {create.isPending ? <RefreshCw size={10} className="animate-spin" /> : <Bell size={10} />}
+            SET LIMIT ORDER
+          </button>
+        )}
+      </div>
+
+      {/* ── Active orders ── */}
+      {active.length > 0 && (
+        <div className="border-b" style={{ borderColor: 'var(--out-ink-dim)' }}>
+          <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest flex items-center justify-between" style={{ color: 'var(--out-muted)', background: '#060b06' }}>
+            <span>ACTIVE ORDERS · {active.length}</span>
+            <button onClick={() => refetch()} className="transition-opacity hover:opacity-70"><RefreshCw size={8} /></button>
+          </div>
+          {active.map(o => (
+            <div key={o.id} className="px-3 py-2 border-b flex items-start justify-between gap-2"
+              style={{ borderColor: 'var(--out-ink-dim)', background: o.status === 'triggered' ? '#100c0210' : 'transparent' }}>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold" style={{ color: o.side === 'buy' ? 'var(--out-ink)' : '#e05050' }}>
+                    {o.side === 'buy' ? '▲' : '▼'} {o.symbol}
+                  </span>
+                  <span className="text-[9px] border px-1" style={{ borderColor: statusColor(o.status), color: statusColor(o.status) }}>
+                    {o.status.toUpperCase()}
+                  </span>
+                </div>
+                <div className="text-[9px]" style={{ color: 'var(--out-text)' }}>
+                  @ ${parseFloat(o.targetPriceUsd).toFixed(2)}
+                  {o.qtyEth    ? ` · ${parseFloat(o.qtyEth).toFixed(4)} ETH`    : ''}
+                  {o.qtyShares ? ` · ${parseFloat(o.qtyShares).toFixed(4)} sh`  : ''}
+                </div>
+                {o.expiresAt && (
+                  <div className="text-[8px]" style={{ color: 'var(--out-muted)' }}>
+                    exp {new Date(o.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                )}
+              </div>
+              <button onClick={() => cancel.mutate(o.id)}
+                className="shrink-0 transition-opacity hover:opacity-70 mt-0.5"
+                style={{ color: 'var(--out-muted)' }}>
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Order history ── */}
+      {history.length > 0 && (
+        <div>
+          <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)', background: '#060b06' }}>
+            HISTORY
+          </div>
+          {history.map(o => (
+            <div key={o.id} className="px-3 py-1.5 border-b flex items-center justify-between"
+              style={{ borderColor: 'var(--out-ink-dim)' }}>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px]" style={{ color: o.side === 'buy' ? 'var(--out-ink)' : '#e05050' }}>
+                  {o.side === 'buy' ? '▲' : '▼'} {o.symbol}
+                </span>
+                <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>
+                  ${parseFloat(o.targetPriceUsd).toFixed(2)}
+                </span>
+              </div>
+              <span className="text-[9px]" style={{ color: statusColor(o.status) }}>
+                {o.status.toUpperCase()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!wallet && active.length === 0 && (
+        <div className="px-3 py-6 text-center text-[10px] flex flex-col items-center gap-2" style={{ color: 'var(--out-muted)' }}>
+          <BellOff size={18} style={{ opacity: 0.3 }} />
+          <span>Connect wallet to set limit orders</span>
+        </div>
+      )}
+      {wallet && active.length === 0 && history.length === 0 && (
+        <div className="px-3 py-6 text-center text-[10px] flex flex-col items-center gap-2" style={{ color: 'var(--out-muted)' }}>
+          <Bell size={18} style={{ opacity: 0.3 }} />
+          <span>No limit orders yet</span>
+          <span className="text-[9px]">Set a target price above — server checks every 10s</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Trade type ─────────────────────────────────────────────────────────── */
 type RwaTrade = {
   id: number; symbol: string; name: string; side: string;
@@ -1239,6 +1582,9 @@ export function RwaPage() {
   const { address: wallet } = useAccount();
   const [selected, setSelected] = useState<Quote>(CATALOGUE[0]);
   const lastSym = useRef(CATALOGUE[0].symbol);
+  const [rightTab, setRightTab] = useState<'order' | 'limits'>('order');
+  type Prefill = { side: 'buy' | 'sell'; qty: string; qtyMode: 'eth' | 'shares' } | null;
+  const [orderPrefill, setOrderPrefill] = useState<Prefill>(null);
 
   /* ── YF + Blockscout quotes (60s, OHLCV data) */
   const { data, isLoading, refetch, dataUpdatedAt } = useQuery<{ quotes: Quote[]; updatedAt: string }>({
@@ -1450,19 +1796,42 @@ export function RwaPage() {
           className="shrink-0 border-l flex flex-col"
           style={{ width: 260, borderColor: 'var(--out-ink-dim)', background: '#060b06' }}
         >
-          {/* Panel label */}
-          <div
-            className="flex items-center px-4 border-b shrink-0"
-            style={{ height: 28, borderColor: 'var(--out-ink-dim)', background: '#060b06' }}
-          >
-            <span className="text-[8.5px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
-              ORDER ENTRY
-            </span>
+          {/* Tab bar */}
+          <div className="flex border-b shrink-0" style={{ borderColor: 'var(--out-ink-dim)', height: 28 }}>
+            {(['order', 'limits'] as const).map(tab => (
+              <button key={tab} onClick={() => setRightTab(tab)}
+                className="flex-1 text-[8.5px] uppercase tracking-widest transition-colors"
+                style={{
+                  color:      rightTab === tab ? 'var(--out-ink)' : 'var(--out-muted)',
+                  background: rightTab === tab ? '#0a120a' : 'transparent',
+                  borderRight: tab === 'order' ? '1px solid var(--out-ink-dim)' : undefined,
+                  borderBottom: rightTab === tab ? '1px solid var(--out-ink)' : undefined,
+                }}>
+                {tab === 'order' ? 'ORDER ENTRY' : 'LIMIT ORDERS'}
+              </button>
+            ))}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ scrollbarWidth: 'none' }}>
-            <OrderPanel q={selected} ethUsd={ethUsd} />
-            <StockHistory symbol={selected.symbol} wallet={wallet} />
+            {rightTab === 'order' ? (
+              <>
+                <OrderPanel q={selected} ethUsd={ethUsd} prefill={orderPrefill} onPrefillUsed={() => setOrderPrefill(null)} />
+                <StockHistory symbol={selected.symbol} wallet={wallet} />
+              </>
+            ) : (
+              <LimitOrderPanel
+                q={selected}
+                ethUsd={ethUsd}
+                onExecuteTriggered={o => {
+                  setOrderPrefill({
+                    side: o.side as 'buy' | 'sell',
+                    qty: o.qtyEth ? String(o.qtyEth) : o.qtyShares ? String(o.qtyShares) : '',
+                    qtyMode: o.qtyEth ? 'eth' : 'shares',
+                  });
+                  setRightTab('order');
+                }}
+              />
+            )}
           </div>
         </div>
       </div>

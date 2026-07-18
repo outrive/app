@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { rwaTradesTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { rwaTradesTable, rwaLimitOrdersTable } from "@workspace/db";
+import { eq, desc, and, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -670,8 +670,120 @@ router.get('/rwa/flap-prices', async (_req: Request, res: Response) => {
   res.json({ prices: results, ethUsd: ethUsd || 1828, updatedAt: new Date().toISOString() });
 });
 
+/* ── POST /rwa/limit-orders ──────────────────────────────────────────────── */
+router.post("/rwa/limit-orders", async (req: Request, res: Response) => {
+  const { walletAddress, symbol, side, targetPriceUsd, qtyEth, qtyShares, expiresAt } = req.body ?? {};
+  if (!walletAddress || !symbol || !side || !targetPriceUsd) {
+    res.status(400).json({ error: "walletAddress, symbol, side, targetPriceUsd required" }); return;
+  }
+  if (side !== 'buy' && side !== 'sell') {
+    res.status(400).json({ error: "side must be buy or sell" }); return;
+  }
+  const info = RWA_TOKENS[(symbol as string).toUpperCase()];
+  if (!info) { res.status(400).json({ error: `Unknown symbol: ${symbol}` }); return; }
+
+  const [order] = await db.insert(rwaLimitOrdersTable).values({
+    walletAddress: (walletAddress as string).toLowerCase(),
+    symbol:        (symbol as string).toUpperCase(),
+    tokenAddress:  info.address,
+    name:          info.name,
+    side,
+    targetPriceUsd: String(targetPriceUsd),
+    qtyEth:    qtyEth    ? String(qtyEth)    : null,
+    qtyShares: qtyShares ? String(qtyShares) : null,
+    status:    'pending',
+    expiresAt: expiresAt ? new Date(expiresAt as string) : null,
+  }).returning();
+
+  res.status(201).json({ order });
+});
+
+/* ── GET /rwa/limit-orders?wallet=0x… ───────────────────────────────────── */
+router.get("/rwa/limit-orders", async (req: Request, res: Response) => {
+  const wallet = (req.query.wallet as string | undefined)?.toLowerCase();
+  if (!wallet) { res.status(400).json({ error: "wallet query param required" }); return; }
+
+  const orders = await db
+    .select()
+    .from(rwaLimitOrdersTable)
+    .where(eq(rwaLimitOrdersTable.walletAddress, wallet))
+    .orderBy(desc(rwaLimitOrdersTable.createdAt))
+    .limit(100);
+
+  res.json({ orders });
+});
+
+/* ── DELETE /rwa/limit-orders/:id ───────────────────────────────────────── */
+router.delete("/rwa/limit-orders/:id", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id ?? '0', 10);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  await db
+    .update(rwaLimitOrdersTable)
+    .set({ status: 'cancelled' })
+    .where(and(eq(rwaLimitOrdersTable.id, id), eq(rwaLimitOrdersTable.status, 'pending')));
+
+  res.json({ ok: true });
+});
+
+/* ── PATCH /rwa/limit-orders/:id/execute ────────────────────────────────── */
+router.patch("/rwa/limit-orders/:id/execute", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id ?? '0', 10);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [order] = await db
+    .update(rwaLimitOrdersTable)
+    .set({ status: 'executed' })
+    .where(eq(rwaLimitOrdersTable.id, id))
+    .returning();
+
+  res.json({ order });
+});
+
+/* ── Limit order keeper — runs after every flap-price refresh ────────────── */
+async function checkLimitOrders(): Promise<void> {
+  try {
+    const pending = await db
+      .select()
+      .from(rwaLimitOrdersTable)
+      .where(inArray(rwaLimitOrdersTable.status, ['pending', 'triggered']));
+
+    if (pending.length === 0) return;
+    const now = Date.now();
+
+    for (const order of pending) {
+      // Expire stale orders
+      if (order.expiresAt && new Date(order.expiresAt).getTime() < now) {
+        await db.update(rwaLimitOrdersTable).set({ status: 'expired' }).where(eq(rwaLimitOrdersTable.id, order.id));
+        continue;
+      }
+      const cached = _flapPriceCache.get(order.tokenAddress.toLowerCase());
+      if (!cached) continue;
+
+      const livePrice   = cached.price;
+      const targetPrice = parseFloat(String(order.targetPriceUsd));
+
+      const shouldTrigger =
+        (order.side === 'buy'  && livePrice <= targetPrice) ||
+        (order.side === 'sell' && livePrice >= targetPrice);
+
+      if (shouldTrigger && order.status === 'pending') {
+        await db.update(rwaLimitOrdersTable)
+          .set({ status: 'triggered', triggeredAt: new Date() })
+          .where(eq(rwaLimitOrdersTable.id, order.id));
+        console.info(`[rwa] limit order #${order.id} TRIGGERED — ${order.side} ${order.symbol} @ ${livePrice} (target ${targetPrice})`);
+      }
+    }
+  } catch (err) {
+    console.error('[rwa] limit order keeper error', err);
+  }
+}
+
 /* ── Pre-warm on module load ─────────────────────────────────────────────── */
 refreshPrices().catch(() => {});           // Blockscout prices (fast, no rate-limit)
 setTimeout(() => refreshFlapPrices().catch(() => {}), 2_000); // FlapPortal prices after 2s
+
+// Check limit orders every 10s after price data is fresh
+setInterval(() => checkLimitOrders().catch(() => {}), 10_000);
 
 export default router;
