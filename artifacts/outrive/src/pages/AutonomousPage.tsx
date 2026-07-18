@@ -1,7 +1,7 @@
 /**
  * AUTONOMOUS AGENT VAULT
- * Non-custodial autonomous RWA trading — user holds private key,
- * agent signs trades independently within configured risk limits.
+ * Monitor & configure your autonomous RWA trading agent.
+ * Private key and LLM setup are done on your own VPS — never entered here.
  *
  * Auth flow:
  *  1. Wallet connected → user clicks "AUTHENTICATE VAULT ACCESS"
@@ -16,11 +16,10 @@ import React, { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useSignMessage } from 'wagmi';
 import {
-  Zap, Shield, Eye, EyeOff, Copy, Check, Plus, Trash2,
+  Zap, Shield, Copy, Check, Plus, Trash2,
   Activity, Key, Code2, AlertTriangle, Cpu, RefreshCw,
-  Download, Lock, LogIn,
+  Download, LogIn, Server, Terminal,
 } from 'lucide-react';
-import { privateKeyToAccount } from 'viem/accounts';
 
 /* ── Constants ────────────────────────────────────────────────────────── */
 const BASE_URL = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -83,14 +82,6 @@ const DEFAULT_STRATEGY: StrategyConfig = {
 function fmtAddr(addr: string) { return addr.slice(0, 6) + '…' + addr.slice(-4); }
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-function deriveAgentAddress(rawPk: string): { address: string; hint: string } | null {
-  try {
-    const pk = rawPk.trim().startsWith('0x') ? rawPk.trim() : '0x' + rawPk.trim();
-    if (pk.length !== 66) return null;
-    const account = privateKeyToAccount(pk as `0x${string}`);
-    return { address: account.address, hint: pk.slice(0, 8) + '…' + pk.slice(-6) };
-  } catch { return null; }
 }
 async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
@@ -187,10 +178,7 @@ export function AutonomousPage() {
   const [authError,      setAuthError]      = useState<string | null>(null);
 
   /* ── Strategy / vault form state ── */
-  const [privateKey,   setPrivateKey]   = useState('');
-  const [showPk,       setShowPk]       = useState(false);
-  const [agentDerived, setAgentDerived] = useState<{ address: string; hint: string } | null>(null);
-  const [strategy,     setStrategy]     = useState<StrategyConfig>(DEFAULT_STRATEGY);
+  const [strategy, setStrategy] = useState<StrategyConfig>(DEFAULT_STRATEGY);
   const [saving,       setSaving]       = useState(false);
   const [saveFlash,    setSaveFlash]    = useState<'ok' | 'err' | null>(null);
 
@@ -279,11 +267,6 @@ export function AutonomousPage() {
   const keys  = keysData?.keys ?? [];
 
   /* ── Vault mutations ── */
-  const onPkChange = useCallback((val: string) => {
-    setPrivateKey(val);
-    setAgentDerived(deriveAgentAddress(val));
-  }, []);
-
   const patchStrategy = useCallback((k: keyof StrategyConfig, v: string) => {
     setStrategy(s => ({ ...s, [k]: v }));
   }, []);
@@ -294,7 +277,6 @@ export function AutonomousPage() {
     setSaving(true);
     try {
       const body: Record<string, unknown> = { strategyConfig: strategy };
-      if (agentDerived) { body.agentAddress = agentDerived.address; body.pkHint = agentDerived.hint; }
       const r = await fetch(api('/api/autonomous/vault'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -351,49 +333,60 @@ export function AutonomousPage() {
 
   const isAuthenticated = !!sessionToken;
 
-  /* ── Code snippets (show key prefix if available) ── */
+  /* ── VPS setup snippets ── */
   const apiKey = keys[0]?.keyPrefix ? keys[0].keyPrefix + '…' : 'OTR-your-key-here';
-  const snippetMcp = `// Claude Desktop — ~/.claude/claude_desktop_config.json
-{
-  "mcpServers": {
-    "outrive": {
-      "command": "npx",
-      "args": ["-y", "@outrive/mcp-server"],
-      "env": {
-        "OUTRIVE_API_KEY": "${apiKey}",
-        "OUTRIVE_WALLET":  "${address ?? '0xYOUR_WALLET'}"
-      }
-    }
-  }
-}`;
+  const snippetEnv = `# ── .env on your VPS ─────────────────────────────────
+# Your agent wallet private key — stays on your server ONLY
+AGENT_PRIVATE_KEY=0xYOUR_AGENT_PRIVATE_KEY
 
-  const snippetHermes = `// Hermes / OpenClaw — REST API
-const res = await fetch("https://api.outrive.io/autonomous/execute", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ${apiKey}",
-    "Content-Type":  "application/json",
-  },
-  body: JSON.stringify({
-    action: "buy",
-    token:  "${strategy.token}",
-    amount_eth: ${strategy.budget_eth || '0.05'},
-    tp_pct: ${strategy.tp_pct || 15},
-    sl_pct: ${strategy.sl_pct || 5},
-  }),
-});`;
+# OTR API key — generated above in this page
+OUTRIVE_API_KEY=${apiKey}
 
-  const snippetCurl = `# cURL — one-liner
-curl -X POST https://api.outrive.io/autonomous/execute \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "action":     "buy",
-    "token":      "${strategy.token}",
-    "amount_eth": ${strategy.budget_eth || '0.05'},
-    "tp_pct":     ${strategy.tp_pct || 15},
-    "sl_pct":     ${strategy.sl_pct || 5}
-  }'`;
+# Your main wallet address (read-only, for vault binding)
+WALLET_ADDRESS=${address ?? '0xYOUR_WALLET'}
+
+# OUTRIVE strategy endpoint
+OUTRIVE_API_URL=https://api.outrive.io`;
+
+  const snippetAgent = `// ── agent/index.mjs — minimal agent loop ──────────────
+import { createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { robinhoodChain } from "@outrive/chains";
+
+const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
+const client  = createWalletClient({ account, chain: robinhoodChain, transport: http() });
+
+async function tick() {
+  // 1. Fetch your strategy config from OUTRIVE
+  const cfg = await fetch(\`\${process.env.OUTRIVE_API_URL}/autonomous/vault\`, {
+    headers: { Authorization: \`Bearer \${process.env.OUTRIVE_API_KEY}\` },
+  }).then(r => r.json());
+
+  if (cfg.vault?.status !== "running") return;
+  const { token, budget_eth, tp_pct, sl_pct, entry_type } = cfg.vault.strategyConfig;
+
+  // 2. Evaluate entry condition + sign + submit trade via FlapPortal
+  // ... your execution logic here
+}
+
+setInterval(tick, 30_000); // poll every 30 s`;
+
+  const snippetDocker = `# ── docker-compose.yml ────────────────────────────────
+services:
+  outrive-agent:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./agent:/app
+    env_file: .env
+    command: node index.mjs
+    restart: unless-stopped
+
+# Deploy:
+#   docker compose up -d
+#
+# Logs:
+#   docker compose logs -f outrive-agent`;
 
   /* ── Render ── */
   return (
@@ -415,7 +408,7 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
                 Autonomous<br />Agent Vault.
               </h1>
               <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--out-muted)' }}>
-                Non-custodial · private key stays in your browser · agent signs trades independently.
+                Monitor your agent · configure strategy · deploy agent on your own VPS.
               </p>
             </div>
 
@@ -505,7 +498,7 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
           ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard label="Agent Address" value={vault?.agentAddress ? fmtAddr(vault.agentAddress) : '—'}
-                sub={vault?.pkHint ?? 'NO KEY LOADED'} />
+                sub={vault?.agentAddress ? 'REGISTERED ON-CHAIN' : 'NOT REGISTERED — SETUP VPS'} />
               <StatCard label="Status" value={vault?.status?.toUpperCase() ?? 'IDLE'}
                 accent={statusColor} sub={vault ? 'VAULT ACTIVE' : 'NOT CONFIGURED'} />
               <StatCard label="Total Trades" value={vault?.totalTrades?.toLocaleString() ?? '0'}
@@ -529,35 +522,8 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* LEFT — Private Key + Token + Strategy */}
+          {/* LEFT — Token + Strategy */}
           <div className="flex flex-col gap-6">
-            {/* Private Key */}
-            <div>
-              <SectionLabel><Lock size={9} style={{ display: 'inline', marginRight: 6 }} />Agent Private Key — session only, never stored</SectionLabel>
-              <div className="relative">
-                <input type={showPk ? 'text' : 'password'} value={privateKey}
-                  onChange={e => onPkChange(e.target.value)} placeholder="0x private key..."
-                  className="w-full px-3 py-2.5 text-[11px] pr-10 bg-transparent border outline-none"
-                  style={{ borderColor: agentDerived ? 'var(--out-ink)' : 'var(--out-ink-dim)', color: 'var(--out-text)', ...MONO }} />
-                <button onClick={() => setShowPk(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100 transition-opacity">
-                  {showPk ? <EyeOff size={12} color="var(--out-muted)" /> : <Eye size={12} color="var(--out-muted)" />}
-                </button>
-              </div>
-              {agentDerived ? (
-                <div className="mt-2 flex items-center gap-2 text-[10px]" style={{ color: 'var(--out-ink)' }}>
-                  <Check size={10} />
-                  <span>AGENT ADDRESS: {fmtAddr(agentDerived.address)}</span>
-                  <span style={{ color: 'var(--out-muted)' }}>· PK HINT: {agentDerived.hint}</span>
-                </div>
-              ) : privateKey.length > 0 ? (
-                <div className="mt-2 text-[10px]" style={{ color: 'var(--out-danger)' }}>INVALID PRIVATE KEY</div>
-              ) : null}
-              <div className="mt-2 text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
-                Key used client-side only to sign tx · clears on page refresh
-              </div>
-            </div>
-
             {/* Token */}
             <div>
               <SectionLabel>Target Token</SectionLabel>
@@ -825,12 +791,12 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
         </Sheet>
       </div>
 
-      {/* ════ OUT-AUT-05 — EXTERNAL INTEGRATION ════════════════════════ */}
+      {/* ════ OUT-AUT-05 — VPS AGENT SETUP ════════════════════════════ */}
       <Sheet dwgNo="OUT-AUT-05">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Code2 size={12} color="var(--out-ink)" />
-            <span className="text-[11px] uppercase tracking-[0.12em] font-bold" style={{ color: 'var(--out-ink)' }}>External Integration</span>
+            <Server size={12} color="var(--out-ink)" />
+            <span className="text-[11px] uppercase tracking-[0.12em] font-bold" style={{ color: 'var(--out-ink)' }}>VPS Agent Setup</span>
           </div>
           <a href={`${BASE_URL}/agent-skill-template.md`} download="agent-skill-template.md"
             className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
@@ -838,15 +804,19 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
             <Download size={10} /> SKILL.MD TEMPLATE
           </a>
         </div>
+        <p className="text-[10px] mb-5 leading-relaxed" style={{ color: 'var(--out-muted)' }}>
+          Run the agent on your own server. Your private key stays on your VPS — it is never entered here.
+          Generate an OTR key above, add it to your <code style={{ color: 'var(--out-ink)' }}>.env</code>, and start the agent loop below.
+        </p>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <CodeBlock lang="CLAUDE DESKTOP — MCP CONFIG" code={snippetMcp} onCopy={() => copyText(snippetMcp)} />
-          <CodeBlock lang="HERMES / OPENCLAW — REST"    code={snippetHermes} onCopy={() => copyText(snippetHermes)} />
-          <CodeBlock lang="CURL — CLI"                   code={snippetCurl} onCopy={() => copyText(snippetCurl)} />
+          <CodeBlock lang=".ENV — VPS CONFIG"       code={snippetEnv}    onCopy={() => copyText(snippetEnv)} />
+          <CodeBlock lang="AGENT LOOP — NODE.JS"    code={snippetAgent}  onCopy={() => copyText(snippetAgent)} />
+          <CodeBlock lang="DOCKER COMPOSE — DEPLOY" code={snippetDocker} onCopy={() => copyText(snippetDocker)} />
         </div>
-        <div className="mt-5 text-[10px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
-          All tools use the same REST endpoint. Any LLM agent with HTTP tool-calling support can control your vault —
-          pass your OTR key as a Bearer token. The <code style={{ color: 'var(--out-ink)' }}>execute</code> action
-          routes through your configured vault strategy and respects TP/SL limits.
+        <div className="mt-4 flex items-center gap-2 text-[9px] uppercase tracking-widest"
+          style={{ color: 'var(--out-muted)' }}>
+          <Terminal size={9} />
+          <span>Strategy config is read from this page · agent polls OUTRIVE API · private key stays on your VPS only</span>
         </div>
       </Sheet>
 
@@ -855,10 +825,10 @@ curl -X POST https://api.outrive.io/autonomous/execute \\
         style={{ border: '1px solid #e0902040', background: 'rgba(224,144,32,0.04)', color: 'var(--out-muted)' }}>
         <AlertTriangle size={12} style={{ color: '#e09020', flexShrink: 0, marginTop: 1 }} />
         <span>
-          <span style={{ color: '#e09020' }}>Non-custodial execution</span> — your private key never leaves the browser.
-          All on-chain trades are irreversible. Agent execution respects your TP/SL limits but cannot guarantee fills
-          during extreme volatility. Start with small <code style={{ color: 'var(--out-ink)' }}>budget_eth</code> values
-          before activating live trading.
+          <span style={{ color: '#e09020' }}>Non-custodial.</span> Your private key is configured only on your own VPS —
+          OUTRIVE never sees or stores it. This page shows monitor data and lets you update strategy;
+          the agent running on your server handles all signing and on-chain execution.
+          All trades are irreversible — start with small <code style={{ color: 'var(--out-ink)' }}>budget_eth</code> values.
         </span>
       </div>
     </div>
