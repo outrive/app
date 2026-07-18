@@ -222,13 +222,17 @@ export function DistributionPage() {
     <div className="flex flex-col gap-6 pb-16">
 
       {/* ════ HERO — no outer Sheet, free-breathing ════════════════════════ */}
-      <div style={{ border: '1px solid var(--out-ink)', background: 'var(--out-bg-sheet)' }}>
+      <div style={{ border: '1px solid var(--out-ink)', borderLeft: '3px solid #e0902080', background: 'var(--out-bg-sheet)' }}>
         <DwgBar dwgNo="OUT-DST-01" />
 
         <div className="px-6 sm:px-10 pt-8 pb-10">
           {/* breadcrumb */}
-          <div className="text-[9px] uppercase tracking-[0.16em] mb-6" style={{ color: 'var(--out-muted)', ...MONO }}>
-            / ACTIVITY / DISTRIBUTIONS /
+          <div className="flex items-center gap-3 text-[9px] uppercase tracking-[0.16em] mb-6" style={{ color: 'var(--out-muted)', ...MONO }}>
+            <span>/ ACTIVITY / DISTRIBUTIONS /</span>
+            <span className="px-1.5 py-px text-[9px] font-bold tracking-widest"
+              style={{ border: '1px solid #e0902060', color: '#e09020', background: '#0d0a05', ...MONO }}>
+              SOON
+            </span>
           </div>
 
           {/* title + countdown */}
