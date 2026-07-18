@@ -10,16 +10,17 @@ import {
   setObjectAclPolicy,
 } from './objectAcl';
 
-const REPLIT_SIDECAR_ENDPOINT = 'http://127.0.0.1:1106';
+const STORAGE_SIDECAR_URL = process.env.STORAGE_SIDECAR_URL ?? 'http://127.0.0.1:1106';
+const STORAGE_AUDIENCE    = process.env.STORAGE_AUDIENCE ?? 'outrive-storage';
 
 export const objectStorageClient = new Storage({
   credentials: {
-    audience: 'replit',
+    audience: STORAGE_AUDIENCE,
     subject_token_type: 'access_token',
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+    token_url: `${STORAGE_SIDECAR_URL}/token`,
     type: 'external_account',
     credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+      url: `${STORAGE_SIDECAR_URL}/credential`,
       format: {
         type: 'json',
         subject_token_field_name: 'access_token',
@@ -250,7 +251,7 @@ async function signObjectURL({
     expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
   };
   const response = await fetch(
-    `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
+    `${STORAGE_SIDECAR_URL}/object-storage/signed-object-url`,
     {
       method: 'POST',
       headers: {

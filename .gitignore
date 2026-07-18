@@ -12,7 +12,7 @@ node_modules
 .env.*
 !.env.example
 
-# Platform-specific (not for public repos)
+# Internal config (not for public repos)
 .replit
 .replitignore
 replit.md
