@@ -184,7 +184,7 @@ function NavBar({ view, setView }: { view: View; setView: (v: View) => void }) {
           DESKTOP  —  fixed left sidebar
       ══════════════════════════════════════════ */}
       <aside
-        className="hidden md:flex flex-col fixed top-12 left-0 bottom-0 z-40 w-44 overflow-y-auto no-scrollbar border-r font-mono text-[13px] uppercase tracking-widest"
+        className="hidden md:flex flex-col fixed top-12 left-0 bottom-0 z-40 w-52 overflow-y-auto no-scrollbar border-r font-mono text-[13px] uppercase tracking-widest"
         style={{ background: 'var(--out-bg)', borderColor: 'var(--out-ink-dim)' }}
       >
         <div className="px-3 pt-5 pb-1.5 text-[11px] tracking-widest" style={{ color: 'var(--out-muted)' }}>
@@ -2131,7 +2131,7 @@ export default function Home() {
       <NavBar view={view} setView={setView} />
 
       {/* Content — offset right on desktop to clear fixed sidebar */}
-      <div className="md:pl-44">
+      <div className="md:pl-52">
         <CalibrationBanner />
         <TickerStrip />
 
@@ -2163,7 +2163,7 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="mt-16 md:pl-44 border-t font-mono" style={{ borderColor: 'var(--out-ink-dim)', background: 'var(--out-bg)' }}>
+      <footer className="mt-16 md:pl-52 border-t font-mono" style={{ borderColor: 'var(--out-ink-dim)', background: 'var(--out-bg)' }}>
         <div className="max-w-[1400px] mx-auto px-4 py-8 flex flex-col gap-6">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             {/* Brand */}
