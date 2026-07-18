@@ -12,6 +12,7 @@ import chatRouter from "./chat.js";
 import creditsRouter from "./credits.js";
 import cliAuthRouter from "./cli-auth.js";
 import rwaRouter from "./rwa.js";
+import distributionsRouter from "./distributions.js";
 const router: IRouter = Router();
 
 router.use(healthRouter);
@@ -27,5 +28,6 @@ router.use(chatRouter);
 router.use(creditsRouter);
 router.use(cliAuthRouter);
 router.use(rwaRouter);
+router.use(distributionsRouter);
 
 export default router;
