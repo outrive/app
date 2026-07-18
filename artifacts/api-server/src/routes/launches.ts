@@ -20,7 +20,9 @@ const ZERO_PADDED  = '0x00000000000000000000000000000000000000000000000000000000
 let reconcilerRunning = false;
 
 const TX_HASH_RE  = /^0x[0-9a-f]{64}$/i;
-const ONE_DAY_MS  = 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;        // give up after 1 h — no real tx takes longer
+
+const VIRTUALS_BASE = 'https://api.virtuals.io/api';
 
 async function reconcilePendingLaunches(): Promise<void> {
   if (reconcilerRunning) return;
@@ -105,13 +107,13 @@ async function reconcilePendingLaunches(): Promise<void> {
         logger.info({ id: row.id, tokenAddress }, "reconciler: launch confirmed");
 
       } catch {
-        // Receipt not found yet — TX still in mempool; retry next interval.
-        // Only give up after 24 h with no tokenAddress and no receipt.
+        // Receipt not found yet — TX still pending or invalid.
+        // Give up after 1 h: no real Robinhood Chain tx stays unconfirmed that long.
         const ageMs = Date.now() - new Date(row.createdAt).getTime();
-        if (ageMs > ONE_DAY_MS) {
+        if (ageMs > ONE_HOUR_MS) {
           await db.update(launchesTable).set({ status: 'failed' }).where(eq(launchesTable.id, row.id));
           logger.warn({ id: row.id, ageH: Math.round(ageMs / 3_600_000) },
-            "reconciler: no receipt after 24h — marking failed");
+            "reconciler: no receipt after 1h — marking failed");
         }
       }
     }
@@ -123,6 +125,56 @@ async function reconcilePendingLaunches(): Promise<void> {
 // Run at startup, then every 30 s
 reconcilePendingLaunches().catch(() => {});
 setInterval(() => reconcilePendingLaunches().catch(() => {}), 30_000);
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   IMAGE ENRICHER — backfills imageUri for confirmed launches that have a
+   tokenAddress but no image yet. Fetches directly from Virtuals API and
+   persists to DB so the next GET /launches serves it immediately.
+───────────────────────────────────────────────────────────────────────────── */
+async function enrichMissingImages(): Promise<void> {
+  const rows = await db
+    .select()
+    .from(launchesTable)
+    .where(and(
+      eq(launchesTable.status, 'confirmed'),
+      isNotNull(launchesTable.tokenAddress),
+      isNull(launchesTable.imageUri),
+    ))
+    .limit(20);
+
+  for (const row of rows) {
+    if (!row.tokenAddress) continue;
+    try {
+      const p = new URLSearchParams();
+      p.set('pagination[pageSize]', '5');
+      p.set('filters[tokenAddress][$eqi]', row.tokenAddress);
+      const r = await fetch(`${VIRTUALS_BASE}/virtuals?${p}`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'OUTRIVE/1.0' },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!r.ok) continue;
+      const j = await r.json() as { data: Array<{ tokenAddress?: string; preToken?: string; image?: { url?: string } | null }> };
+      const addr = row.tokenAddress.toLowerCase();
+      const match = (j.data ?? []).find(item =>
+        (item.tokenAddress ?? '').toLowerCase() === addr ||
+        (item.preToken     ?? '').toLowerCase() === addr
+      );
+      if (match?.image?.url) {
+        await db.update(launchesTable)
+          .set({ imageUri: match.image.url })
+          .where(eq(launchesTable.id, row.id));
+        logger.info({ id: row.id, tokenAddress: row.tokenAddress }, 'image-enricher: imageUri saved');
+      }
+    } catch { /* silently skip — retry next cycle */ }
+    // 300 ms gap to avoid hammering Virtuals API
+    await new Promise(res => setTimeout(res, 300));
+  }
+}
+
+// Run image enricher 10 s after boot (give reconciler time to confirm first),
+// then every 5 min.
+setTimeout(() => enrichMissingImages().catch(() => {}), 10_000);
+setInterval(() => enrichMissingImages().catch(() => {}), 5 * 60_000);
 
 /* ─────────────────────────────────────────────────────────────────────────────
    ROUTES
