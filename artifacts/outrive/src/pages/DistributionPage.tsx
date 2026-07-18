@@ -67,17 +67,26 @@ interface AllocResp {
 }
 
 /* ── BarChart ──────────────────────────────────────────────────────────── */
+// Deterministic skeleton heights — no Math.random() in render (breaks React StrictMode).
+const SKELETON_HEIGHTS = [18,32,12,44,28,8,52,36,20,60,40,16,48,24,56,10,38,26,50,14];
+
 function BarChart({ data, H = 80 }: { data: number[]; H?: number }) {
-  const max = Math.max(...data, 0.000001);
   const W = 5, G = 3;
+  if (data.length === 0) {
+    return (
+      <div className="flex items-end opacity-[0.12]" style={{ height: H }}>
+        {SKELETON_HEIGHTS.map((h, i) => (
+          <div key={i} style={{
+            width: W, marginRight: G, flexShrink: 0,
+            height: Math.round((h / 60) * H),
+            background: 'var(--out-ink)', borderRadius: 1,
+          }} />
+        ))}
+      </div>
+    );
+  }
+  const max = Math.max(...data, 0.000001);
   const totalW = data.length * (W + G) - G;
-  if (data.length === 0) return (
-    <div className="h-[80px] flex items-end opacity-10">
-      {Array.from({ length: 20 }).map((_, i) => (
-        <div key={i} style={{ width: W, marginRight: G, height: Math.random() * H * 0.6 + 4, background: 'var(--out-ink)', borderRadius: 1 }} />
-      ))}
-    </div>
-  );
   return (
     <svg width={totalW} height={H} style={{ display: 'block' }}>
       {data.map((v, i) => {
