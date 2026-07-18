@@ -12,7 +12,7 @@
  *  6. Server derives wallet from session — never trusts client-supplied address
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useSignMessage } from 'wagmi';
 import {
@@ -172,8 +172,26 @@ export function AutonomousPage() {
   const { signMessageAsync } = useSignMessage();
   const qc = useQueryClient();
 
-  /* ── Auth state ── */
-  const [sessionToken,  setSessionToken]  = useState<string | null>(null);
+  /* ── Auth state — persisted in sessionStorage per wallet ── */
+  const storageKey = address ? `outrive_vault_token_${address.toLowerCase()}` : null;
+  const [sessionToken, _setSessionToken] = useState<string | null>(() => {
+    if (!address) return null;
+    return sessionStorage.getItem(`outrive_vault_token_${address.toLowerCase()}`);
+  });
+  const setSessionToken = useCallback((token: string | null) => {
+    _setSessionToken(token);
+    if (!storageKey) return;
+    if (token) sessionStorage.setItem(storageKey, token);
+    else        sessionStorage.removeItem(storageKey);
+  }, [storageKey]);
+
+  /* Restore token when wallet changes (e.g. switch accounts) */
+  useEffect(() => {
+    if (!address) { _setSessionToken(null); return; }
+    const saved = sessionStorage.getItem(`outrive_vault_token_${address.toLowerCase()}`);
+    _setSessionToken(saved);
+  }, [address]);
+
   const [authenticating, setAuthenticating] = useState(false);
   const [authError,      setAuthError]      = useState<string | null>(null);
 
@@ -265,6 +283,14 @@ export function AutonomousPage() {
 
   const vault = vaultData?.vault;
   const keys  = keysData?.keys ?? [];
+
+  /* Sync strategy form from vault data whenever vault loads */
+  useEffect(() => {
+    if (vault?.strategyConfig) {
+      setStrategy(cfg => ({ ...DEFAULT_STRATEGY, ...vault.strategyConfig, ...cfg }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault?.strategyConfig]);
 
   /* ── Vault mutations ── */
   const patchStrategy = useCallback((k: keyof StrategyConfig, v: string) => {
