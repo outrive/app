@@ -365,9 +365,12 @@ import { robinhoodChain } from "@outrive/chains";
 const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
 const client  = createWalletClient({ account, chain: robinhoodChain, transport: http() });
 
+// All OUTRIVE API routes are under /api/ — always include this prefix
+const OUTRIVE_BASE = process.env.OUTRIVE_API_URL; // e.g. https://api.outrive.io
+
 async function tick() {
-  // 1. Fetch your strategy config from OUTRIVE
-  const cfg = await fetch(\`\${process.env.OUTRIVE_API_URL}/autonomous/vault\`, {
+  // 1. Fetch strategy config — GET /api/autonomous/vault
+  const cfg = await fetch(\`\${OUTRIVE_BASE}/api/autonomous/vault\`, {
     headers: { Authorization: \`Bearer \${process.env.OUTRIVE_API_KEY}\` },
   }).then(r => r.json());
 
