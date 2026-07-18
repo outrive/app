@@ -30,6 +30,13 @@ export default function App() {
           showWalletLoginFirst: true,
         },
         loginMethods: ['wallet'],
+        walletList: [
+          'detected_wallets',   // injected wallets: MetaMask, Brave, Rabby, dll
+          'metamask',
+          'coinbase_wallet',
+          'rainbow',
+          'wallet_connect',
+        ],
         defaultChain: robinhoodMainnet,
         supportedChains: [robinhoodMainnet, robinhoodTestnet],
         embeddedWallets: {
