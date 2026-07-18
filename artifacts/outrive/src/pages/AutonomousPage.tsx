@@ -345,8 +345,17 @@ OUTRIVE_API_KEY=${apiKey}
 # Your main wallet address (read-only, for vault binding)
 WALLET_ADDRESS=${address ?? '0xYOUR_WALLET'}
 
-# OUTRIVE strategy endpoint
-OUTRIVE_API_URL=https://api.outrive.io`;
+# ── OUTRIVE API URL ──────────────────────────────────
+# Option A: custom domain (requires Cloudflare CNAME setup — see HOW TO tab)
+OUTRIVE_API_URL=https://api.outrive.io
+
+# Option B: use your Replit production URL directly (no custom domain needed)
+# OUTRIVE_API_URL=https://YOUR-APP.replit.app
+#
+# ⚠ The custom domain only works AFTER:
+#   1. You publish the app on Replit (Publish button, top right)
+#   2. You add api.outrive.io as a Custom Domain in Replit deployment settings
+#   3. You add a CNAME record in Cloudflare: api → YOUR-APP.replit.app`;
 
   const snippetAgent = `// ── agent/index.mjs — minimal agent loop ──────────────
 import { createWalletClient, http } from "viem";
