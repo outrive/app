@@ -411,7 +411,7 @@ services:
           <div className="flex items-center gap-3 text-[9px] uppercase tracking-[0.16em] mb-6" style={{ color: 'var(--out-muted)' }}>
             <span>/ APP / AUTONOMOUS /</span>
             <span className="px-1.5 py-px text-[9px] font-bold tracking-widest"
-              style={{ border: '1px solid #e0902060', color: '#e09020', background: '#0d0a05' }}>SOON</span>
+              style={{ border: '1px solid #8CB80E60', color: '#8CB80E', background: '#060c05' }}>LIVE</span>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
             <div>
