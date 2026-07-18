@@ -339,10 +339,10 @@ export function DistributionPage() {
       )}
 
       {/* ════ HISTORY + ACTIVITY two-column ══════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Distribution history — 3/5 */}
-        <div className="lg:col-span-3">
+        {/* Distribution history — 1/2 */}
+        <div>
           <Sheet dwgNo="OUT-DST-03">
             <div className="flex items-center gap-3 mb-5">
               <TrendingUp size={13} color="var(--out-ink)" />
@@ -422,8 +422,8 @@ export function DistributionPage() {
           </Sheet>
         </div>
 
-        {/* Fee activity — 2/5 */}
-        <div className="lg:col-span-2">
+        {/* Fee activity — 1/2 */}
+        <div>
           <Sheet dwgNo="OUT-DST-04">
             <div className="flex items-center gap-3 mb-5">
               <DollarSign size={13} color="var(--out-ink)" />
