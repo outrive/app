@@ -1578,13 +1578,21 @@ function StockHistory({ symbol, wallet }: { symbol: string; wallet?: string }) {
 }
 
 /* ─── Main page ──────────────────────────────────────────────────────────── */
-export function RwaPage() {
+export function RwaPage({ initialSymbol, initialSide }: { initialSymbol?: string; initialSide?: 'buy' | 'sell' } = {}) {
   const { address: wallet } = useAccount();
-  const [selected, setSelected] = useState<Quote>(CATALOGUE[0]);
-  const lastSym = useRef(CATALOGUE[0].symbol);
+  const [selected, setSelected] = useState<Quote>(() => {
+    if (initialSymbol) {
+      const match = CATALOGUE.find(q => q.symbol === initialSymbol.toUpperCase());
+      if (match) return match;
+    }
+    return CATALOGUE[0];
+  });
+  const lastSym = useRef(selected.symbol);
   const [rightTab, setRightTab] = useState<'order' | 'limits'>('order');
   type Prefill = { side: 'buy' | 'sell'; qty: string; qtyMode: 'eth' | 'shares' } | null;
-  const [orderPrefill, setOrderPrefill] = useState<Prefill>(null);
+  const [orderPrefill, setOrderPrefill] = useState<Prefill>(() =>
+    initialSide ? { side: initialSide, qty: '', qtyMode: 'eth' } : null
+  );
 
   /* ── YF + Blockscout quotes (60s, OHLCV data) */
   const { data, isLoading, refetch, dataUpdatedAt } = useQuery<{ quotes: Quote[]; updatedAt: string }>({

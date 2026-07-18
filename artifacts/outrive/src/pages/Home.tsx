@@ -368,7 +368,7 @@ function LaunchRow({ launch, explorerUrl }: { launch: Launch; explorerUrl?: stri
   );
 }
 
-function Dashboard({ walletAddress }: { walletAddress?: string }) {
+function Dashboard({ walletAddress, onTradeClick }: { walletAddress?: string; onTradeClick?: (symbol: string, side: 'buy' | 'sell') => void }) {
   const { data: launches, isLoading: launchesLoading, refetch: refetchLaunches } = useListLaunches(
     { walletAddress: walletAddress ?? '' },
     { query: { enabled: !!walletAddress, refetchInterval: 30_000 } as any },
@@ -646,7 +646,7 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
       {/* ═══════════════════════════════════════
           SHEET C — RWA PORTFOLIO & TRADE HISTORY
       ═══════════════════════════════════════ */}
-      <RwaPortfolioSheet walletAddress={walletAddress} />
+      <RwaPortfolioSheet walletAddress={walletAddress} onTradeClick={onTradeClick} />
 
       {/* ═══════════════════════════════════════
           SHEET D — SYSTEM STATUS
@@ -728,6 +728,35 @@ function Dashboard({ walletAddress }: { walletAddress?: string }) {
   );
 }
 
+/* ─── Price Sparkline ───────────────────────────────────────────────────── */
+function PriceSparkline({ symbol }: { symbol: string }) {
+  const { data } = useQuery<{ snapshots: Array<{ price: number; ts: number }> }>({
+    queryKey: ['rwa-price-history', symbol],
+    queryFn:  () => fetch(apiUrl(`/api/rwa/price-history/${symbol}`)).then(r => r.json()),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  const snaps = data?.snapshots ?? [];
+  if (snaps.length < 4) return <div style={{ width: 80, height: 24 }} />;
+  const prices = snaps.map(s => s.price);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const range = max - min || 1;
+  const W = 80, H = 24;
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * W;
+    const y = H - ((p - min) / range) * (H - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const isUp = prices[prices.length - 1] >= prices[0];
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible', display: 'block' }}>
+      <polyline points={pts} fill="none"
+        stroke={isUp ? '#7ecb3b' : '#e05050'}
+        strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /* ─── RWA Portfolio Sheet ────────────────────────────────────────────────── */
 type RwaTrade = {
   id: number; symbol: string; name: string; tokenAddress: string;
@@ -766,7 +795,7 @@ function RwaTokenLogo({ symbol }: { symbol: string }) {
     style={{ width: 22, height: 22, minWidth: 22, borderRadius: '50%', objectFit: 'cover', background: '#111' }} />;
 }
 
-function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
+function RwaPortfolioSheet({ walletAddress, onTradeClick }: { walletAddress?: string; onTradeClick?: (symbol: string, side: 'buy' | 'sell') => void }) {
   const { data, isLoading, refetch } = useQuery<{ trades: RwaTrade[] }>({
     queryKey: ['rwa-trades', walletAddress],
     queryFn: () => fetch(apiUrl(`/api/rwa/trades?wallet=${walletAddress}`)).then(r => r.json()),
@@ -790,26 +819,31 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
 
   const trades = data?.trades ?? [];
 
-  // Compute portfolio summary — track avgCost separately from net shares
-  const { totalBought, totalSold, positions } = React.useMemo(() => {
-    let totalBought = 0, totalSold = 0;
+  // Compute portfolio summary with realized P&L (average cost method, oldest-first)
+  const { realizedPnl, positions } = React.useMemo(() => {
+    let realizedPnl = 0;
+    const sorted = [...trades].reverse(); // oldest-first for correct avg-cost tracking
     const pos: Record<string, { shares: number; buyShares: number; buyUsd: number; name: string }> = {};
-    for (const t of trades) {
+    for (const t of sorted) {
       const shares = parseFloat(t.shares) || 0;
       const usd    = parseFloat(t.totalUsd) || 0;
       if (t.side === 'buy') {
-        totalBought += usd;
         pos[t.symbol] = pos[t.symbol] ?? { shares: 0, buyShares: 0, buyUsd: 0, name: t.name };
         pos[t.symbol].shares    += shares;
         pos[t.symbol].buyShares += shares;
         pos[t.symbol].buyUsd   += usd;
-      }
-      if (t.side === 'sell') {
-        totalSold += usd;
+      } else if (t.side === 'sell') {
+        if (pos[t.symbol] && pos[t.symbol].buyShares > 0) {
+          const avgCost      = pos[t.symbol].buyUsd / pos[t.symbol].buyShares;
+          const actualShares = Math.min(shares, pos[t.symbol].buyShares);
+          realizedPnl       += usd - avgCost * actualShares;
+          pos[t.symbol].buyUsd    -= avgCost * actualShares;
+          pos[t.symbol].buyShares -= actualShares;
+        }
         if (pos[t.symbol]) pos[t.symbol].shares -= shares;
       }
     }
-    return { totalBought, totalSold, positions: Object.entries(pos).filter(([, v]) => v.shares > 0.0001) };
+    return { realizedPnl, positions: Object.entries(pos).filter(([, v]) => v.shares > 0.0001) };
   }, [trades]);
 
   const agentTrades  = trades.filter(t => t.source === 'agent');
@@ -827,21 +861,40 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
         RWA PORTFOLIO OVERVIEW
       </div>
 
-      {/* ── Stats bar ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: 'TOTAL TRADES',   value: isLoading ? '—' : String(trades.length),                       sub: 'all time'              },
-          { label: 'OPEN POSITIONS', value: isLoading ? '—' : String(positions.length),                    sub: 'live holdings'         },
-          { label: 'TOTAL INVESTED', value: isLoading ? '—' : `${totalBought.toFixed(2)}`,                sub: 'cumulative buys'       },
-          { label: 'AGENT TRADES',   value: isLoading ? '—' : String(agentTrades.length),                  sub: 'autonomous'            },
-        ].map(s => (
-          <div key={s.label} className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-1">
-            <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{s.label}</div>
-            <div className="text-[22px] font-bold leading-none mt-1" style={{ color: 'var(--out-ink)' }}>{s.value}</div>
-            <div className="text-[9px] mt-1" style={{ color: 'var(--out-ink-dim)' }}>{s.sub}</div>
+      {/* ── Stats bar — portfolio value + P&L ── */}
+      {(() => {
+        const totalPortfolioValue = positions.reduce((sum, [sym, pos]) => {
+          const px = flapMap[sym] || 0;
+          return sum + (px > 0 ? px * pos.shares : 0);
+        }, 0);
+        const totalCostBasis = positions.reduce((sum, [, pos]) => {
+          const avg = pos.buyShares > 0 ? pos.buyUsd / pos.buyShares : 0;
+          return sum + avg * pos.shares;
+        }, 0);
+        const unrealizedPnl = totalPortfolioValue > 0 ? totalPortfolioValue - totalCostBasis : 0;
+        const totalReturn   = realizedPnl + unrealizedPnl;
+        const fmt = (n: number) => n >= 0 ? `+${n.toFixed(2)}` : `-${Math.abs(n).toFixed(2)}`;
+        type StatRow = { label: string; value: string; sub: string; pnl: number | null };
+        const stats: StatRow[] = [
+          { label: 'PORTFOLIO VALUE', value: isLoading ? '—' : totalPortfolioValue > 0 ? `${totalPortfolioValue.toFixed(2)}` : '—', sub: `${positions.length} position${positions.length !== 1 ? 's' : ''}`, pnl: null },
+          { label: 'UNREALIZED P&L',  value: isLoading ? '—' : unrealizedPnl !== 0 ? fmt(unrealizedPnl) : '—', sub: 'open holdings',         pnl: unrealizedPnl },
+          { label: 'REALIZED P&L',    value: isLoading ? '—' : realizedPnl   !== 0 ? fmt(realizedPnl)   : '—', sub: 'closed trades',          pnl: realizedPnl   },
+          { label: 'TOTAL RETURN',    value: isLoading ? '—' : totalReturn    !== 0 ? fmt(totalReturn)   : '—', sub: 'unrealized + realized',   pnl: totalReturn   },
+        ];
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {stats.map(s => (
+              <div key={s.label} className="border border-[var(--out-grid-major)] p-4 font-mono flex flex-col gap-1">
+                <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{s.label}</div>
+                <div className="text-[20px] font-bold leading-none mt-1" style={{
+                  color: s.pnl === null ? 'var(--out-ink)' : s.pnl >= 0 ? '#7ecb3b' : '#e05050',
+                }}>{s.value}</div>
+                <div className="text-[9px] mt-1" style={{ color: 'var(--out-ink-dim)' }}>{s.sub}</div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* ── Open positions ── */}
       {positions.length > 0 && (
@@ -870,11 +923,13 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
                         <div className="text-[10px] mt-0.5" style={{ color: 'var(--out-muted)' }}>{pos.name}</div>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="flex flex-col items-end gap-1">
                       <div className="text-[13px] font-bold" style={{ color: 'var(--out-ink)' }}>
                         {pos.shares.toFixed(4)}
                       </div>
                       <div className="text-[9px]" style={{ color: 'var(--out-muted)' }}>shares</div>
+                      {/* Sparkline */}
+                      <PriceSparkline symbol={sym} />
                     </div>
                   </div>
                   {/* Metrics grid */}
@@ -907,6 +962,23 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
                       </div>
                     )}
                   </div>
+                  {/* Quick trade buttons */}
+                  {onTradeClick && (
+                    <div className="flex gap-2 border-t pt-3" style={{ borderColor: 'var(--out-ink-dim)' }}>
+                      <button
+                        onClick={() => onTradeClick(sym, 'buy')}
+                        className="flex-1 py-1.5 text-[9px] font-bold uppercase tracking-widest border transition-all hover:opacity-80 active:scale-95"
+                        style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}>
+                        ▲ BUY
+                      </button>
+                      <button
+                        onClick={() => onTradeClick(sym, 'sell')}
+                        className="flex-1 py-1.5 text-[9px] font-bold uppercase tracking-widest border transition-all hover:opacity-80 active:scale-95"
+                        style={{ borderColor: '#e05050', color: '#e05050' }}>
+                        ▼ SELL
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -992,6 +1064,81 @@ function RwaPortfolioSheet({ walletAddress }: { walletAddress?: string }) {
         )}
       </div>
     </Sheet>
+  );
+}
+
+/* ─── RWA Portfolio Mini Widget ─────────────────────────────────────────── */
+function RwaPortfolioMini({ walletAddress, onNavigate }: { walletAddress?: string; onNavigate?: () => void }) {
+  const { data } = useQuery<{ trades: RwaTrade[] }>({
+    queryKey: ['rwa-trades', walletAddress],
+    queryFn:  () => fetch(apiUrl(`/api/rwa/trades?wallet=${walletAddress}`)).then(r => r.json()),
+    enabled:  !!walletAddress,
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  const { data: flapPrices } = useQuery<{ prices: Array<{ symbol: string; priceUsd: number }> }>({
+    queryKey: ['flap-prices-mini'],
+    queryFn:  () => fetch(apiUrl('/api/rwa/flap-prices')).then(r => r.json()),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+  const flapMap = React.useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of flapPrices?.prices ?? []) if (p.priceUsd > 0) m[p.symbol] = p.priceUsd;
+    return m;
+  }, [flapPrices]);
+  const trades = data?.trades ?? [];
+
+  const { totalPortfolioValue, unrealizedPnl, posCount } = React.useMemo(() => {
+    const sorted = [...trades].reverse();
+    const pos: Record<string, { shares: number; buyShares: number; buyUsd: number }> = {};
+    for (const t of sorted) {
+      const shares = parseFloat(t.shares) || 0;
+      const usd    = parseFloat(t.totalUsd) || 0;
+      if (t.side === 'buy') {
+        pos[t.symbol] = pos[t.symbol] ?? { shares: 0, buyShares: 0, buyUsd: 0 };
+        pos[t.symbol].shares += shares; pos[t.symbol].buyShares += shares; pos[t.symbol].buyUsd += usd;
+      } else if (t.side === 'sell' && pos[t.symbol]) {
+        const avg    = pos[t.symbol].buyShares > 0 ? pos[t.symbol].buyUsd / pos[t.symbol].buyShares : 0;
+        const actual = Math.min(shares, pos[t.symbol].buyShares);
+        pos[t.symbol].buyUsd -= avg * actual; pos[t.symbol].buyShares -= actual; pos[t.symbol].shares -= shares;
+      }
+    }
+    const open = Object.entries(pos).filter(([, v]) => v.shares > 0.0001);
+    const totalPortfolioValue = open.reduce((s, [sym, p]) => s + (flapMap[sym] || 0) * p.shares, 0);
+    const totalCost = open.reduce((s, [, p]) => {
+      const avg = p.buyShares > 0 ? p.buyUsd / p.buyShares : 0;
+      return s + avg * p.shares;
+    }, 0);
+    return { totalPortfolioValue, unrealizedPnl: totalPortfolioValue > 0 ? totalPortfolioValue - totalCost : 0, posCount: open.length };
+  }, [trades, flapMap]);
+
+  if (!walletAddress || trades.length === 0) return null;
+  const up = unrealizedPnl >= 0;
+  return (
+    <button onClick={onNavigate}
+      className="w-full border border-[var(--out-grid-major)] p-4 font-mono flex items-center justify-between gap-4 transition-colors hover:border-[var(--out-ink-dim)]"
+      style={{ background: '#060b0640', textAlign: 'left', cursor: onNavigate ? 'pointer' : 'default' }}>
+      <div className="flex flex-col gap-0.5">
+        <div className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>
+          RWA PORTFOLIO · {posCount} POSITION{posCount !== 1 ? 'S' : ''}
+        </div>
+        <div className="text-[22px] font-bold leading-tight" style={{ color: totalPortfolioValue > 0 ? 'var(--out-ink)' : 'var(--out-muted)' }}>
+          {totalPortfolioValue > 0 ? `${totalPortfolioValue.toFixed(2)}` : '—'}
+        </div>
+      </div>
+      <div className="flex items-center gap-4">
+        {unrealizedPnl !== 0 && (
+          <div className="text-right">
+            <div className="text-[9px] uppercase tracking-widest mb-0.5" style={{ color: 'var(--out-muted)' }}>UNREALIZED</div>
+            <div className="text-[14px] font-bold" style={{ color: up ? '#7ecb3b' : '#e05050' }}>
+              {up ? '+' : ''}${unrealizedPnl.toFixed(2)}
+            </div>
+          </div>
+        )}
+        <div className="text-[10px] shrink-0" style={{ color: 'var(--out-muted)' }}>→ DASHBOARD</div>
+      </div>
+    </button>
   );
 }
 
@@ -1816,6 +1963,33 @@ export default function Home() {
   const { isConnected, address } = useAccount();
   const [view, setView] = useState<View>('agent');
 
+  // ── RWA quick-trade pre-selection ──────────────────────────────────────────
+  const [rwaInitSymbol, setRwaInitSymbol] = React.useState<string | undefined>();
+  const [rwaInitSide,   setRwaInitSide]   = React.useState<'buy' | 'sell' | undefined>();
+  const [rwaInitKey,    setRwaInitKey]     = React.useState(0);
+
+  // ── Global triggered limit-orders poll (visible on every tab) ─────────────
+  const { data: triggeredData } = useQuery<{ orders: Array<{ id: number; symbol: string; side: string; targetPriceUsd: string }> }>({
+    queryKey: ['triggered-limit-orders', address],
+    queryFn:  async () => {
+      const r = await fetch(apiUrl(`/api/rwa/limit-orders?wallet=${address}`));
+      const j = await r.json() as { orders: Array<{ status: string } & Record<string, unknown>> };
+      return { orders: (j.orders ?? []).filter((o) => o.status === 'triggered') as any };
+    },
+    enabled:         !!address,
+    refetchInterval: 8_000,
+    staleTime:       5_000,
+  });
+  const triggeredOrders = triggeredData?.orders ?? [];
+
+  // Navigate to RWA tab with pre-selected asset + side
+  const handleTradeClick = React.useCallback((symbol: string, side: 'buy' | 'sell') => {
+    setRwaInitSymbol(symbol);
+    setRwaInitSide(side);
+    setRwaInitKey(k => k + 1);
+    setView('rwa');
+  }, []);
+
   // Scroll to top on every view change
   React.useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1860,7 +2034,7 @@ export default function Home() {
   const step3: StepState = !isConnected ? 'locked' : 'locked';
 
   const renderView = () => {
-    if (view === 'dashboard')    return <Dashboard walletAddress={address} />;
+    if (view === 'dashboard')    return <Dashboard walletAddress={address} onTradeClick={handleTradeClick} />;
     if (view === 'docs')         return <Docs />;
     if (view === 'howto')        return <HowTo />;
     if (view === 'cli')          return <CliDocsPage />;
@@ -1870,7 +2044,7 @@ export default function Home() {
     if (view === 'whitepaper')   return <WhitepaperPage />;
     if (view === 'launches')     return <LaunchesPage />;
     if (view === 'outrive')      return <OutrivePage />;
-    if (view === 'rwa')          return <RwaPage />;
+    if (view === 'rwa')          return <RwaPage key={rwaInitKey} initialSymbol={rwaInitSymbol} initialSide={rwaInitSide} />;
     if (view === 'autonomous')   return <AutonomousPage />;
 
     // market — full-width rich page
@@ -1940,6 +2114,9 @@ export default function Home() {
             </span>
           </div>
 
+          {/* RWA portfolio mini — visible from agent tab */}
+          <RwaPortfolioMini walletAddress={address} onNavigate={() => setView('dashboard')} />
+
           <ChatConsole />
         </div>
       </div>
@@ -1954,6 +2131,29 @@ export default function Home() {
       <div className="md:pl-44">
         <CalibrationBanner />
         <TickerStrip />
+
+        {/* ── Triggered limit orders — global banner, visible on any tab ── */}
+        {triggeredOrders.length > 0 && (
+          <div className="border-b flex items-center justify-between gap-3 px-4 py-2"
+            style={{ borderColor: '#e0902055', background: '#100c0335', fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Zap size={10} color="#e09020" style={{ flexShrink: 0 }} />
+              <span className="text-[10px] font-bold uppercase tracking-widest shrink-0" style={{ color: '#e09020' }}>
+                {triggeredOrders.length} LIMIT ORDER{triggeredOrders.length > 1 ? 'S' : ''} TRIGGERED
+              </span>
+              <span className="text-[10px] truncate hidden sm:block" style={{ color: 'var(--out-muted)' }}>
+                — {triggeredOrders.map(o => `${o.side === 'buy' ? '▲' : '▼'} ${o.symbol} @${parseFloat(o.targetPriceUsd).toFixed(2)}`).join(' · ')}
+              </span>
+            </div>
+            <button
+              onClick={() => setView('rwa')}
+              className="shrink-0 text-[9px] border px-3 py-1 font-bold uppercase tracking-widest transition-opacity hover:opacity-80"
+              style={{ borderColor: '#e09020', color: '#e09020' }}>
+              EXECUTE NOW →
+            </button>
+          </div>
+        )}
+
         <div className="pt-3 md:pt-4">
           {renderView()}
         </div>

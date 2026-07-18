@@ -613,6 +613,22 @@ const _flapPriceCache = new Map<string, { price: number; ts: number }>();
 let   _flapRefreshing = false;
 let   _flapLastRun    = 0;
 
+/* ── In-memory price history ring buffer (288 pts ≈ 48 min @ 10 s intervals) ──
+   Used by GET /rwa/price-history/:symbol for portfolio sparklines.           */
+const _priceHistory    = new Map<string, Array<{ price: number; ts: number }>>();
+const PRICE_HISTORY_MAX = 288;
+
+function appendPriceHistory(): void {
+  for (const [sym, info] of Object.entries(RWA_TOKENS)) {
+    const hit = _flapPriceCache.get(info.address.toLowerCase());
+    if (!hit) continue;
+    const arr = _priceHistory.get(sym) ?? [];
+    arr.push({ price: hit.price, ts: Date.now() });
+    if (arr.length > PRICE_HISTORY_MAX) arr.shift();
+    _priceHistory.set(sym, arr);
+  }
+}
+
 async function refreshFlapPrices(): Promise<void> {
   if (_flapRefreshing) return;
   _flapRefreshing = true;
@@ -644,6 +660,7 @@ async function refreshFlapPrices(): Promise<void> {
       await sleep(150); // 150ms gap — prevents RPC rate limiting
     }
     _flapLastRun = Date.now();
+    appendPriceHistory(); // snapshot for sparklines (in-memory ring buffer)
     console.info(`[rwa] flap-prices refreshed — ${_flapPriceCache.size} tokens`);
   } finally {
     _flapRefreshing = false;
@@ -778,6 +795,12 @@ async function checkLimitOrders(): Promise<void> {
     console.error('[rwa] limit order keeper error', err);
   }
 }
+
+/* ── GET /rwa/price-history/:symbol — sparkline ring-buffer ─────────────── */
+router.get('/rwa/price-history/:symbol', (req: Request, res: Response) => {
+  const sym = (req.params.symbol ?? '').toUpperCase();
+  res.json({ symbol: sym, snapshots: _priceHistory.get(sym) ?? [] });
+});
 
 /* ── Pre-warm on module load ─────────────────────────────────────────────── */
 refreshPrices().catch(() => {});           // Blockscout prices (fast, no rate-limit)
