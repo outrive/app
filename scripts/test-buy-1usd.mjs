@@ -8,9 +8,11 @@
  *   SYMBOL defaults to NVDA
  */
 
-import { createWalletClient, http } from '/home/runner/workspace/artifacts/api-server/node_modules/viem/_cjs/index.js';
-import { privateKeyToAccount } from '/home/runner/workspace/artifacts/api-server/node_modules/viem/_cjs/accounts/index.js';
-import { defineChain } from '/home/runner/workspace/artifacts/api-server/node_modules/viem/_cjs/utils/index.js';
+// Run from repo root: node scripts/test-buy-1usd.mjs [SYMBOL]
+// Requires viem in PATH — install globally or: cd artifacts/api-server && node ../scripts/test-buy-1usd.mjs
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { defineChain } from 'viem/utils';
 
 /* ── Chain definition ───────────────────────────────────────────────────── */
 const robinhoodChain = defineChain({
