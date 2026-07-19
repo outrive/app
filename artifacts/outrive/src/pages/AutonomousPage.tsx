@@ -18,7 +18,7 @@ import { useAccount, useSignMessage } from 'wagmi';
 import {
   Zap, Shield, Copy, Check, Plus, Trash2,
   Activity, Key, Code2, AlertTriangle, Cpu, RefreshCw,
-  Download, LogIn, Server, Terminal,
+  Download, LogIn, Server, Terminal, Bot, GitBranch, Layers,
 } from 'lucide-react';
 
 /* ── Constants ────────────────────────────────────────────────────────── */
@@ -456,6 +456,187 @@ services:
 # pm2 start index.mjs --name outrive-agent
 # pm2 save && pm2 startup
 # pm2 logs outrive-agent`;
+
+  /* ── Hermes AI Strategy snippets ── */
+  const snippetHermesTools = `"""
+OUTRIVE Hermes Tools
+Save as ~/outrive-agent/hermes_tools.py
+
+These three functions are loaded by Hermes Agent and give it
+read + write access to your OUTRIVE vault and live market data.
+Register with: hermes tool add ~/outrive-agent/hermes_tools.py
+"""
+import os, requests
+from dotenv import load_dotenv
+
+load_dotenv(os.path.expanduser("~/outrive-agent/.env"))
+
+API   = os.environ.get("OUTRIVE_API_URL", "https://api.outrive.io")
+TOKEN = os.environ.get("OUTRIVE_API_KEY")   # OTR-xxxxxxxxxx
+HDR   = {
+    "Authorization": f"Bearer {TOKEN}",
+    "Content-Type": "application/json",
+}
+
+def get_market_intel() -> dict:
+    """
+    Get current live RWA token prices, vault status, portfolio P&L,
+    and current strategy config from OUTRIVE.
+    Returns a summary string and full market + vault JSON.
+    """
+    r = requests.get(f"{API}/api/autonomous/market-intel", headers=HDR, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+def update_strategy(
+    token: str,
+    strategy: str,
+    budget_eth: str,
+    tp_pct: str   = "5",
+    sl_pct: str   = "3",
+    entry_type: str = "market",
+    status: str   = "running",
+) -> dict:
+    """
+    Update the OUTRIVE vault strategy configuration.
+
+    token      : RWA ticker — AAPL | NVDA | TSLA | GOOGL | META | MSFT
+                              AMZN | AMD | PLTR | ORCL | SPY | MU | SPCX
+    strategy   : dca | momentum | dip-buy | breakout | custom
+    budget_eth : ETH per trade cycle, e.g. '0.002'
+    tp_pct     : take-profit %, e.g. '5'  (close position at +5%)
+    sl_pct     : stop-loss   %, e.g. '3'  (close position at -3%)
+    entry_type : market | limit | dip | breakout
+    status     : running | paused | idle
+    """
+    r = requests.post(
+        f"{API}/api/autonomous/vault",
+        headers=HDR, timeout=10,
+        json={
+            "status": status,
+            "strategyConfig": {
+                "token":          token,
+                "strategy":       strategy,
+                "budget_eth":     budget_eth,
+                "tp_pct":         tp_pct,
+                "sl_pct":         sl_pct,
+                "entry_type":     entry_type,
+                "max_concurrent": "1",
+            },
+        },
+    )
+    r.raise_for_status()
+    return r.json()
+
+def get_vault_status() -> dict:
+    """Get current vault configuration, agent status, and performance stats."""
+    r = requests.get(f"{API}/api/autonomous/vault", headers=HDR, timeout=10)
+    r.raise_for_status()
+    return r.json()`;
+
+  const snippetHermesConfig = `# ~/.hermes/config.yaml
+# Hermes AI Strategy — OUTRIVE integration
+#
+# Run "hermes setup --portal" for interactive setup, or fill this manually.
+# Full provider list: https://hermes-agent.nousresearch.com/docs/integrations/providers
+
+# ── LLM provider (pick one) ──────────────────────────────────────────
+# Option A: Nous Portal (subscription, includes Hermes-3 models)
+# model: nous/hermes-3-llama-3.1-70b
+
+# Option B: OpenRouter (pay-per-token, wide model choice)
+model: openrouter/nousresearch/hermes-3-llama-3.1-70b:free
+
+# Option C: Anthropic (high quality, slightly higher cost)
+# model: anthropic/claude-sonnet-4-5
+
+# Option D: Local model via Ollama (free, needs GPU or fast CPU)
+# model: ollama/nous-hermes-3
+
+# ── OUTRIVE custom tools ──────────────────────────────────────────────
+tools:
+  custom:
+    - path: ~/outrive-agent/hermes_tools.py
+
+# ── Environment (OUTRIVE_API_KEY loaded from .env by hermes_tools.py) ─
+# No secrets needed here — the tools file handles auth.`;
+
+  const snippetHermesScheduler = `"""
+OUTRIVE Hermes Strategy Scheduler
+Save as ~/outrive-agent/hermes_scheduler.py
+
+Runs a Hermes AI analysis cycle on a fixed interval.
+Hermes reads market intel, reasons with its LLM, and
+updates vault strategy parameters if conditions change.
+
+Run with PM2:
+  pm2 start hermes_scheduler.py \\
+    --name hermes-strategy \\
+    --interpreter python3
+  pm2 save
+  pm2 logs hermes-strategy
+"""
+import subprocess, time, logging
+from datetime import datetime
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+# How often Hermes runs an analysis cycle (seconds)
+INTERVAL = 3600   # 1 hour — adjust to your preference
+
+HERMES_PROMPT = """
+You are an autonomous RWA trading strategy advisor for OUTRIVE.
+
+Your task each cycle:
+1. Call get_market_intel() — read live prices, vault status, current P&L
+2. Analyze conditions for the configured target token
+3. Decide whether the current strategy parameters are still optimal
+4. If adjustment is warranted, call update_strategy() with improved params
+5. Briefly explain your reasoning and what you changed (or why you kept it)
+
+Hard rules you must follow:
+- Never set budget_eth above 0.01 ETH without explicit user instruction
+- Always set a stop-loss (sl_pct) between 2 and 10
+- Use dca for sideways / unclear markets, momentum for strong uptrends
+- If total P&L is below -5% of initial budget, set status to 'paused'
+  and explain the pause in your reasoning
+- Make conservative incremental changes — not full strategy overhauls
+- All token tickers must be uppercase (AAPL not aapl)
+
+Begin the analysis cycle now.
+"""
+
+def run_cycle():
+    logging.info("Starting Hermes strategy analysis cycle...")
+    try:
+        result = subprocess.run(
+            ["hermes", "run", "--once", HERMES_PROMPT],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            output = (result.stdout or "").strip()
+            logging.info("Cycle complete.")
+            # Print last 600 chars of Hermes reasoning to logs
+            if output:
+                logging.info("Hermes output (tail):\\n%s", output[-600:])
+        else:
+            logging.error("Hermes returned non-zero exit: %s", result.stderr[-300:])
+    except subprocess.TimeoutExpired:
+        logging.error("Hermes cycle timed out after 120s — skipping")
+    except FileNotFoundError:
+        logging.error("hermes binary not found — run: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash")
+
+if __name__ == "__main__":
+    logging.info("OUTRIVE Hermes Scheduler started | interval=%ds", INTERVAL)
+    while True:
+        run_cycle()
+        next_run = datetime.now().strftime("%H:%M:%S")
+        logging.info("Next cycle in %d min | sleeping...", INTERVAL // 60)
+        time.sleep(INTERVAL)`;
 
   /* ── Render ── */
   return (
@@ -948,6 +1129,160 @@ services:
           style={{ color: 'var(--out-muted)' }}>
           <Terminal size={9} />
           <span>Strategy config is read from this page · agent polls OUTRIVE API · private key stays on your VPS only</span>
+        </div>
+      </Sheet>
+
+      {/* ════ OUT-AUT-06 — HERMES AI STRATEGY ════════════════════════════ */}
+      <Sheet dwgNo="OUT-AUT-06">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Bot size={12} color="var(--out-ink)" />
+            <span className="text-[11px] uppercase tracking-[0.12em] font-bold" style={{ color: 'var(--out-ink)' }}>
+              Hermes AI Strategy
+            </span>
+            <span className="ml-2 px-2 py-px text-[9px] font-bold uppercase tracking-widest"
+              style={{ border: '1px solid #4a6aff60', color: '#7090ff', background: '#04060f' }}>
+              OPTIONAL LAYER
+            </span>
+          </div>
+          <a href="https://hermes-agent.nousresearch.com/docs/" target="_blank" rel="noreferrer"
+            className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
+            style={{ color: 'var(--out-ink)' }}>
+            <Code2 size={10} /> HERMES DOCS ↗
+          </a>
+        </div>
+
+        {/* What is this */}
+        <div className="mb-8 p-5" style={{ border: '1px solid var(--out-ink-dim)', background: '#050a05' }}>
+          <div className="text-[9px] uppercase tracking-[0.16em] mb-3" style={{ color: 'var(--out-muted)' }}>
+            WHAT IS HERMES AI STRATEGY
+          </div>
+          <p className="text-[11px] leading-relaxed mb-4" style={{ color: 'var(--out-text)' }}>
+            Hermes Agent (NousResearch) is an open-source autonomous AI agent that runs on your VPS.
+            When connected to OUTRIVE, it acts as an intelligent strategy orchestrator — it reads live
+            market data and your portfolio state, reasons about conditions using an LLM, and updates
+            your vault strategy parameters automatically.
+          </p>
+          <p className="text-[11px] leading-relaxed" style={{ color: 'var(--out-text)' }}>
+            Your existing trading agent (<code style={{ color: 'var(--out-ink)' }}>index.mjs</code>) keeps running
+            unchanged — Hermes only writes to the vault config. Zero disruption to the current flow.
+          </p>
+
+          {/* Architecture diagram */}
+          <div className="mt-5 p-4" style={{ background: '#030703', border: '1px solid var(--out-ink-dim)' }}>
+            <div className="text-[9px] uppercase tracking-widest mb-3" style={{ color: 'var(--out-muted)' }}>
+              ARCHITECTURE — HOW IT FITS
+            </div>
+            <div className="flex flex-col gap-2 text-[10px]" style={{ ...MONO }}>
+              {[
+                { label: 'HERMES AGENT',      desc: 'Reads market intel → reasons with LLM → updates strategy', color: '#7090ff', icon: <Bot size={9} /> },
+                { label: '       ↓ writes vault config', desc: '', color: 'var(--out-muted)', icon: null },
+                { label: 'OUTRIVE API',        desc: 'Stores vault config — /api/autonomous/market-intel', color: 'var(--out-ink)', icon: <Layers size={9} /> },
+                { label: '       ↓ reads vault config', desc: '', color: 'var(--out-muted)', icon: null },
+                { label: 'index.mjs (VPS)',    desc: 'Executes trades on Robinhood Chain (unchanged)', color: 'var(--out-ink)', icon: <Server size={9} /> },
+                { label: '       ↓ signs + broadcasts', desc: '', color: 'var(--out-muted)', icon: null },
+                { label: 'ROBINHOOD CHAIN',   desc: 'On-chain settlement (unchanged)', color: 'var(--out-ink-dim)', icon: <GitBranch size={9} /> },
+              ].map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  {row.icon && <span style={{ color: row.color, flexShrink: 0 }}>{row.icon}</span>}
+                  {!row.icon && <span className="w-[9px] shrink-0" />}
+                  <span style={{ color: row.color }}>{row.label}</span>
+                  {row.desc && <span className="text-[9px]" style={{ color: 'var(--out-muted)' }}>— {row.desc}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Setup steps */}
+        <div className="mb-8">
+          <div className="text-[9px] uppercase tracking-[0.16em] mb-4" style={{ color: 'var(--out-muted)', ...MONO }}>
+            SETUP GUIDE — STEPS 01 – 06
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {([
+              {
+                n: '01', title: 'INSTALL HERMES ON YOUR VPS',
+                body: 'SSH into the same VPS running index.mjs. Install Hermes Agent with the one-line installer. Requires Python 3.10+ (usually pre-installed on Ubuntu 22.04).',
+                cmd: '# Install Hermes Agent (NousResearch)\ncurl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash\n\n# Verify installation\nhermes --version',
+              },
+              {
+                n: '02', title: 'INSTALL PYTHON REQUESTS',
+                body: 'The OUTRIVE tools file uses the requests library to call the OUTRIVE API. Install it in your Python environment.',
+                cmd: 'pip3 install requests python-dotenv\n\n# Or with pip if pip3 is not aliased\npip install requests python-dotenv',
+              },
+              {
+                n: '03', title: 'CREATE OUTRIVE TOOLS FILE',
+                body: 'Create the OUTRIVE tools file at ~/outrive-agent/hermes_tools.py. Copy the full HERMES TOOLS snippet below into this file. These three functions are what Hermes calls to interact with OUTRIVE.',
+                cmd: 'nano ~/outrive-agent/hermes_tools.py\n# Paste the HERMES TOOLS snippet below\n# Save with Ctrl+O, exit with Ctrl+X',
+              },
+              {
+                n: '04', title: 'CONFIGURE HERMES',
+                body: 'Run Hermes setup wizard or manually create ~/.hermes/config.yaml. Copy the HERMES CONFIG snippet below. You need an LLM provider — OpenRouter with Hermes-3 is recommended (free tier available).',
+                cmd: '# Interactive setup (easiest)\nhermes setup --portal\n\n# Or manually create config\nmkdir -p ~/.hermes\nnano ~/.hermes/config.yaml\n# Paste HERMES CONFIG snippet below',
+              },
+              {
+                n: '05', title: 'ADD OTR KEY TO ENV',
+                body: 'Add your OUTRIVE OTR key to your .env file (the same one used by index.mjs). Hermes reads this via python-dotenv in the tools file.',
+                cmd: '# Add to ~/outrive-agent/.env (same file as index.mjs)\necho "OUTRIVE_API_URL=https://api.outrive.io" >> ~/outrive-agent/.env\n\n# OUTRIVE_API_KEY should already be there from index.mjs setup\n# Verify it is present:\ncat ~/outrive-agent/.env | grep OUTRIVE',
+              },
+              {
+                n: '06', title: 'RUN THE SCHEDULER',
+                body: 'Copy the HERMES SCHEDULER snippet to hermes_scheduler.py and run it with PM2. It triggers a Hermes analysis cycle every hour — Hermes reads market data, reasons with the LLM, and updates vault strategy if conditions warrant it.',
+                cmd: 'nano ~/outrive-agent/hermes_scheduler.py\n# Paste HERMES SCHEDULER snippet below\n\n# Run with PM2 (keeps it alive on reboot)\npm2 start hermes_scheduler.py \\\n  --name hermes-strategy \\\n  --interpreter python3\npm2 save\n\n# Check live output\npm2 logs hermes-strategy',
+              },
+            ] as { n: string; title: string; body: string; cmd: string }[]).map(s => (
+              <div key={s.n} className="flex flex-col gap-2 p-4 border"
+                style={{ borderColor: '#4a6aff40', background: '#04060f' }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[20px] font-bold leading-none" style={{ color: '#7090ff', ...MONO }}>{s.n}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#7090ff' }}>{s.title}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</p>
+                <pre className="mt-1 p-3 text-[10px] leading-relaxed overflow-x-auto whitespace-pre"
+                  style={{ background: '#020508', border: '1px solid #4a6aff30', color: '#a0b8ff', ...MONO }}>
+                  {s.cmd}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Code snippets */}
+        <div className="text-[9px] uppercase tracking-[0.16em] mb-4" style={{ color: 'var(--out-muted)', ...MONO }}>
+          REFERENCE FILES — COPY TO YOUR VPS
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <CodeBlock
+            lang="HERMES TOOLS — hermes_tools.py"
+            onCopy={() => copyText(snippetHermesTools)}
+            code={snippetHermesTools}
+          />
+          <CodeBlock
+            lang="HERMES CONFIG — ~/.hermes/config.yaml"
+            onCopy={() => copyText(snippetHermesConfig)}
+            code={snippetHermesConfig}
+          />
+          <CodeBlock
+            lang="HERMES SCHEDULER — hermes_scheduler.py"
+            onCopy={() => copyText(snippetHermesScheduler)}
+            code={snippetHermesScheduler}
+          />
+        </div>
+
+        {/* What it DOES NOT change */}
+        <div className="mt-6 p-4 flex items-start gap-3"
+          style={{ border: '1px solid #4a6aff40', background: '#04060f' }}>
+          <Bot size={11} style={{ color: '#7090ff', flexShrink: 0, marginTop: 1 }} />
+          <div className="text-[11px] leading-relaxed" style={{ color: 'var(--out-muted)' }}>
+            <span style={{ color: '#7090ff' }}>Non-disruptive by design.</span>{' '}
+            Hermes only writes to <code style={{ color: '#7090ff' }}>strategyConfig</code> via{' '}
+            <code style={{ color: '#7090ff' }}>POST /api/autonomous/vault</code>.{' '}
+            It does not touch <code style={{ color: 'var(--out-ink)' }}>index.mjs</code>, does not sign transactions,
+            does not hold your private key, and does not interfere with the trading loop.
+            You can disable Hermes at any time by stopping <code style={{ color: '#7090ff' }}>hermes-strategy</code> in PM2
+            — the trading agent continues running with the last saved config.
+          </div>
         </div>
       </Sheet>
 

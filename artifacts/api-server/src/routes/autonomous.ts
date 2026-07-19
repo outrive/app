@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import {
   createNonce, redeemNonce, buildSignMessage, createSession, getSessionWallet,
 } from "../lib/autonomous-sessions.js";
+import { RWA_TOKENS, getCachedFlapPrices } from "./rwa.js";
 
 const router: IRouter = Router();
 
@@ -364,6 +365,88 @@ router.delete("/autonomous/api-keys/:id", requireAutonomousAuth, async (req: Req
     res.json({ ok: true });
   } catch (err) {
     req.log?.error({ err }, "autonomous/api-keys revoke error");
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+/* ──────────────────────────────────────────────────────────────────────
+   PROTECTED — GET /api/autonomous/market-intel
+   Hermes AI Strategy orchestrator endpoint.
+   Returns current vault state + all RWA market prices in one call.
+   Auth: OTR key OR session token — same middleware as other routes.
+────────────────────────────────────────────────────────────────────── */
+router.get("/autonomous/market-intel", requireAutonomousAuth, async (req: Request, res: Response): Promise<void> => {
+  const wallet = (req as Request & { authedWallet: string }).authedWallet;
+
+  try {
+    /* ── 1. Vault state ── */
+    const vaultRes = await pool.query<{
+      agent_address: string | null;
+      status: string;
+      strategy_config: string | null;
+      total_trades: number;
+      total_pnl_usd: string;
+      updated_at: Date;
+    }>(
+      `SELECT agent_address, status, strategy_config, total_trades, total_pnl_usd, updated_at
+       FROM agent_vaults WHERE wallet_address = $1`,
+      [wallet],
+    );
+    const v = vaultRes.rows[0] ?? null;
+    const strategyConfig = v?.strategy_config ? JSON.parse(v.strategy_config) : null;
+
+    /* ── 2. RWA market prices from in-memory flap cache ── */
+    const cachedPrices = getCachedFlapPrices();
+    const market: Record<string, { priceUsd: number; tokenAddress: string; name: string; priceAgeMs: number }> = {};
+    for (const [sym, info] of Object.entries(RWA_TOKENS)) {
+      const hit = cachedPrices[sym];
+      if (hit) {
+        market[sym] = {
+          priceUsd:     hit.price,
+          tokenAddress: info.address,
+          name:         info.name,
+          priceAgeMs:   Date.now() - hit.ts,
+        };
+      }
+    }
+
+    /* ── 3. Target token current price ── */
+    const targetToken: string | null = strategyConfig?.token ?? null;
+    const targetPrice: number | null = targetToken ? (market[targetToken]?.priceUsd ?? null) : null;
+
+    /* ── 4. Human-readable summary for the LLM context window ── */
+    const topPrices = Object.entries(market)
+      .slice(0, 8)
+      .map(([sym, d]) => `${sym}=${d.priceUsd.toFixed(2)}`)
+      .join(", ");
+
+    const summary = v
+      ? `Vault status: ${v.status}. Strategy: ${strategyConfig?.strategy ?? "not set"} on ${targetToken ?? "no token"}. ` +
+        `Budget: ${strategyConfig?.budget_eth ?? "?"} ETH/trade. ` +
+        `TP: +${strategyConfig?.tp_pct ?? "?"}% / SL: -${strategyConfig?.sl_pct ?? "?"}%. ` +
+        `Target price: ${targetPrice != null ? "$" + targetPrice.toFixed(2) : "N/A"}. ` +
+        `Total trades: ${v.total_trades}. Total P&L: ${parseFloat(v.total_pnl_usd).toFixed(2)}. ` +
+        `Top market prices: ${topPrices}.`
+      : "No vault configured. Visit outrive.io to set up the vault first.";
+
+    res.json({
+      timestamp:   new Date().toISOString(),
+      vault:       v ? {
+        agentAddress:   v.agent_address,
+        status:         v.status,
+        strategyConfig,
+        totalTrades:    v.total_trades,
+        totalPnlUsd:    parseFloat(v.total_pnl_usd),
+        updatedAt:      v.updated_at,
+      } : null,
+      market,
+      targetToken,
+      targetPrice,
+      tokenCount:  Object.keys(market).length,
+      summary,
+    });
+  } catch (err) {
+    req.log?.error({ err }, "autonomous/market-intel error");
     res.status(500).json({ error: "Internal error" });
   }
 });

@@ -1296,6 +1296,7 @@ function Docs() {
               { method: 'GET',  path: '/api/autonomous/api-keys',     desc: 'List active OTR API keys for the authenticated wallet (Bearer required)' },
               { method: 'POST', path: '/api/autonomous/api-keys',     desc: 'Generate a new OTR key — returns full key once, stores SHA-256 hash only' },
               { method: 'DELETE', path: '/api/autonomous/api-keys/:id', desc: 'Revoke an OTR key by id — must be owned by the authenticated wallet' },
+              { method: 'GET',  path: '/api/autonomous/market-intel',  desc: 'Hermes AI — vault state + live RWA prices in one call (OTR key auth); used by Hermes strategy orchestrator' },
             ].map((r, i) => <Row key={i} r={r} />)}
           </div>
 

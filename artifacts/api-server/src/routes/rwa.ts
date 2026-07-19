@@ -809,4 +809,14 @@ setTimeout(() => refreshFlapPrices().catch(() => {}), 2_000); // FlapPortal pric
 // Check limit orders every 10s after price data is fresh
 setInterval(() => checkLimitOrders().catch(() => {}), 10_000);
 
+/* ── Exported helper — used by autonomous market-intel route ── */
+export function getCachedFlapPrices(): Record<string, { price: number; ts: number }> {
+  const out: Record<string, { price: number; ts: number }> = {};
+  for (const [sym, info] of Object.entries(RWA_TOKENS)) {
+    const hit = _flapPriceCache.get(info.address.toLowerCase());
+    if (hit) out[sym] = hit;
+  }
+  return out;
+}
+
 export default router;
