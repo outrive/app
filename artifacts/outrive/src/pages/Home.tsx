@@ -1384,6 +1384,100 @@ function Docs() {
             </div>
           </div>
 
+          {/* 10 Hermes AI Integration */}
+          <div>
+            <SectionHead n="10" t="HERMES AI STRATEGY — INTEGRATION GUIDE" />
+            <p className="text-[11px] leading-relaxed max-w-3xl mb-4" style={{ color: 'var(--out-text)' }}>
+              Add an autonomous AI strategy layer on top of your OUTRIVE vault.{' '}
+              <span style={{ color: 'var(--out-ink)' }}>Hermes</span> reads live market data every hour,
+              reasons with an LLM, and updates your vault strategy config automatically.
+              Your existing trading agent (<code style={{ color: 'var(--out-ink)' }}>index.mjs</code>) keeps running unchanged.
+            </p>
+
+            {/* Architecture */}
+            <div className="border p-4 mb-5 font-mono text-[11px] leading-loose" style={{ borderColor: 'var(--out-grid-major)', color: 'var(--out-text)', background: 'var(--out-surface)' }}>
+              <div style={{ color: 'var(--out-muted)' }}>// flow (both processes run simultaneously on your VPS)</div>
+              <div className="mt-1"><span style={{ color: 'var(--out-ink)' }}>Hermes</span> (every 1 hour)</div>
+              <div className="pl-4">→ GET /api/autonomous/market-intel &nbsp;&nbsp;<span style={{ color: 'var(--out-muted)' }}>reads live RWA prices + vault state</span></div>
+              <div className="pl-4">→ LLM reasoning &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style={{ color: 'var(--out-muted)' }}>analyzes conditions, decides adjustments</span></div>
+              <div className="pl-4">→ POST /api/autonomous/vault &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style={{ color: 'var(--out-muted)' }}>writes updated strategy config</span></div>
+              <div className="mt-1"><span style={{ color: 'var(--out-ink)' }}>index.mjs</span> (every 30 seconds, unchanged)</div>
+              <div className="pl-4">→ GET /api/autonomous/vault &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style={{ color: 'var(--out-muted)' }}>reads strategy config, executes trades</span></div>
+            </div>
+
+            {/* Steps */}
+            <div className="flex flex-col gap-3 mb-5">
+              {[
+                {
+                  n: '01', title: 'GET OPENROUTER API KEY',
+                  body: 'Sign up at openrouter.ai → Keys → Create Key. Add $1 minimum credit (required for tool-calling models). Cost per Hermes cycle is ~$0.0002.',
+                },
+                {
+                  n: '02', title: 'TEST MARKET INTEL ENDPOINT',
+                  body: 'curl -s https://api.outrive.io/api/autonomous/market-intel -H "Authorization: Bearer OTR-your-key-here" | python3 -m json.tool',
+                },
+                {
+                  n: '03', title: 'INSTALL PYTHON DEPENDENCIES',
+                  body: 'cd ~/outrive-agent && python3 -m venv venv && source venv/bin/activate && pip install requests openai python-dotenv',
+                },
+                {
+                  n: '04', title: 'ADD OPENROUTER KEY TO .ENV',
+                  body: 'Append OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx to your existing ~/outrive-agent/.env file.',
+                },
+                {
+                  n: '05', title: 'CREATE hermes_tools.py',
+                  body: 'Contains get_market_intel(), update_strategy(), and get_vault_status() — the three functions Hermes calls against the OUTRIVE API.',
+                },
+                {
+                  n: '06', title: 'CREATE hermes_orchestrator.py',
+                  body: 'The main loop. Uses openai/gpt-4o-mini via OpenRouter with tool-calling. Runs one cycle then exits (--once) or loops on an interval (default 3600s).',
+                },
+                {
+                  n: '07', title: 'TEST ONE CYCLE',
+                  body: 'source venv/bin/activate && python3 hermes_orchestrator.py --once — you should see [HERMES DECISION] with a market analysis.',
+                },
+                {
+                  n: '08', title: 'RUN PERMANENTLY WITH PM2',
+                  body: 'npm install -g pm2 && pm2 start ~/outrive-agent/venv/bin/python3 --name hermes-strategy -- ~/outrive-agent/hermes_orchestrator.py && pm2 save && pm2 startup',
+                },
+              ].map(s => (
+                <div key={s.n} className="flex gap-4 border-b pb-3" style={{ borderColor: 'var(--out-grid-major)' }}>
+                  <span className="shrink-0 text-[10px] w-6 pt-0.5 uppercase tracking-widest" style={{ color: 'var(--out-muted)' }}>{s.n}</span>
+                  <div>
+                    <div className="text-[12px] uppercase tracking-widest mb-1" style={{ color: 'var(--out-ink)' }}>{s.title}</div>
+                    <div className="font-mono text-[11px] leading-relaxed" style={{ color: 'var(--out-text)' }}>{s.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Supported models */}
+            <div className="mb-5">
+              <div className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--out-muted)' }}>RECOMMENDED MODELS (OpenRouter)</div>
+              {[
+                { k: 'openai/gpt-4o-mini',                        v: '~$0.0002/cycle · best tool-calling reliability · recommended' },
+                { k: 'anthropic/claude-3-haiku-20240307',          v: '~$0.0003/cycle · fast, accurate reasoning' },
+                { k: 'meta-llama/llama-3.3-70b-instruct:free',     v: 'free tier · supports tools · rate-limited, add credit to remove limits' },
+              ].map(r => (
+                <div key={r.k} className="flex gap-2 items-baseline py-1.5 border-b" style={{ borderColor: 'var(--out-grid-major)' }}>
+                  <code className="shrink-0 text-[10px]" style={{ color: 'var(--out-ink)' }}>{r.k}</code>
+                  <span className="text-[11px]" style={{ color: 'var(--out-muted)' }}>{r.v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Download button */}
+            <a
+              href="https://api.outrive.io/docs/hermes-integration.md"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 border px-4 py-2 text-[11px] uppercase tracking-widest transition-opacity hover:opacity-70"
+              style={{ borderColor: 'var(--out-ink)', color: 'var(--out-ink)' }}
+            >
+              ↓ DOWNLOAD FULL INTEGRATION GUIDE (.MD)
+            </a>
+          </div>
+
         </div>
       </Sheet>
     </div>
