@@ -41,7 +41,7 @@ app.get("/api/cli/outrive-cli.mjs", (_req, res) => {
 app.use("/api", router);
 
 // Serve static docs
-const publicDir = join(__dirname, "../../public");
+const publicDir = join(__dirname, "../public");
 app.use(express.static(publicDir));
 
 // Boot-time calibration check + signer status log + indexer start (non-blocking)
