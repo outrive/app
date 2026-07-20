@@ -132,6 +132,448 @@ Wallet-authenticated CLI for terminal-based access to OUTRIVE.
 
 ---
 
+### ElizaOS (Integration)
+**What it does:** The most widely adopted open-source AI agent framework in crypto ("the Linux of crypto agents"). An ElizaOS plugin can call OUTRIVE's market-intel endpoint on a schedule, reason over prices with its LLM character, and push strategy updates to the vault automatically.
+
+**Logic:**
+```
+ElizaOS character wakes on schedule
+  → calls GET /api/autonomous/market-intel  (reads live prices + vault state)
+  → LLM character reasons over conditions
+  → calls POST /api/autonomous/vault        (writes updated strategy if needed)
+  → index.mjs picks up config on next 30s tick → executes trade on-chain
+```
+
+**Setup:**
+
+1. Install ElizaOS:
+```bash
+git clone https://github.com/elizaOS/eliza
+cd eliza && pnpm install && pnpm build
+```
+
+2. Create the OUTRIVE plugin at `packages/plugin-outrive/src/index.ts`:
+```typescript
+import type { Plugin, Action } from "@elizaos/core";
+
+const OTR_KEY = process.env.OUTRIVE_API_KEY;
+const API     = "https://api.outrive.io";
+const HDR     = { Authorization: `Bearer ${OTR_KEY}`, "Content-Type": "application/json" };
+
+const getMarketIntel: Action = {
+  name: "GET_MARKET_INTEL",
+  description: "Read live RWA prices, vault status, and P&L from OUTRIVE",
+  handler: async (_runtime, _message, _state, _options, callback) => {
+    const res  = await fetch(`${API}/api/autonomous/market-intel`, { headers: HDR });
+    const data = await res.json();
+    await callback({ text: data.summary, data });
+    return true;
+  },
+  similes: ["check market", "read vault", "get prices"],
+  examples: [],
+  validate: async () => !!OTR_KEY,
+};
+
+const updateStrategy: Action = {
+  name: "UPDATE_STRATEGY",
+  description: "Update OUTRIVE vault strategy config",
+  handler: async (_runtime, message, _state, _options, callback) => {
+    const config = JSON.parse(message.content.text);
+    const res    = await fetch(`${API}/api/autonomous/vault`, {
+      method: "POST", headers: HDR,
+      body: JSON.stringify({ status: "running", strategyConfig: config }),
+    });
+    const data = await res.json();
+    await callback({ text: "Strategy updated", data });
+    return true;
+  },
+  similes: ["update strategy", "change config", "adjust vault"],
+  examples: [],
+  validate: async () => !!OTR_KEY,
+};
+
+export const outrivePlugin: Plugin = {
+  name: "outrive",
+  description: "OUTRIVE autonomous RWA vault integration",
+  actions: [getMarketIntel, updateStrategy],
+};
+export default outrivePlugin;
+```
+
+3. Add to your character config (`characters/my-agent.json`):
+```json
+{
+  "name": "MyAgent",
+  "plugins": ["@elizaos/plugin-outrive"],
+  "settings": {
+    "OUTRIVE_API_KEY": "OTR-your-key-here"
+  }
+}
+```
+
+4. Run:
+```bash
+pnpm start --character=characters/my-agent.json
+```
+
+**Docs:** https://elizaos.github.io/eliza/
+
+---
+
+### GOAT — Great Onchain Agent Toolkit (Integration)
+**What it does:** Open-source toolkit that connects LLMs to on-chain actions across EVM and Solana. OUTRIVE is registered as a GOAT "wallet tool" — any GOAT-compatible agent can read live RWA prices and update vault strategy the same way it calls swap or transfer tools.
+
+**Setup:**
+
+1. Install:
+```bash
+npm install @goat-sdk/core @goat-sdk/wallet-evm
+```
+
+2. Create OUTRIVE tool at `tools/outrive.ts`:
+```typescript
+import { Tool, ToolBase } from "@goat-sdk/core";
+
+export class OutriveTool extends ToolBase {
+  private headers = {
+    Authorization: `Bearer ${process.env.OUTRIVE_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+
+  @Tool({ name: "get_market_intel", description: "Read live RWA prices and vault status from OUTRIVE" })
+  async getMarketIntel() {
+    const res = await fetch("https://api.outrive.io/api/autonomous/market-intel", { headers: this.headers });
+    return res.json();
+  }
+
+  @Tool({ name: "update_vault_strategy", description: "Update OUTRIVE vault strategy config" })
+  async updateStrategy(params: {
+    token: string; strategy: string; budget_eth: string;
+    tp_pct?: string; sl_pct?: string; entry_type?: string;
+  }) {
+    const res = await fetch("https://api.outrive.io/api/autonomous/vault", {
+      method: "POST", headers: this.headers,
+      body: JSON.stringify({ status: "running", strategyConfig: params }),
+    });
+    return res.json();
+  }
+}
+```
+
+3. Register in your GOAT agent:
+```typescript
+import { getOnChainTools } from "@goat-sdk/core";
+import { OutriveTool } from "./tools/outrive";
+
+const tools = await getOnChainTools({
+  wallet: yourWallet,
+  plugins: [new OutriveTool()],
+});
+```
+
+**Docs:** https://ohmygoat.dev
+
+---
+
+### Claude via MCP — Model Context Protocol (Integration)
+**What it does:** Anthropic's MCP is a standard protocol that lets Claude (Desktop, API, Cursor) call external tools defined as MCP servers. An OUTRIVE MCP server exposes `get_market_intel`, `update_strategy`, and `get_vault_status` — making the vault controllable from any MCP-compatible client in plain English, with zero custom orchestration code.
+
+**Setup:**
+
+1. Create MCP server at `outrive-mcp/index.mjs`:
+```javascript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const API = "https://api.outrive.io";
+const HDR = { Authorization: `Bearer ${process.env.OUTRIVE_API_KEY}`, "Content-Type": "application/json" };
+
+const server = new McpServer({ name: "outrive", version: "1.0.0" });
+
+server.tool("get_market_intel", "Read live RWA prices, vault status, and P&L from OUTRIVE", {}, async () => {
+  const res  = await fetch(`${API}/api/autonomous/market-intel`, { headers: HDR });
+  const data = await res.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+});
+
+server.tool("update_strategy", "Update OUTRIVE vault strategy config", {
+  token:      z.string().describe("RWA ticker: AAPL, NVDA, TSLA, GOOGL, META, MSFT, AMZN, AMD, PLTR, ORCL, SPY, QQQ, MU, COIN, INTC, CRWV, BE, USAR, USO, SPCX"),
+  strategy:   z.enum(["dca", "momentum", "dip-buy", "breakout", "custom"]),
+  budget_eth: z.string().describe("ETH per trade, e.g. '0.002'"),
+  tp_pct:     z.string().optional().describe("Take-profit %, e.g. '5'"),
+  sl_pct:     z.string().optional().describe("Stop-loss %, e.g. '3'"),
+  status:     z.enum(["running", "paused", "idle"]).optional(),
+}, async (params) => {
+  const res  = await fetch(`${API}/api/autonomous/vault`, {
+    method: "POST", headers: HDR,
+    body: JSON.stringify({ status: params.status ?? "running", strategyConfig: params }),
+  });
+  const data = await res.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+});
+
+server.tool("get_vault_status", "Read current vault configuration and status", {}, async () => {
+  const res  = await fetch(`${API}/api/autonomous/vault`, { headers: HDR });
+  const data = await res.json();
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+});
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+2. Install dependencies:
+```bash
+mkdir outrive-mcp && cd outrive-mcp
+npm init -y
+npm install @modelcontextprotocol/sdk zod
+```
+
+3. Add to Claude Desktop config (`~/.claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "outrive": {
+      "command": "node",
+      "args": ["/path/to/outrive-mcp/index.mjs"],
+      "env": {
+        "OUTRIVE_API_KEY": "OTR-your-key-here"
+      }
+    }
+  }
+}
+```
+
+4. Restart Claude Desktop. You can now say in plain English:
+> "Check my OUTRIVE vault and switch to momentum strategy if NVDA is up more than 3%."
+
+Claude will call the tools, reason over the result, and execute the update — no code required on your end.
+
+**Docs:** https://modelcontextprotocol.io
+
+---
+
+### BullSpot (Integration)
+**What it does:** Autonomous AI trading agent platform that is MCP-compatible and supports Claude, Hermes, and Cursor as clients. BullSpot's signal engine can be connected to OUTRIVE's execution layer — BullSpot reads signals and generates strategy decisions, OUTRIVE's vault executes them on Robinhood Chain.
+
+**Setup:**
+
+1. Sign up at https://bullspot.app and install the BullSpot MCP server:
+```bash
+npm install -g @bullspot/mcp
+```
+
+2. Add both OUTRIVE and BullSpot to your MCP config (`~/.claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "outrive": {
+      "command": "node",
+      "args": ["/path/to/outrive-mcp/index.mjs"],
+      "env": { "OUTRIVE_API_KEY": "OTR-your-key-here" }
+    },
+    "bullspot": {
+      "command": "bullspot-mcp",
+      "env": { "BULLSPOT_API_KEY": "your-bullspot-key" }
+    }
+  }
+}
+```
+
+3. In Claude Desktop or Cursor, the agent now has access to both systems simultaneously:
+- BullSpot tools: `get_signal`, `get_portfolio`, `get_market_sentiment`
+- OUTRIVE tools: `get_market_intel`, `update_strategy`, `get_vault_status`
+
+4. Prompt example:
+> "Check BullSpot signal for AAPL, then read my OUTRIVE vault. If BullSpot is bullish and my current strategy is dca, switch to momentum with 5% TP."
+
+**Docs:** https://bullspot.app
+
+---
+
+### TradingAgents by TauricResearch (Integration)
+**What it does:** The most starred autonomous financial trading framework in the world (93,000+ GitHub stars as of July 2026). Multi-agent architecture where specialized LLM agents — market analyst, risk manager, portfolio manager, and trader — debate and vote on strategy decisions. OUTRIVE replaces TradingAgents' default broker adapter as its on-chain execution target.
+
+**Setup:**
+
+1. Install TradingAgents:
+```bash
+git clone https://github.com/TauricResearch/TradingAgents
+cd TradingAgents && pip install -r requirements.txt
+```
+
+2. Create OUTRIVE broker adapter at `tradingagents/brokers/outrive_broker.py`:
+```python
+import os, requests
+
+API = "https://api.outrive.io"
+HDR = {"Authorization": f"Bearer {os.environ['OUTRIVE_API_KEY']}", "Content-Type": "application/json"}
+
+class OutriveBroker:
+    """OUTRIVE vault adapter for TradingAgents framework."""
+
+    def get_market_data(self, ticker: str) -> dict:
+        """Returns live price and market context for a given RWA ticker."""
+        r = requests.get(f"{API}/api/autonomous/market-intel", headers=HDR, timeout=10)
+        data = r.json()
+        return {
+            "ticker":    ticker,
+            "price":     data["market"].get(ticker, {}).get("priceUsd", 0),
+            "vault":     data["vault"],
+            "summary":   data["summary"],
+            "allPrices": data["market"],
+        }
+
+    def execute_strategy(self, decision: dict) -> dict:
+        """Writes TradingAgents strategy decision to OUTRIVE vault."""
+        payload = {
+            "status": decision.get("status", "running"),
+            "strategyConfig": {
+                "token":      decision["ticker"],
+                "strategy":   decision["strategy"],   # dca | momentum | dip-buy | breakout
+                "budget_eth": decision["budget_eth"],
+                "tp_pct":     str(decision.get("tp_pct", 5)),
+                "sl_pct":     str(decision.get("sl_pct", 3)),
+                "entry_type": decision.get("entry_type", "market"),
+            },
+        }
+        r = requests.post(f"{API}/api/autonomous/vault", headers=HDR, json=payload, timeout=10)
+        return r.json()
+
+    def get_portfolio(self) -> dict:
+        """Returns current vault status and P&L."""
+        r = requests.get(f"{API}/api/autonomous/vault", headers=HDR, timeout=10)
+        return r.json()
+```
+
+3. Register in TradingAgents config (`config.yaml`):
+```yaml
+broker: outrive
+broker_config:
+  OUTRIVE_API_KEY: "OTR-your-key-here"
+  target_ticker: "AAPL"
+  cycle_interval_seconds: 3600
+```
+
+4. Run:
+```bash
+python main.py --broker outrive --ticker AAPL
+```
+
+**Docs:** https://github.com/TauricResearch/TradingAgents
+
+---
+
+### OpenAI Assistants API (Integration)
+**What it does:** The same tool-calling pattern used with Hermes works identically with OpenAI Assistants. Define OUTRIVE tools as function definitions in an Assistant — OpenAI handles reasoning and dispatch. Compatible with GPT-4o, GPT-4o-mini, and o3-mini. Swap the OpenRouter client in `hermes_orchestrator.py` with the OpenAI Assistants client — zero other changes needed.
+
+**Setup:**
+
+1. Install:
+```bash
+pip install openai python-dotenv
+```
+
+2. Create assistant with OUTRIVE tools (`openai_strategy.py`):
+```python
+import os, json, time, requests
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+API = "https://api.outrive.io"
+HDR = {"Authorization": f"Bearer {os.environ['OUTRIVE_API_KEY']}", "Content-Type": "application/json"}
+
+TOOLS = [
+    {"type": "function", "function": {
+        "name": "get_market_intel",
+        "description": "Read live RWA prices, vault status, and P&L from OUTRIVE.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "update_strategy",
+        "description": "Update OUTRIVE vault strategy config.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "token":      {"type": "string"},
+                "strategy":   {"type": "string", "enum": ["dca", "momentum", "dip-buy", "breakout", "custom"]},
+                "budget_eth": {"type": "string"},
+                "tp_pct":     {"type": "string"},
+                "sl_pct":     {"type": "string"},
+                "entry_type": {"type": "string", "enum": ["market", "limit", "dip", "breakout"]},
+                "status":     {"type": "string", "enum": ["running", "paused", "idle"]},
+            },
+            "required": ["token", "strategy", "budget_eth"],
+        },
+    }},
+]
+
+def dispatch(name, args):
+    if name == "get_market_intel":
+        return requests.get(f"{API}/api/autonomous/market-intel", headers=HDR).json()
+    if name == "update_strategy":
+        return requests.post(f"{API}/api/autonomous/vault", headers=HDR,
+            json={"status": args.get("status", "running"), "strategyConfig": args}).json()
+
+def run_cycle():
+    # Create a one-shot thread
+    thread = client.beta.threads.create()
+    client.beta.threads.messages.create(thread_id=thread.id, role="user",
+        content="Run a strategy analysis cycle. Read market intel first, then decide if strategy needs adjustment.")
+
+    run = client.beta.threads.runs.create(
+        thread_id=thread.id,
+        assistant_id=os.environ["OPENAI_ASSISTANT_ID"],
+        tools=TOOLS,
+    )
+
+    while run.status in ("queued", "in_progress", "requires_action"):
+        time.sleep(1)
+        run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+        if run.status == "requires_action":
+            outputs = []
+            for tc in run.required_action.submit_tool_outputs.tool_calls:
+                args   = json.loads(tc.function.arguments)
+                result = dispatch(tc.function.name, args)
+                outputs.append({"tool_call_id": tc.id, "output": json.dumps(result)})
+            run = client.beta.threads.runs.submit_tool_outputs(
+                thread_id=thread.id, run_id=run.id, tool_outputs=outputs)
+
+    msgs = client.beta.threads.messages.list(thread_id=thread.id)
+    print("[DECISION]", msgs.data[0].content[0].text.value)
+
+if __name__ == "__main__":
+    run_cycle()
+```
+
+3. Run:
+```bash
+OPENAI_API_KEY=sk-xxx OPENAI_ASSISTANT_ID=asst-xxx OUTRIVE_API_KEY=OTR-xxx python openai_strategy.py
+```
+
+**Docs:** https://platform.openai.com/docs/assistants
+
+---
+
+## Integration Compatibility Matrix
+
+| Integration | Type | Effort | Cost/cycle | Status |
+|-------------|------|--------|------------|--------|
+| **Hermes (Nous Research)** | LLM strategy | ✅ Live | ~$0.0002 | Production |
+| **ElizaOS** | Agent framework | Low — TS plugin | Model cost only | Ready |
+| **GOAT** | Onchain toolkit | Low — register tool | Model cost only | Ready |
+| **Claude via MCP** | LLM + protocol | Low — MCP server | Claude API cost | Ready |
+| **BullSpot** | Trading platform | Low — MCP config | BullSpot + model | Ready |
+| **TradingAgents** | Multi-agent finance | Medium — broker adapter | Model cost only | Ready |
+| **OpenAI Assistants** | LLM strategy | Minimal — swap client | ~$0.001 GPT-4o | Ready |
+| **Virtuals Protocol** | On-chain agents | Native | Gas only | Production |
+
+---
+
 ## API Reference
 
 All endpoints require `Authorization: Bearer <token>`.
